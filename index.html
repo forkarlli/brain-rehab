@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>大腦活化復健管理系統</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <!-- Sidebar -->
+  <nav class="sidebar" id="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">
+        <span class="logo-icon">🧠</span>
+        <div class="logo-text">
+          <h1>大腦活化</h1>
+          <p>復健管理系統</p>
+        </div>
+      </div>
+      <button class="sidebar-toggle" id="sidebarToggle">☰</button>
+    </div>
+    <ul class="nav-menu">
+      <li class="nav-item active" data-page="dashboard">
+        <span class="nav-icon">📊</span>
+        <span class="nav-label">系統總覽</span>
+      </li>
+      <li class="nav-item" data-page="patients">
+        <span class="nav-icon">👤</span>
+        <span class="nav-label">病人管理</span>
+      </li>
+      <li class="nav-item" data-page="assessments">
+        <span class="nav-icon">📋</span>
+        <span class="nav-label">檢測記錄</span>
+      </li>
+      <li class="nav-item" data-page="prescriptions">
+        <span class="nav-icon">💊</span>
+        <span class="nav-label">訓練處方</span>
+      </li>
+      <li class="nav-item" data-page="sessions">
+        <span class="nav-icon">🏃</span>
+        <span class="nav-label">治療記錄</span>
+      </li>
+      <li class="nav-item" data-page="reports">
+        <span class="nav-icon">📈</span>
+        <span class="nav-label">成效報告</span>
+      </li>
+    </ul>
+    <div class="sidebar-footer">
+      <div class="user-info">
+        <div class="user-avatar">T</div>
+        <div>
+          <p class="user-name">治療師 王小明</p>
+          <p class="user-role">物理治療師</p>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Main Content -->
+  <div class="main-content" id="mainContent">
+    <!-- Top Bar -->
+    <header class="topbar">
+      <div class="topbar-left">
+        <h2 class="page-title" id="pageTitle">系統總覽</h2>
+        <span class="breadcrumb" id="breadcrumb">首頁</span>
+      </div>
+      <div class="topbar-right">
+        <div class="search-box">
+          <span class="search-icon">🔍</span>
+          <input type="text" placeholder="搜尋病人..." id="globalSearch">
+        </div>
+        <div class="notification-btn" title="通知">
+          🔔
+          <span class="badge">3</span>
+        </div>
+        <div class="date-display" id="currentDate"></div>
+      </div>
+    </header>
+
+    <!-- Page Content -->
+    <main class="content-area">
+
+      <!-- ========== DASHBOARD PAGE ========== -->
+      <section class="page active" id="page-dashboard">
+        <div class="stats-grid">
+          <div class="stat-card blue">
+            <div class="stat-icon">👥</div>
+            <div class="stat-info">
+              <span class="stat-value" id="stat-patients">24</span>
+              <span class="stat-label">在治病人數</span>
+            </div>
+            <div class="stat-trend up">↑ 2 本月新增</div>
+          </div>
+          <div class="stat-card green">
+            <div class="stat-icon">✅</div>
+            <div class="stat-info">
+              <span class="stat-value" id="stat-sessions-today">8</span>
+              <span class="stat-label">今日治療場次</span>
+            </div>
+            <div class="stat-trend up">↑ 完成 5 場</div>
+          </div>
+          <div class="stat-card orange">
+            <div class="stat-icon">📋</div>
+            <div class="stat-info">
+              <span class="stat-value" id="stat-assessments">12</span>
+              <span class="stat-label">待完成評估</span>
+            </div>
+            <div class="stat-trend down">↓ 較上週減少</div>
+          </div>
+          <div class="stat-card purple">
+            <div class="stat-icon">📈</div>
+            <div class="stat-info">
+              <span class="stat-value">87%</span>
+              <span class="stat-label">平均成效進步率</span>
+            </div>
+            <div class="stat-trend up">↑ 優良</div>
+          </div>
+        </div>
+
+        <div class="dashboard-grid">
+          <!-- Today's Schedule -->
+          <div class="card">
+            <div class="card-header">
+              <h3>今日治療排程</h3>
+              <button class="btn btn-sm btn-outline" onclick="navigateTo('sessions')">查看全部</button>
+            </div>
+            <div class="schedule-list" id="todaySchedule"></div>
+          </div>
+
+          <!-- Recent Patients -->
+          <div class="card">
+            <div class="card-header">
+              <h3>最近活躍病人</h3>
+              <button class="btn btn-sm btn-outline" onclick="navigateTo('patients')">查看全部</button>
+            </div>
+            <div class="patient-list-mini" id="recentPatients"></div>
+          </div>
+
+          <!-- Progress Chart -->
+          <div class="card card-full">
+            <div class="card-header">
+              <h3>本月治療成效趨勢</h3>
+              <div class="card-actions">
+                <select class="select-sm" id="chartFilter">
+                  <option>近30天</option>
+                  <option>近3個月</option>
+                  <option>近6個月</option>
+                </select>
+              </div>
+            </div>
+            <div class="chart-container">
+              <canvas id="progressChart"></canvas>
+            </div>
+          </div>
+
+          <!-- Alerts -->
+          <div class="card">
+            <div class="card-header">
+              <h3>注意事項</h3>
+              <span class="badge badge-warning">3</span>
+            </div>
+            <div class="alerts-list" id="alertsList"></div>
+          </div>
+
+          <!-- Data Management -->
+          <div class="card">
+            <div class="card-header">
+              <h3>資料管理</h3>
+            </div>
+            <div style="padding:16px;display:flex;flex-direction:column;gap:10px">
+              <div style="font-size:13px;color:var(--gray-500);line-height:1.6">
+                所有資料已自動儲存至瀏覽器 localStorage，重新整理後不會遺失。<br>
+                建議定期匯出 JSON 備份，避免清除瀏覽器資料時遺失。
+              </div>
+              <div style="display:flex;gap:8px;flex-wrap:wrap">
+                <button class="btn btn-primary" onclick="exportBackup()">⬇ 匯出所有資料</button>
+                <button class="btn btn-outline" onclick="importBackup()">⬆ 匯入備份</button>
+              </div>
+              <input type="file" id="importFileInput" accept=".json" style="display:none" onchange="handleImportFile(event)">
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== PATIENTS PAGE ========== -->
+      <section class="page" id="page-patients">
+        <div class="page-actions">
+          <div class="search-filter">
+            <input type="text" class="input" placeholder="搜尋病人姓名、病歷號..." id="patientSearch">
+            <select class="select" id="patientStatusFilter">
+              <option value="">所有狀態</option>
+              <option value="active">治療中</option>
+              <option value="completed">已完成</option>
+              <option value="paused">暫停</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" onclick="openModal('addPatientModal')">+ 新增病人</button>
+        </div>
+
+        <div class="card">
+          <table class="data-table" id="patientsTable">
+            <thead>
+              <tr>
+                <th>病歷號</th>
+                <th>姓名</th>
+                <th>年齡</th>
+                <th>診斷</th>
+                <th>治療師</th>
+                <th>狀態</th>
+                <th>最後治療</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="patientsTableBody"></tbody>
+          </table>
+        </div>
+
+        <!-- Add Patient Modal -->
+        <div class="modal" id="addPatientModal">
+          <div class="modal-overlay" onclick="closeModal('addPatientModal')"></div>
+          <div class="modal-content modal-lg">
+            <div class="modal-header">
+              <h3 id="patientModalTitle">新增病人資料</h3>
+              <button class="modal-close" onclick="closeModal('addPatientModal')">✕</button>
+            </div>
+            <form class="modal-body" id="patientForm">
+              <div class="form-section">
+                <h4>基本資料</h4>
+                <div class="form-grid">
+                  <div class="form-group">
+                    <label>姓名 *</label>
+                    <input type="text" class="input" id="p-name" required>
+                  </div>
+                  <div class="form-group">
+                    <label>病歷號 *</label>
+                    <input type="text" class="input" id="p-id" required>
+                  </div>
+                  <div class="form-group">
+                    <label>出生日期 *</label>
+                    <input type="date" class="input" id="p-dob" placeholder="yyyy/mm/dd" required>
+                  </div>
+                  <div class="form-group">
+                    <label>性別</label>
+                    <select class="select" id="p-gender">
+                      <option value="M">男</option>
+                      <option value="F">女</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>聯絡電話</label>
+                    <input type="tel" class="input" id="p-phone">
+                  </div>
+                  <div class="form-group">
+                    <label>緊急聯絡人</label>
+                    <input type="text" class="input" id="p-emergency">
+                  </div>
+                </div>
+              </div>
+              <div class="form-section">
+                <h4>臨床資料</h4>
+                <div class="form-grid">
+                  <div class="form-group form-group-full">
+                    <label>主要診斷 *</label>
+                    <div class="diagnosis-checkbox-group" id="p-diagnosis-group">
+                      <label class="diag-option"><input type="checkbox" name="p-diagnosis" value="腦中風（缺血性）"><span>腦中風（缺血性）</span></label>
+                      <label class="diag-option"><input type="checkbox" name="p-diagnosis" value="腦中風（出血性）"><span>腦中風（出血性）</span></label>
+                      <label class="diag-option"><input type="checkbox" name="p-diagnosis" value="腦外傷"><span>腦外傷</span></label>
+                      <label class="diag-option"><input type="checkbox" name="p-diagnosis" value="帕金森氏症"><span>帕金森氏症</span></label>
+                      <label class="diag-option"><input type="checkbox" name="p-diagnosis" value="阿茲海默症"><span>阿茲海默症</span></label>
+                      <label class="diag-option"><input type="checkbox" name="p-diagnosis" value="多發性硬化症"><span>多發性硬化症</span></label>
+                      <label class="diag-option"><input type="checkbox" name="p-diagnosis" value="脊髓損傷"><span>脊髓損傷</span></label>
+                      <label class="diag-option"><input type="checkbox" name="p-diagnosis" value="大腦退化"><span>大腦退化</span></label>
+                      <label class="diag-option"><input type="checkbox" name="p-diagnosis" value="一般保健"><span>一般保健</span></label>
+                      <label class="diag-option"><input type="checkbox" name="p-diagnosis" value="心血管疾病"><span>心血管疾病</span></label>
+                      <label class="diag-option"><input type="checkbox" name="p-diagnosis" value="其他"><span>其他</span></label>
+                    </div>
+                  </div>
+                  <div class="form-group">
+                    <label>發病日期</label>
+                    <input type="date" class="input" id="p-onset" placeholder="yyyy/mm/dd">
+                  </div>
+                  <div class="form-group">
+                    <label>住院/門診</label>
+                    <select class="select" id="p-type">
+                      <option value="inpatient">住院</option>
+                      <option value="outpatient">門診</option>
+                    </select>
+                  </div>
+                  <div class="form-group form-group-full">
+                    <label>主訴與病史</label>
+                    <textarea class="textarea" id="p-history" rows="3"></textarea>
+                  </div>
+                  <div class="form-group form-group-full">
+                    <label>禁忌症與注意事項</label>
+                    <textarea class="textarea" id="p-contraindications" rows="2"></textarea>
+                  </div>
+                </div>
+              </div>
+              <div class="modal-footer">
+                <button type="button" class="btn btn-outline" onclick="closeModal('addPatientModal')">取消</button>
+                <button type="submit" class="btn btn-primary">儲存病人資料</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== ASSESSMENTS PAGE ========== -->
+      <section class="page" id="page-assessments">
+        <div class="page-actions">
+          <div class="search-filter">
+            <select class="select" id="assessPatientFilter">
+              <option value="">選擇病人</option>
+            </select>
+            <select class="select" id="assessTypeFilter">
+              <option value="">所有評估類型</option>
+              <option>認知功能評估</option>
+              <option>運動功能評估</option>
+              <option>平衡功能評估</option>
+              <option>語言功能評估</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" onclick="openModal('addAssessModal')">+ 新增評估</button>
+        </div>
+
+        <div class="assessment-tabs">
+          <button class="tab-btn active" data-tab="cognitive">認知功能</button>
+          <button class="tab-btn" data-tab="motor">運動功能</button>
+          <button class="tab-btn" data-tab="balance">平衡功能</button>
+          <button class="tab-btn" data-tab="language">語言功能</button>
+          <button class="tab-btn" data-tab="bcf">肌肉張力測試</button>
+          <button class="tab-btn" data-tab="righteye">👁 RightEye報告</button>
+        </div>
+
+        <div class="card" id="assessmentsTableCard">
+          <table class="data-table" id="assessmentsTable">
+            <thead>
+              <tr>
+                <th>日期</th>
+                <th>病人</th>
+                <th>評估項目</th>
+                <th>分數</th>
+                <th>進步幅度</th>
+                <th>評估者</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="assessmentsTableBody"></tbody>
+          </table>
+        </div>
+
+        <!-- BCF Interface -->
+        <div id="bcf-interface" style="display:none"></div>
+
+        <!-- RightEye Interface -->
+        <div id="righteye-interface" style="display:none"></div>
+
+        <!-- Add Assessment Modal -->
+        <div class="modal" id="addAssessModal">
+          <div class="modal-overlay" onclick="closeModal('addAssessModal')"></div>
+          <div class="modal-content modal-lg">
+            <div class="modal-header">
+              <h3>新增評估記錄</h3>
+              <button class="modal-close" onclick="closeModal('addAssessModal')">✕</button>
+            </div>
+            <div class="modal-body">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>病人 *</label>
+                  <select class="select" id="a-patient"></select>
+                </div>
+                <div class="form-group">
+                  <label>評估日期 *</label>
+                  <input type="date" class="input" id="a-date" placeholder="yyyy/mm/dd">
+                </div>
+                <div class="form-group form-group-full">
+                  <label>評估類型 *</label>
+                  <select class="select" id="a-type" onchange="renderAssessmentForm()">
+                    <option value="">請選擇評估類型</option>
+                    <option value="mmse">MMSE 簡易心智狀態測驗</option>
+                    <option value="moca">MoCA 蒙特利爾認知評估</option>
+                    <option value="fugl">Fugl-Meyer 運動評估</option>
+                    <option value="berg">Berg 平衡量表</option>
+                    <option value="barthel">Barthel 日常生活指數</option>
+                  </select>
+                </div>
+              </div>
+              <div id="assessmentFormDynamic" class="form-section mt-16"></div>
+              <div class="form-group mt-16">
+                <label>備註</label>
+                <textarea class="textarea" id="a-notes" rows="3"></textarea>
+              </div>
+              <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal('addAssessModal')">取消</button>
+                <button class="btn btn-primary" onclick="saveAssessment()">儲存評估</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== PRESCRIPTIONS PAGE ========== -->
+      <section class="page" id="page-prescriptions">
+        <div class="page-actions">
+          <div class="search-filter">
+            <select class="select" id="rxPatientFilter">
+              <option value="">選擇病人</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" onclick="openModal('addRxModal')">+ 新增處方</button>
+        </div>
+
+        <div class="rx-grid" id="prescriptionsGrid"></div>
+
+        <!-- Add Prescription Modal -->
+        <div class="modal" id="addRxModal">
+          <div class="modal-overlay" onclick="closeModal('addRxModal')"></div>
+          <div class="modal-content modal-lg">
+            <div class="modal-header">
+              <h3>新增訓練處方</h3>
+              <button class="modal-close" onclick="closeModal('addRxModal')">✕</button>
+            </div>
+            <div class="modal-body">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>病人 *</label>
+                  <select class="select" id="rx-patient"></select>
+                </div>
+                <div class="form-group">
+                  <label>處方日期</label>
+                  <input type="date" class="input" id="rx-date" placeholder="yyyy/mm/dd">
+                </div>
+                <div class="form-group">
+                  <label>訓練目標</label>
+                  <input type="text" class="input" id="rx-goal" placeholder="例：改善上肢協調性">
+                </div>
+                <div class="form-group">
+                  <label>治療頻率</label>
+                  <select class="select" id="rx-frequency">
+                    <option>每日一次</option>
+                    <option>每週五次</option>
+                    <option>每週四次</option>
+                    <option>每週三次</option>
+                    <option>每週兩次</option>
+                    <option>每週一次</option>
+                    <option>二週一次</option>
+                    <option>三週一次</option>
+                    <option>每月兩次</option>
+                    <option>每月一次</option>
+                  </select>
+                </div>
+              </div>
+
+              <div class="form-section">
+                <div class="section-header">
+                  <h4>訓練項目</h4>
+                  <button class="btn btn-sm btn-outline" onclick="addExerciseItem()">+ 新增項目</button>
+                </div>
+                <div id="exerciseItems">
+                  <div class="exercise-item">
+                    <div class="form-grid exercise-grid">
+                      <div class="form-group">
+                        <label>訓練類型</label>
+                        <select class="select">
+                          <option>認知訓練</option>
+                          <option>運動訓練</option>
+                          <option>平衡訓練</option>
+                          <option>感覺整合</option>
+                          <option>神經肌肉刺激</option>
+                        </select>
+                      </div>
+                      <div class="form-group">
+                        <label>訓練項目</label>
+                        <input type="text" class="input" placeholder="項目名稱">
+                      </div>
+                      <div class="form-group">
+                        <label>組數/次數</label>
+                        <input type="text" class="input" placeholder="例：3組 x 10次">
+                      </div>
+                      <div class="form-group">
+                        <label>強度</label>
+                        <select class="select">
+                          <option>輕度</option>
+                          <option>中度</option>
+                          <option>高度</option>
+                        </select>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>特殊注意事項</label>
+                <textarea class="textarea" id="rx-notes" rows="3"></textarea>
+              </div>
+              <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal('addRxModal')">取消</button>
+                <button class="btn btn-primary" onclick="savePrescription()">儲存處方</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== SESSIONS PAGE ========== -->
+      <section class="page" id="page-sessions">
+        <div class="page-actions">
+          <div class="search-filter">
+            <input type="date" class="input" id="sessionDateFilter" placeholder="yyyy/mm/dd">
+            <select class="select" id="sessionPatientFilter">
+              <option value="">所有病人</option>
+            </select>
+            <select class="select" id="sessionStatusFilter">
+              <option value="">所有狀態</option>
+              <option value="scheduled">已排程</option>
+              <option value="completed">已完成</option>
+              <option value="cancelled">已取消</option>
+            </select>
+          </div>
+          <button class="btn btn-primary" onclick="openModal('addSessionModal')">+ 新增記錄</button>
+        </div>
+
+        <div class="card">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>日期時間</th>
+                <th>病人</th>
+                <th>治療項目</th>
+                <th>時長</th>
+                <th>治療師</th>
+                <th>狀態</th>
+                <th>病人反應</th>
+                <th>操作</th>
+              </tr>
+            </thead>
+            <tbody id="sessionsTableBody"></tbody>
+          </table>
+        </div>
+
+        <!-- Add Session Modal -->
+        <div class="modal" id="addSessionModal">
+          <div class="modal-overlay" onclick="closeModal('addSessionModal')"></div>
+          <div class="modal-content modal-lg">
+            <div class="modal-header">
+              <h3 id="sessionModalTitle">新增治療記錄</h3>
+              <button class="modal-close" onclick="closeModal('addSessionModal');editingId=null;document.getElementById('sessionModalTitle').textContent='新增治療記錄'">✕</button>
+            </div>
+            <div class="modal-body">
+              <div class="form-grid">
+                <div class="form-group">
+                  <label>病人 *</label>
+                  <select class="select" id="s-patient"></select>
+                </div>
+                <div class="form-group">
+                  <label>治療日期 *</label>
+                  <input type="date" class="input" id="s-date" placeholder="yyyy/mm/dd">
+                </div>
+                <div class="form-group">
+                  <label>開始時間</label>
+                  <input type="time" class="input" id="s-start">
+                </div>
+                <div class="form-group">
+                  <label>結束時間</label>
+                  <input type="time" class="input" id="s-end">
+                </div>
+                <div class="form-group form-group-full">
+                  <label>執行項目</label>
+                  <textarea class="textarea" id="s-items" rows="3" placeholder="列出本次執行的訓練項目..."></textarea>
+                </div>
+                <div class="form-group form-group-full">
+                  <label>病人反應與配合度</label>
+                  <div class="rating-group">
+                    <span>差</span>
+                    <label><input type="radio" name="cooperation" value="1"> 1</label>
+                    <label><input type="radio" name="cooperation" value="2"> 2</label>
+                    <label><input type="radio" name="cooperation" value="3" checked> 3</label>
+                    <label><input type="radio" name="cooperation" value="4"> 4</label>
+                    <label><input type="radio" name="cooperation" value="5"> 5</label>
+                    <span>優</span>
+                  </div>
+                </div>
+                <div class="form-group form-group-full">
+                  <label>治療師觀察記錄</label>
+                  <textarea class="textarea" id="s-notes" rows="3" placeholder="記錄治療過程中的觀察、進步情況、問題等..."></textarea>
+                </div>
+              </div>
+
+              <div class="form-section bcf-section">
+                <h4>🧠 BCF 設備參數（選填）</h4>
+                <div class="form-grid">
+                  <div class="form-group form-group-full">
+                    <label>刺激模式</label>
+                    <select class="select" id="s-bcf-mode">
+                      <option value="">不使用 BCF 設備</option>
+                      <option value="cognitive">認知刺激模式</option>
+                      <option value="motor">運動刺激模式</option>
+                      <option value="balance">平衡刺激模式</option>
+                      <option value="sensory">感覺整合模式</option>
+                      <option value="combined">複合刺激模式</option>
+                    </select>
+                  </div>
+                  <div class="form-group">
+                    <label>刺激頻率 (Hz)</label>
+                    <input type="number" class="input" id="s-bcf-freq" min="0" max="200" placeholder="例：40">
+                  </div>
+                  <div class="form-group">
+                    <label>刺激強度 (mA)</label>
+                    <input type="number" class="input" id="s-bcf-intensity" min="0" max="20" step="0.5" placeholder="例：5.0">
+                  </div>
+                  <div class="form-group">
+                    <label>刺激時長 (分鐘)</label>
+                    <input type="number" class="input" id="s-bcf-duration" min="0" max="120" placeholder="例：20">
+                  </div>
+                  <div class="form-group">
+                    <label>療程編號</label>
+                    <input type="text" class="input" id="s-bcf-session-ref" placeholder="例：BCF-2026-0420">
+                  </div>
+                  <div class="form-group form-group-full">
+                    <label>電極放置位置</label>
+                    <input type="text" class="input" id="s-bcf-electrode" placeholder="例：C3、C4（左右運動皮質）">
+                  </div>
+                </div>
+              </div>
+
+              <div class="form-group">
+                <label>完成狀態</label>
+                <select class="select" id="s-status">
+                  <option value="completed">已完成</option>
+                  <option value="partial">部分完成</option>
+                  <option value="cancelled">取消</option>
+                </select>
+              </div>
+              <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal('addSessionModal')">取消</button>
+                <button class="btn btn-primary" onclick="saveSession()">儲存記錄</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== REPORTS PAGE ========== -->
+      <section class="page" id="page-reports">
+        <div class="page-actions">
+          <div class="search-filter">
+            <select class="select" id="reportPatientFilter">
+              <option value="">選擇病人</option>
+            </select>
+            <select class="select" id="reportPeriod">
+              <option value="month">近一個月</option>
+              <option value="quarter">近三個月</option>
+              <option value="half">近六個月</option>
+              <option value="year">近一年</option>
+            </select>
+          </div>
+          <button class="btn btn-outline" onclick="printReport()">🖨️ 列印報告</button>
+          <button class="btn btn-primary" onclick="generateReport()">產生報告</button>
+        </div>
+
+        <div id="reportContent">
+          <div class="report-placeholder">
+            <div class="placeholder-icon">📊</div>
+            <h3>請選擇病人以產生成效報告</h3>
+            <p>選擇病人後點選「產生報告」即可查看完整治療成效分析</p>
+          </div>
+        </div>
+      </section>
+
+    </main>
+  </div>
+
+  <!-- Patient Detail Modal -->
+  <div class="modal" id="patientDetailModal">
+    <div class="modal-overlay" onclick="closeModal('patientDetailModal')"></div>
+    <div class="modal-content modal-xl">
+      <div class="modal-header">
+        <div class="patient-detail-header-info" id="detailHeaderInfo"></div>
+        <button class="modal-close" onclick="closeModal('patientDetailModal')">✕</button>
+      </div>
+      <div class="detail-tabs">
+        <button class="detail-tab active" data-detail-tab="overview">概覽</button>
+        <button class="detail-tab" data-detail-tab="assessments">評估記錄</button>
+        <button class="detail-tab" data-detail-tab="sessions">治療記錄</button>
+        <button class="detail-tab" data-detail-tab="prescriptions">訓練處方</button>
+      </div>
+      <div class="modal-body" id="patientDetailBody"></div>
+    </div>
+  </div>
+
+  <!-- Toast Notification -->
+  <div class="toast" id="toast"></div>
+
+  <script src="app. js.js?v=20260429"></script>
+</body>
+</html>
