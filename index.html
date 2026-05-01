@@ -7,6 +7,20 @@
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
+  <!-- Login Screen -->
+  <div id="loginScreen">
+    <div class="login-card">
+      <div class="login-brain">🧠</div>
+      <h1>大腦活化復健管理系統</h1>
+      <p class="login-subtitle">Brain Cognitive Function System</p>
+      <label class="login-label">系統密碼</label>
+      <input type="password" class="login-input" id="loginPassword" placeholder="請輸入密碼" autocomplete="current-password">
+      <div class="login-error" id="loginError"></div>
+      <button class="btn btn-primary login-btn" onclick="submitLogin()">進入系統</button>
+      <p class="login-footer-text">© 2026 BCF 大腦活化復健系統　僅限授權人員使用</p>
+    </div>
+  </div>
+
   <!-- Sidebar -->
   <nav class="sidebar" id="sidebar">
     <div class="sidebar-header">

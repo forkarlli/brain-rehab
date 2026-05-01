@@ -3402,8 +3402,23 @@ function printReport() {
   window.print();
 }
 
+// ===== AUTH =====
+function submitLogin() {
+  const pw = document.getElementById('loginPassword').value;
+  if (pw === 'BCF2026') {
+    sessionStorage.setItem('bcf_auth', '1');
+    document.getElementById('loginScreen').classList.add('hidden');
+    initApp();
+  } else {
+    const err = document.getElementById('loginError');
+    err.textContent = '密碼錯誤，請重新輸入';
+    document.getElementById('loginPassword').value = '';
+    document.getElementById('loginPassword').focus();
+  }
+}
+
 // ===== EVENT LISTENERS =====
-document.addEventListener('DOMContentLoaded', () => {
+function initApp() {
   loadFromStorage();   // 必須在所有 render 之前
   updateDate();
   renderDashboard();
@@ -3470,4 +3485,15 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Date display update every minute
   setInterval(updateDate, 60000);
+}
+
+document.addEventListener('DOMContentLoaded', () => {
+  if (!sessionStorage.getItem('bcf_auth')) {
+    document.getElementById('loginPassword').addEventListener('keydown', e => {
+      if (e.key === 'Enter') submitLogin();
+    });
+    return;
+  }
+  document.getElementById('loginScreen').classList.add('hidden');
+  initApp();
 });
