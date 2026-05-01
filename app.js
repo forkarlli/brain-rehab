@@ -181,6 +181,7 @@ function navigateTo(page) {
     prescriptions: ['訓練處方', '首頁 / 訓練處方'],
     sessions: ['治療記錄', '首頁 / 治療記錄'],
     reports: ['成效報告', '首頁 / 成效報告'],
+    settings: ['系統設定', '首頁 / 系統設定'],
   };
 
   if (titles[page]) {
@@ -3403,22 +3404,55 @@ function printReport() {
 }
 
 // ===== AUTH =====
+function getTherapistPw() {
+  return localStorage.getItem('bcf_pw_therapist') || 'BCF2026';
+}
+function getAdminPw() {
+  return localStorage.getItem('bcf_pw_admin') || 'Cpt8094005';
+}
+function isAdmin() {
+  return sessionStorage.getItem('bcf_auth') === 'admin';
+}
+
 function submitLogin() {
   const pw = document.getElementById('loginPassword').value;
-  if (pw === 'BCF2026') {
-    sessionStorage.setItem('bcf_auth', '1');
+  const errEl = document.getElementById('loginError');
+  if (pw === getTherapistPw()) {
+    sessionStorage.setItem('bcf_auth', 'therapist');
+    document.getElementById('loginScreen').classList.add('hidden');
+    initApp();
+  } else if (pw === getAdminPw()) {
+    sessionStorage.setItem('bcf_auth', 'admin');
     document.getElementById('loginScreen').classList.add('hidden');
     initApp();
   } else {
-    const err = document.getElementById('loginError');
-    err.textContent = '密碼錯誤，請重新輸入';
+    errEl.textContent = '密碼錯誤，請重新輸入';
     document.getElementById('loginPassword').value = '';
     document.getElementById('loginPassword').focus();
   }
 }
 
+function saveNewPassword(role) {
+  const newPw = document.getElementById(`new-${role}-pw`).value.trim();
+  const confirmPw = document.getElementById(`confirm-${role}-pw`).value.trim();
+  const errEl = document.getElementById(`${role}-pw-error`);
+  errEl.textContent = '';
+  if (!newPw) { errEl.textContent = '請輸入新密碼'; return; }
+  if (newPw.length < 4) { errEl.textContent = '密碼至少需要 4 個字元'; return; }
+  if (newPw !== confirmPw) { errEl.textContent = '兩次輸入的密碼不一致'; return; }
+  localStorage.setItem(`bcf_pw_${role}`, newPw);
+  document.getElementById(`new-${role}-pw`).value = '';
+  document.getElementById(`confirm-${role}-pw`).value = '';
+  showToast(`${role === 'therapist' ? '治療師' : '管理員'}密碼已更新`);
+}
+
 // ===== EVENT LISTENERS =====
 function initApp() {
+  if (isAdmin()) {
+    const navSettings = document.getElementById('nav-settings');
+    if (navSettings) navSettings.style.display = '';
+  }
+
   loadFromStorage();   // 必須在所有 render 之前
   updateDate();
   renderDashboard();

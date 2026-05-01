@@ -58,6 +58,10 @@
         <span class="nav-icon">📈</span>
         <span class="nav-label">成效報告</span>
       </li>
+      <li class="nav-item" data-page="settings" id="nav-settings" style="display:none">
+        <span class="nav-icon">⚙️</span>
+        <span class="nav-label">系統設定</span>
+      </li>
     </ul>
     <div class="sidebar-footer">
       <div class="user-info">
@@ -678,6 +682,57 @@
             <div class="placeholder-icon">📊</div>
             <h3>請選擇病人以產生成效報告</h3>
             <p>選擇病人後點選「產生報告」即可查看完整治療成效分析</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== SETTINGS PAGE ========== -->
+      <section class="page" id="page-settings">
+        <div class="settings-grid">
+          <div class="card">
+            <div class="card-header">
+              <h3>🔑 更改治療師密碼</h3>
+            </div>
+            <div style="padding:20px;display:flex;flex-direction:column;gap:14px">
+              <div class="form-group">
+                <label>新密碼</label>
+                <input type="password" class="input" id="new-therapist-pw" placeholder="輸入新密碼（至少 4 個字元）" autocomplete="new-password">
+              </div>
+              <div class="form-group">
+                <label>確認新密碼</label>
+                <input type="password" class="input" id="confirm-therapist-pw" placeholder="再次輸入新密碼" autocomplete="new-password">
+              </div>
+              <div class="settings-error" id="therapist-pw-error"></div>
+              <button class="btn btn-primary" onclick="saveNewPassword('therapist')">儲存治療師密碼</button>
+            </div>
+          </div>
+
+          <div class="card">
+            <div class="card-header">
+              <h3>🛡️ 更改管理員密碼</h3>
+            </div>
+            <div style="padding:20px;display:flex;flex-direction:column;gap:14px">
+              <div class="form-group">
+                <label>新密碼</label>
+                <input type="password" class="input" id="new-admin-pw" placeholder="輸入新密碼（至少 4 個字元）" autocomplete="new-password">
+              </div>
+              <div class="form-group">
+                <label>確認新密碼</label>
+                <input type="password" class="input" id="confirm-admin-pw" placeholder="再次輸入新密碼" autocomplete="new-password">
+              </div>
+              <div class="settings-error" id="admin-pw-error"></div>
+              <button class="btn btn-primary" onclick="saveNewPassword('admin')">儲存管理員密碼</button>
+            </div>
+          </div>
+
+          <div class="card card-full">
+            <div class="card-header">
+              <h3>ℹ️ 目前角色資訊</h3>
+            </div>
+            <div style="padding:20px;color:var(--gray-600);font-size:13px;line-height:1.8">
+              <p>目前登入身份：<strong style="color:var(--primary)">管理員</strong></p>
+              <p style="margin-top:8px;color:var(--gray-400)">密碼更改後永久生效，下次登入即使用新密碼。若忘記密碼請清除瀏覽器 localStorage 以恢復預設值。</p>
+            </div>
           </div>
         </div>
       </section>
