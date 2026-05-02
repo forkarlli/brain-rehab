@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+  <meta charset="UTF-8">
+  <title>Worker CORS Test</title>
+  <style>
+    body { font-family: monospace; padding: 2rem; background: #1a1a1a; color: #eee; }
+    input { width: 400px; padding: 6px 10px; background: #333; color: #eee; border: 1px solid #555; border-radius: 4px; }
+    button { margin-left: 8px; padding: 6px 16px; background: #2563eb; color: #fff; border: none; border-radius: 4px; cursor: pointer; }
+    button:hover { background: #1d4ed8; }
+    pre { margin-top: 1.5rem; padding: 1rem; background: #111; border: 1px solid #333; border-radius: 6px; white-space: pre-wrap; word-break: break-all; min-height: 80px; }
+    .ok  { color: #4ade80; }
+    .err { color: #f87171; }
+  </style>
+</head>
+<body>
+  <h2>Cloudflare Worker CORS Test</h2>
+  <label>API Key: <input type="password" id="apiKey" placeholder="sk-ant-..." /></label>
+  <button onclick="runTest()">Send Test Request</button>
+  <pre id="output">（結果將顯示在此）</pre>
+
+  <script>
+    async function runTest() {
+      const apiKey = document.getElementById('apiKey').value.trim();
+      const out = document.getElementById('output');
+      if (!apiKey) { out.textContent = '請先輸入 API Key'; return; }
+
+      out.className = '';
+      out.textContent = '傳送中…';
+
+      try {
+        const resp = await fetch('https://bcf-anthropic-proxy.bcf-karl.workers.dev', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'x-api-key': apiKey,
+          },
+          body: JSON.stringify({
+            model: 'claude-sonnet-4-6',
+            max_tokens: 20,
+            messages: [{ role: 'user', content: 'Reply with exactly: Worker OK' }],
+          }),
+        });
+
+        const data = await resp.json();
+        out.className = resp.ok ? 'ok' : 'err';
+        out.textContent = JSON.stringify(data, null, 2);
+      } catch (e) {
+        out.className = 'err';
+        out.textContent = 'Failed to fetch: ' + e.message;
+      }
+    }
+  </script>
+</body>
+</html>
