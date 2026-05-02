@@ -2771,7 +2771,7 @@ async function readRightEyeWithAI() {
   "vMissedL": <Vertical 左眼 Missed 次數>
 }`;
 
-    const resp = await fetch('https://api.anthropic.com/v1/messages', {
+    const resp = await fetch('https://bcf-anthropic-proxy.bcf-karl.workers.dev', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
