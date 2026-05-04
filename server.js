@@ -326,20 +326,21 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
 });
 
 // ===== START SERVER =====
-if (IS_PROD) {
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`✅ BCF Server running (HTTP port ${PORT}) — TLS handled by Railway`);
-  });
-} else {
+const keyPath  = path.join(__dirname, 'key.pem');
+const certPath = path.join(__dirname, 'cert.pem');
+const hasSSL   = fs.existsSync(keyPath) && fs.existsSync(certPath);
+
+if (!IS_PROD && hasSSL) {
   const https = require('https');
-  const sslOptions = {
-    key:  fs.readFileSync(path.join(__dirname, 'key.pem')),
-    cert: fs.readFileSync(path.join(__dirname, 'cert.pem')),
-  };
+  const sslOptions = { key: fs.readFileSync(keyPath), cert: fs.readFileSync(certPath) };
   https.createServer(sslOptions, app).listen(PORT, '0.0.0.0', () => {
     console.log('✅ BCF Server 運行中 (HTTPS)');
     console.log(`   本機訪問：    https://localhost:${PORT}`);
     console.log(`   區域網路訪問：https://192.168.1.109:${PORT}`);
     console.log('   iPad 首次連線需點「仍要繼續」略過憑證警告');
+  });
+} else {
+  app.listen(PORT, '0.0.0.0', () => {
+    console.log(`✅ BCF Server running (HTTP port ${PORT})${IS_PROD ? ' — TLS handled by Railway' : ' — no SSL certs found'}`);
   });
 }
