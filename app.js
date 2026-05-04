@@ -215,7 +215,7 @@ let currentDetailPatient = null;
 const RE_IMAGES = [];
 
 function getREPatientId() {
-  return document.getElementById('re-patient-select')?.value || '';
+  return document.getElementById('assess-patient-select')?.value || '';
 }
 
 function saveREImages() {
@@ -365,7 +365,7 @@ function getAvatarColor(name) {
 
 // ===== POPULATE PATIENT SELECTS =====
 function populatePatientSelects() {
-  const selects = ['a-patient', 'rx-patient', 's-patient', 'assessPatientFilter', 'rxPatientFilter', 'sessionPatientFilter', 'reportPatientFilter', 'bcf-patient-select', 're-patient-select'];
+  const selects = ['a-patient', 'rx-patient', 's-patient', 'assessPatientFilter', 'rxPatientFilter', 'sessionPatientFilter', 'reportPatientFilter', 'assess-patient-select'];
   selects.forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -995,10 +995,7 @@ function computeBCFDecision(regions) {
 function renderBCFInterface() {
   const container = document.getElementById('bcf-interface');
   if (!container) return;
-  if (container.querySelector("#bcf-patient-select")) { populatePatientSelects(); return; }
-
-  const patientOpts = DB.patients.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
-  const today = new Date().toISOString().split('T')[0];
+  if (container.querySelector("#bcf-voice-btn")) { return; }
 
   // Compass grid order (治療師視角，面對病人左右鏡像): [E1↗, E7↑, E3↖, E6→, center, E5←, E4↘, E8↓, E2↙]
   const compassOrder = ['E1','E7','E3','E6',null,'E5','E4','E8','E2'];
@@ -1152,23 +1149,6 @@ function renderBCFInterface() {
             <button class="btn btn-success" onclick="fillBCFFromVoice()">✍️ 填入表單</button>
             <button class="btn btn-outline" onclick="clearBCFVoiceState()">重新語音</button>
           </div>
-        </div>
-      </div>
-    </div>
-
-    <div class="card bcf-patient-card">
-      <div class="bcf-patient-row">
-        <div class="form-group">
-          <label>病人</label>
-          <select id="bcf-patient-select" class="select"><option value="">請選擇病人</option>${patientOpts}</select>
-        </div>
-        <div class="form-group">
-          <label>評估日期</label>
-          <input type="date" id="bcf-date" class="input" placeholder="yyyy/mm/dd" value="${today}">
-        </div>
-        <div class="form-group">
-          <label>評估者</label>
-          <input type="text" id="bcf-therapist" class="input" value="治療師 王小明">
         </div>
       </div>
     </div>
@@ -2901,7 +2881,7 @@ function generateBCFResults() {
 
     const flyingChairHTML = computeFlyingChairRx(
       affectedItems,
-      getPatient(document.getElementById('bcf-patient-select')?.value)
+      getPatient(document.getElementById('assess-patient-select')?.value)
     );
 
     const rightEyeHTML = reResult.hasAbnormal ? renderRightEyeSection(reResult) : '';
@@ -3152,8 +3132,8 @@ function generateIntegratedPrescription() {
   mergedRx.sort((a, b) => a.priority - b.priority);
 
   // ── Patient info ──
-  const patientId = document.getElementById('bcf-patient-select')?.value;
-  const date = document.getElementById('bcf-date')?.value;
+  const patientId = document.getElementById('assess-patient-select')?.value;
+  const date = document.getElementById('assess-date')?.value;
   const pt = getPatient(patientId);
 
   // ── Render ──
@@ -3290,8 +3270,8 @@ function generateIntegratedPrescription() {
 }
 
 function saveBCFAssessment() {
-  const patientId = document.getElementById('bcf-patient-select').value;
-  const date = document.getElementById('bcf-date').value;
+  const patientId = document.getElementById('assess-patient-select').value;
+  const date = document.getElementById('assess-date').value;
   if (!patientId || !date) { showToast('請選擇病人和日期', 'error'); return; }
 
   let diffCount = 0;
@@ -3320,7 +3300,7 @@ function saveBCFAssessment() {
     score: totalItems - diffCount,
     maxScore: totalItems,
     prev,
-    therapist: document.getElementById('bcf-therapist')?.value || '王小明',
+    therapist: document.getElementById('assess-therapist')?.value || '王小明',
     notes: document.getElementById('bcf-notes')?.value || '',
   };
   DB.assessments.unshift(bcfRec);
@@ -3357,28 +3337,9 @@ function clearBCFForm() {
 function renderRightEyeInterface() {
   const container = document.getElementById('righteye-interface');
   if (!container) return;
-  if (container.querySelector("#re-spH")) { populatePatientSelects(); return; }
-
-  const today = new Date().toISOString().split('T')[0];
+  if (container.querySelector("#re-spH")) { return; }
 
   container.innerHTML = `
-    <div class="card bcf-patient-card">
-      <div class="bcf-patient-row">
-        <div class="form-group">
-          <label>病人</label>
-          <select id="re-patient-select" class="select"><option value="">請選擇病人</option></select>
-        </div>
-        <div class="form-group">
-          <label>評估日期</label>
-          <input type="date" id="re-date" class="input" placeholder="yyyy/mm/dd" value="${today}">
-        </div>
-        <div class="form-group">
-          <label>評估者</label>
-          <input type="text" id="re-therapist" class="input" value="治療師 王小明">
-        </div>
-      </div>
-    </div>
-
     <div class="card">
       <div class="card-header">
         <h3>👁 RightEye 報告</h3>
@@ -3507,7 +3468,7 @@ function renderRightEyeInterface() {
     if (imageFiles.length > 0) handleREFiles(imageFiles);
   });
 
-  const patientSel = document.getElementById('re-patient-select');
+  const patientSel = document.getElementById('assess-patient-select');
   if (patientSel) patientSel.addEventListener('change', () => loadREImages(patientSel.value));
 
   populatePatientSelects();
@@ -3771,8 +3732,8 @@ function analyzeRightEyeStandalone() {
 }
 
 function saveRightEyeAssessment() {
-  const patientId = document.getElementById('re-patient-select')?.value;
-  const date = document.getElementById('re-date')?.value;
+  const patientId = document.getElementById('assess-patient-select')?.value;
+  const date = document.getElementById('assess-date')?.value;
   if (!patientId || !date) { showToast('請選擇病人和日期', 'error'); return; }
 
   const parseNum = v => { const n = parseFloat(v); return isNaN(n) ? null : n; };
@@ -3799,7 +3760,7 @@ function saveRightEyeAssessment() {
     score: maxScore - abnCount,
     maxScore,
     prev,
-    therapist: document.getElementById('re-therapist')?.value || '王小明',
+    therapist: document.getElementById('assess-therapist')?.value || '王小明',
     notes: document.getElementById('re-notes')?.value || '',
   };
   DB.assessments.unshift(reRec);
@@ -4327,6 +4288,11 @@ function initApp() {
   populatePatientSelects();
   loadPatientsFromServer();
   loadAssessmentsFromServer();
+
+  const assessDate = document.getElementById('assess-date');
+  if (assessDate && !assessDate.value) {
+    assessDate.value = new Date().toISOString().split('T')[0];
+  }
 
   // Sidebar navigation
   document.querySelectorAll('.nav-item').forEach(item => {

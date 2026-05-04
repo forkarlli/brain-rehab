@@ -344,6 +344,23 @@
           <button class="btn btn-primary" onclick="openModal('addAssessModal')">+ 新增評估</button>
         </div>
 
+        <div class="card assess-shared-header">
+          <div class="bcf-patient-row">
+            <div class="form-group">
+              <label>病人</label>
+              <select id="assess-patient-select" class="select"><option value="">請選擇病人</option></select>
+            </div>
+            <div class="form-group">
+              <label>評估日期</label>
+              <input type="date" id="assess-date" class="input">
+            </div>
+            <div class="form-group">
+              <label>評估者</label>
+              <input type="text" id="assess-therapist" class="input" value="治療師 王小明">
+            </div>
+          </div>
+        </div>
+
         <div class="assessment-tabs">
           <button class="tab-btn active" data-tab="cognitive">認知功能</button>
           <button class="tab-btn" data-tab="motor">運動功能</button>
