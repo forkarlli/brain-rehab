@@ -42,7 +42,6 @@ const STORAGE_KEY = 'brain_rehab_db';
 function saveToStorage() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      patients:      DB.patients,
       assessments:   DB.assessments,
       prescriptions: DB.prescriptions,
       sessions:      DB.sessions,
@@ -55,15 +54,70 @@ function saveToStorage() {
 function loadFromStorage() {
   try {
     const raw = localStorage.getItem(STORAGE_KEY);
-    if (!raw) { saveToStorage(); return; }  // 首次啟動：持久化預設資料
+    if (!raw) { saveToStorage(); return; }
     const saved = JSON.parse(raw);
-    if (Array.isArray(saved.patients))      DB.patients      = saved.patients;
     if (Array.isArray(saved.assessments))   DB.assessments   = saved.assessments;
     if (Array.isArray(saved.prescriptions)) DB.prescriptions = saved.prescriptions;
     if (Array.isArray(saved.sessions))      DB.sessions      = saved.sessions;
   } catch(e) {
     console.warn('localStorage 讀取失敗，使用預設資料', e);
   }
+}
+
+async function savePatientsToServer() {
+  try {
+    await fetch('/api/patients', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ patients: DB.patients }),
+    });
+  } catch(e) {
+    showToast('⚠️ 病人資料同步失敗', 'error');
+  }
+}
+
+async function migrateLocalStoragePatients() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return false;
+    const saved = JSON.parse(raw);
+    if (!Array.isArray(saved.patients) || saved.patients.length === 0) return false;
+    const resp = await fetch('/api/migrate-patients', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ patients: saved.patients }),
+    });
+    if (!resp.ok) return false;
+    const result = await resp.json();
+    if (result.migrated) {
+      DB.patients = saved.patients;
+      showToast(`已將 ${result.count} 位病人資料遷移至伺服器`, 'success');
+      return true;
+    }
+    return false;
+  } catch(e) {
+    console.warn('病人資料遷移失敗', e);
+    return false;
+  }
+}
+
+async function loadPatientsFromServer() {
+  try {
+    const resp = await fetch('/api/patients');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (Array.isArray(data.patients) && data.patients.length > 0) {
+      DB.patients = data.patients;
+    } else {
+      await migrateLocalStoragePatients();
+    }
+  } catch(e) {
+    console.warn('伺服器病人資料讀取失敗，使用本機預設資料', e);
+  }
+  populatePatientSelects();
+  renderDashboard();
+  const activePage = document.querySelector('.page.active');
+  if (activePage?.id === 'patients') renderPatients();
 }
 
 function exportBackup() {
@@ -102,6 +156,7 @@ function handleImportFile(e) {
       if (Array.isArray(data.prescriptions)) DB.prescriptions = data.prescriptions;
       if (Array.isArray(data.sessions))      DB.sessions      = data.sessions;
       saveToStorage();
+      savePatientsToServer();
       populatePatientSelects();
       renderDashboard();
       showToast(`備份匯入成功（${data.patients.length} 位病人）`, 'success');
@@ -165,6 +220,7 @@ function compressImageToBase64(file, callback) {
 
 // ===== NAVIGATION =====
 function navigateTo(page) {
+  if (ROLE_PAGES[currentRole()] && !ROLE_PAGES[currentRole()].has(page)) return;
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
 
@@ -592,6 +648,7 @@ function deletePatient(id) {
   if (idx !== -1) {
     DB.patients.splice(idx, 1);
     saveToStorage();
+    savePatientsToServer();
     renderPatients();
     populatePatientSelects();
     showToast('病人資料已刪除', 'error');
@@ -643,6 +700,7 @@ function savePatient(e) {
   }
 
   saveToStorage();
+  savePatientsToServer();
   closeModal('addPatientModal');
   renderPatients();
   populatePatientSelects();
@@ -1028,6 +1086,37 @@ function renderBCFInterface() {
     </div>`).join('');
 
   container.innerHTML = `
+    <div class="card bcf-voice-card">
+      <div class="card-header">
+        <h3>🎤 語音輸入 — 快速填入</h3>
+        <span class="bcf-section-hint">語音記錄評估結果，AI 解析後自動填入表單</span>
+      </div>
+      <div style="padding:16px;display:flex;flex-direction:column;gap:12px">
+        <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+          <button class="btn bcf-voice-btn" id="bcf-voice-btn" onclick="toggleBCFVoice()">🎤 開始語音輸入</button>
+          <span id="bcf-voice-status" style="font-size:13px;color:var(--gray-500)"></span>
+        </div>
+        <div id="bcf-voice-warn" style="display:none;background:#fff3cd;border:1px solid #ffc107;border-radius:var(--radius-sm);padding:8px 12px;font-size:13px;color:#856404">
+          ⚠️ 請使用 Chrome 或 Edge 瀏覽器以使用語音輸入功能
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:600;color:var(--gray-600);display:block;margin-bottom:4px">辨識文字</label>
+          <textarea id="bcf-voice-transcript" class="textarea" rows="3" readonly style="background:var(--gray-50);resize:vertical" placeholder="按下「開始語音輸入」，辨識文字即時顯示於此…"></textarea>
+        </div>
+        <div>
+          <button class="btn btn-primary" id="bcf-parse-btn" onclick="parseBCFVoice()" disabled>✨ 確認並解析</button>
+        </div>
+        <div id="bcf-voice-result" style="display:none">
+          <div style="font-size:13px;font-weight:700;color:var(--gray-700);margin-bottom:8px">AI 解析結果預覽</div>
+          <div id="bcf-voice-result-body" style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius-sm);padding:12px;overflow-x:auto;font-size:12px"></div>
+          <div style="display:flex;gap:8px;margin-top:12px">
+            <button class="btn btn-success" onclick="fillBCFFromVoice()">✍️ 填入表單</button>
+            <button class="btn btn-outline" onclick="clearBCFVoiceState()">重新語音</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <div class="card bcf-patient-card">
       <div class="bcf-patient-row">
         <div class="form-group">
@@ -1098,6 +1187,324 @@ function renderBCFInterface() {
     </div>
 
     <div id="bcf-results" style="display:none"></div>`;
+}
+
+// ===== VOICE INPUT — BCF =====
+let _bcfRecog = null;
+let _bcfVoiceOn = false;
+let _bcfVoiceParsed = null;
+let _bcfMediaRecorder = null;
+
+function _isIOS() {
+  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
+}
+
+function _useWebSpeech() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  return !!SR && !_isIOS();
+}
+
+function toggleBCFVoice() {
+  if (_bcfVoiceOn) {
+    if (_bcfMediaRecorder && _bcfMediaRecorder.state === 'recording') {
+      _bcfMediaRecorder.stop();
+    } else if (_bcfRecog) {
+      _bcfRecog.stop();
+    }
+  } else {
+    startBCFVoice();
+  }
+}
+
+function startBCFVoice() {
+  if (_useWebSpeech()) {
+    _startWebSpeech();
+  } else if (window.MediaRecorder) {
+    _startMediaRecorder();
+  } else {
+    const warn = document.getElementById('bcf-voice-warn');
+    if (warn) { warn.style.display = 'block'; warn.textContent = '⚠️ 請使用 Chrome、Edge 或 iOS Safari 以使用語音輸入'; }
+  }
+}
+
+function _startWebSpeech() {
+  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+  const warn = document.getElementById('bcf-voice-warn');
+  if (warn) warn.style.display = 'none';
+
+  _bcfRecog = new SpeechRecognition();
+  _bcfRecog.lang = 'zh-TW';
+  _bcfRecog.interimResults = true;
+  _bcfRecog.continuous = true;
+
+  const transcriptEl = document.getElementById('bcf-voice-transcript');
+  const btn          = document.getElementById('bcf-voice-btn');
+  const statusEl     = document.getElementById('bcf-voice-status');
+  const parseBtn     = document.getElementById('bcf-parse-btn');
+  let finalText = '';
+
+  _bcfRecog.onstart = () => {
+    _bcfVoiceOn = true;
+    if (btn) { btn.textContent = '⏹ 停止錄音'; btn.classList.add('bcf-voice-recording'); }
+    if (statusEl) statusEl.textContent = '🔴 錄音中…';
+  };
+
+  _bcfRecog.onresult = e => {
+    let interim = '';
+    for (let i = e.resultIndex; i < e.results.length; i++) {
+      if (e.results[i].isFinal) finalText += e.results[i][0].transcript;
+      else interim += e.results[i][0].transcript;
+    }
+    if (transcriptEl) transcriptEl.value = finalText + interim;
+    if (parseBtn) parseBtn.disabled = !(finalText + interim).trim();
+  };
+
+  _bcfRecog.onend = () => {
+    _bcfVoiceOn = false;
+    if (btn) { btn.textContent = '🎤 開始語音輸入'; btn.classList.remove('bcf-voice-recording'); }
+    if (statusEl) statusEl.textContent = finalText ? '✅ 錄音完成' : '';
+    if (transcriptEl) transcriptEl.value = finalText;
+    if (parseBtn && finalText.trim()) parseBtn.disabled = false;
+  };
+
+  _bcfRecog.onerror = e => {
+    _bcfVoiceOn = false;
+    if (btn) { btn.textContent = '🎤 開始語音輸入'; btn.classList.remove('bcf-voice-recording'); }
+    if (statusEl) statusEl.textContent = `⚠️ 語音錯誤：${e.error}`;
+  };
+
+  _bcfRecog.start();
+}
+
+async function _startMediaRecorder() {
+  const btn      = document.getElementById('bcf-voice-btn');
+  const statusEl = document.getElementById('bcf-voice-status');
+  const warn     = document.getElementById('bcf-voice-warn');
+  if (warn) warn.style.display = 'none';
+
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (err) {
+    if (warn) { warn.style.display = 'block'; warn.textContent = `⚠️ 無法存取麥克風：${err.message}`; }
+    return;
+  }
+
+  // 依瀏覽器支援度選擇格式（iOS 優先 mp4/m4a，其他優先 webm）
+  const mimeType = ['audio/mp4', 'audio/x-m4a', 'audio/webm;codecs=opus', 'audio/webm', ''].find(
+    t => !t || MediaRecorder.isTypeSupported(t)
+  ) || '';
+
+  const recorder = new MediaRecorder(stream, mimeType ? { mimeType } : {});
+  const chunks = [];
+  _bcfMediaRecorder = recorder;
+
+  recorder.ondataavailable = e => { if (e.data.size > 0) chunks.push(e.data); };
+
+  recorder.onstop = async () => {
+    stream.getTracks().forEach(t => t.stop());
+    _bcfVoiceOn = false;
+    if (btn) { btn.textContent = '🎤 開始語音輸入'; btn.classList.remove('bcf-voice-recording'); }
+    const blobType = recorder.mimeType || mimeType || 'audio/webm';
+    const blob = new Blob(chunks, { type: blobType });
+    await _transcribeAudio(blob, blobType);
+  };
+
+  recorder.onerror = e => {
+    _bcfVoiceOn = false;
+    if (btn) { btn.textContent = '🎤 開始語音輸入'; btn.classList.remove('bcf-voice-recording'); }
+    if (statusEl) statusEl.textContent = `⚠️ 錄音錯誤：${e.error?.message || e.error}`;
+  };
+
+  recorder.start();
+  _bcfVoiceOn = true;
+  if (btn) { btn.textContent = '⏹ 停止錄音'; btn.classList.add('bcf-voice-recording'); }
+  if (statusEl) statusEl.textContent = '🔴 錄音中… 再按一次停止並轉錄';
+}
+
+async function _transcribeAudio(blob, mimeType) {
+  const statusEl    = document.getElementById('bcf-voice-status');
+  const transcriptEl = document.getElementById('bcf-voice-transcript');
+  const parseBtn    = document.getElementById('bcf-parse-btn');
+
+  if (statusEl) statusEl.textContent = '⏳ 上傳並轉錄音檔…';
+
+  try {
+    const ext = (mimeType.includes('mp4') || mimeType.includes('m4a')) ? 'm4a' : 'webm';
+    const formData = new FormData();
+    formData.append('audio', blob, `recording.${ext}`);
+
+    const resp = await fetch('/api/transcribe', { method: 'POST', body: formData });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    const { text } = await resp.json();
+    if (transcriptEl) transcriptEl.value = text;
+    if (parseBtn && text?.trim()) parseBtn.disabled = false;
+    if (statusEl) statusEl.textContent = '✅ 轉錄完成，請確認文字後按「確認並解析」';
+  } catch (err) {
+    if (statusEl) statusEl.textContent = `⚠️ 轉錄失敗：${err.message}`;
+    showToast(`音檔轉錄失敗：${err.message}`, 'error');
+  }
+}
+
+async function parseBCFVoice() {
+  const transcriptEl = document.getElementById('bcf-voice-transcript');
+  const text = transcriptEl?.value?.trim();
+  if (!text) { showToast('請先完成語音輸入', 'warning'); return; }
+
+  const parseBtn     = document.getElementById('bcf-parse-btn');
+  const resultDiv    = document.getElementById('bcf-voice-result');
+  const resultBody   = document.getElementById('bcf-voice-result-body');
+
+  if (parseBtn) { parseBtn.disabled = true; parseBtn.textContent = '解析中…'; }
+
+  try {
+    const resp = await fetch('/api/parse-voice', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text }),
+    });
+    if (!resp.ok) {
+      const err = await resp.json().catch(() => ({}));
+      throw new Error(err.error || `HTTP ${resp.status}`);
+    }
+    _bcfVoiceParsed = await resp.json();
+    if (resultDiv)  resultDiv.style.display = 'block';
+    if (resultBody) resultBody.innerHTML = _renderVoicePreview(_bcfVoiceParsed);
+    showToast('AI 解析完成，請確認後填入', 'success');
+  } catch (err) {
+    showToast(`解析失敗：${err.message}`, 'error');
+  } finally {
+    if (parseBtn) { parseBtn.disabled = false; parseBtn.textContent = '✨ 確認並解析'; }
+  }
+}
+
+function _renderVoicePreview(data) {
+  if (!data || !Array.isArray(data.muscles)) return '<p style="color:var(--danger)">格式錯誤，請重試</p>';
+  const rows = data.muscles.map(m => `
+    <tr>
+      <td style="padding:4px 8px;border:1px solid var(--gray-200)">${m.name || '—'}</td>
+      <td style="padding:4px 8px;border:1px solid var(--gray-200)">${m.side || '—'}</td>
+      <td style="padding:4px 8px;border:1px solid var(--gray-200)">${m.score ?? '—'}</td>
+      <td style="padding:4px 8px;border:1px solid var(--gray-200)">${m.note || '—'}</td>
+    </tr>`).join('');
+  return `<table style="width:100%;border-collapse:collapse">
+    <thead><tr style="background:var(--gray-100)">
+      <th style="padding:4px 8px;border:1px solid var(--gray-200);text-align:left">名稱</th>
+      <th style="padding:4px 8px;border:1px solid var(--gray-200);text-align:left">側別</th>
+      <th style="padding:4px 8px;border:1px solid var(--gray-200);text-align:left">分數</th>
+      <th style="padding:4px 8px;border:1px solid var(--gray-200);text-align:left">備注</th>
+    </tr></thead>
+    <tbody>${rows}</tbody>
+  </table>${data.generalNote ? `<p style="margin-top:8px;color:var(--gray-600)">整體備注：${data.generalNote}</p>` : ''}`;
+}
+
+function fillBCFFromVoice() {
+  if (!_bcfVoiceParsed) { showToast('尚無解析結果', 'warning'); return; }
+  const total   = (_bcfVoiceParsed.muscles || []).length;
+  const matched = _applyVoiceDataToBCF(_bcfVoiceParsed.muscles, _bcfVoiceParsed.generalNote);
+  const missed  = total - matched;
+  showToast(`已填入 ${matched} 個欄位${missed > 0 ? `，${missed} 個未匹配已附加至備注` : ''}`, 'success');
+}
+
+function clearBCFVoiceState() {
+  _bcfVoiceParsed = null;
+  const transcriptEl = document.getElementById('bcf-voice-transcript');
+  if (transcriptEl) transcriptEl.value = '';
+  const resultDiv = document.getElementById('bcf-voice-result');
+  if (resultDiv) resultDiv.style.display = 'none';
+  const parseBtn  = document.getElementById('bcf-parse-btn');
+  if (parseBtn)  { parseBtn.disabled = true; }
+  const statusEl  = document.getElementById('bcf-voice-status');
+  if (statusEl)  statusEl.textContent = '';
+}
+
+function _applyVoiceDataToBCF(muscles, generalNote) {
+  const NAME_MAP = {
+    'E1':'E1','E2':'E2','E3':'E3','E4':'E4','E5':'E5','E6':'E6','E7':'E7','E8':'E8',
+    '右上':'E1','左下':'E2','左上':'E3','右下':'E4','往左':'E5','往右':'E6','往上':'E7','往下':'E8',
+    'V1':'V1','V2':'V2','V3':'V3','V4':'V4','V5':'V5','V6':'V6','V7':'V7','V8':'V8','V9':'V9','V10':'V10',
+    '頭往後':'V1','頭往左後':'V2','頭往左':'V3','頭往左前':'V4',
+    '頭往前':'V5','頭往右前':'V6','頭往右':'V7','頭往右後':'V8','右側傾':'V9','左側傾':'V10',
+    'C1':'C1','C2':'C2','C3':'C3','C4':'C4','C5':'C5','C6':'C6','C7':'C7','C8':'C8',
+    '左耳':'C1','右耳':'C5',
+    'L1':'L1','L2':'L2',
+    'conv-up':'conv-up','conv-mid':'conv-mid','conv-dn':'conv-dn',
+    '上方convergence':'conv-up','中間convergence':'conv-mid','下方convergence':'conv-dn',
+    'upper convergence':'conv-up','mid convergence':'conv-mid','lower convergence':'conv-dn',
+  };
+
+  let matched = 0;
+  const unmatched = [];
+
+  for (const m of (muscles || [])) {
+    const rawName = (m.name || '').trim();
+    const fieldId = _findBCFFieldId(rawName, NAME_MAP);
+
+    if (!fieldId) {
+      unmatched.push(`${rawName}（${m.side || ''}）${m.note ? '：' + m.note : ''}`);
+      continue;
+    }
+
+    _setBCFFieldValue(fieldId, _resolveArmValue(m), m.score);
+    matched++;
+  }
+
+  const notesEl = document.getElementById('bcf-notes');
+  if (notesEl) {
+    const parts = [];
+    if (notesEl.value.trim()) parts.push(notesEl.value.trim());
+    if (generalNote) parts.push(generalNote);
+    if (unmatched.length > 0) parts.push('【語音未匹配】' + unmatched.join('；'));
+    notesEl.value = parts.join('\n');
+  }
+
+  return matched;
+}
+
+function _findBCFFieldId(name, map) {
+  if (map[name]) return map[name];
+  const up = name.toUpperCase();
+  for (const [k, v] of Object.entries(map)) {
+    if (k.toUpperCase() === up) return v;
+  }
+  for (const [k, v] of Object.entries(map)) {
+    if (name.includes(k) || k.includes(name)) return v;
+  }
+  return null;
+}
+
+function _resolveArmValue(m) {
+  const combined = ((m.side || '') + (m.note || '')).toLowerCase();
+  if (combined.includes('左長') || combined.includes('left-long') || combined.includes('left long')) return 'left-long';
+  if (combined.includes('右長') || combined.includes('左短') || combined.includes('right-long') || combined.includes('right long')) return 'right-long';
+  if (m.side === '左' && (m.score || 0) > 0) return 'left-long';
+  if (m.side === '右' && (m.score || 0) > 0) return 'right-long';
+  if (m.score === 1) return 'left-long';
+  if (m.score === 2) return 'right-long';
+  return 'none';
+}
+
+function _setBCFFieldValue(fieldId, armValue, score) {
+  if (/^(E[1-8]|V\d+|L[12])$/.test(fieldId)) {
+    const radio = document.querySelector(`input[name="${fieldId}"][value="${armValue}"]`);
+    if (radio) { radio.checked = true; radio.dispatchEvent(new Event('change')); }
+    return;
+  }
+  if (/^C[1-8]$/.test(fieldId)) {
+    const hasDiff = (score || 0) > 0 || armValue !== 'none';
+    const cb = document.querySelector(`input[name="${fieldId}"][value="diff"]`);
+    if (cb) { cb.checked = hasDiff; cb.dispatchEvent(new Event('change')); }
+    return;
+  }
+  if (fieldId.startsWith('conv-')) {
+    const val = (score || 0) > 0 || armValue !== 'none' ? 'abnormal' : 'normal';
+    const radio = document.querySelector(`input[name="${fieldId}"][value="${val}"]`);
+    if (radio) { radio.checked = true; radio.dispatchEvent(new Event('change')); }
+  }
 }
 
 function markBCFItem(id, hasDiff) {
@@ -1547,6 +1954,8 @@ function computeFlyingChairRx(affectedItems, patient) {
 // ===== RIGHT EYE REPORT ANALYSIS =====
 function computeRightEyeRx(data) {
   const { spH, spV, spC, eso, svH, svV, syncH, syncV, intrusion,
+          pldRight, pldLeft, orthRight, orthLeft,
+          svRight, svLeft, svUp, svDown,
           hTotal, hOverR, hUnderR, hMissedR, hOverL, hUnderL, hMissedL,
           vTotal, vOverR, vUnderR, vMissedR, vOverL, vUnderL, vMissedL } = data;
 
@@ -1554,6 +1963,9 @@ function computeRightEyeRx(data) {
   const esoSt  = v => v === null ? 'na' : v < 1.0  ? 'normal' : v <= 2.0  ? 'mild' : 'severe';
   const svSt   = v => v === null ? 'na' : v > 150  ? 'normal' : v >= 100  ? 'mild' : 'severe';
   const syncSt = v => v === null ? 'na' : v > 0.85 ? 'normal' : v >= 0.75 ? 'mild' : 'severe';
+  // pldRight 偏負（< -5mm）→ Right Parietal Cortex；pldLeft 偏大（> 5mm）→ Left CB
+  const pldRSt = pldRight === null ? 'na' : pldRight > -5 ? 'normal' : pldRight > -10 ? 'mild' : 'severe';
+  const pldLSt = pldLeft  === null ? 'na' : Math.abs(pldLeft) < 5 ? 'normal' : Math.abs(pldLeft) < 10 ? 'mild' : 'severe';
 
   const ST_ICON  = { normal: '🟢', mild: '🟡', moderate: '🟠', severe: '🔴', na: '⚪' };
   const ST_LABEL = { normal: '正常', mild: '輕度異常', moderate: '中度異常', severe: '嚴重異常', na: '未填入' };
@@ -1567,6 +1979,12 @@ function computeRightEyeRx(data) {
   const syncHSt = syncSt(syncH);
   const syncVSt = syncSt(syncV);
   const intSt  = intrusion === 'none' ? 'normal' : 'severe';  // up/down/left/right all = severe
+
+  const svRSt   = svSt(svRight);
+  const svLSt   = svSt(svLeft);
+  const svUSt   = svSt(svUp);
+  const svDSt   = svSt(svDown);
+  const orthAbn = r => r === 'up' || r === 'down';
 
   // ── Overshoot / Undershoot / Missed 判斷（四等級，均以百分比計算）──
   function overGrade(r) {
@@ -1689,45 +2107,88 @@ function computeRightEyeRx(data) {
     },
     // ── Saccade Over/Under/Missed ──
     ...(hTotal ? [
-      { label: '水平 Saccade 右眼 Overshot',  value: hOverRPct  !== null ? hOverRPct  + '%' : '—', status: hOverRSt,
-        brain: overBrain(hOverRSt, ['CB（小腦抑制不足）'], ['CB（小腦）']),
-        note:  overNote(hOverRSt, '小腦 Overshoot 抑制嚴重異常 ⚠️', 'CB 過衝中度，低速精準控制訓練', 'CB 過衝輕度，建議精準控制訓練') },
-      { label: '水平 Saccade 右眼 Undershot', value: hUnderRPct !== null ? hUnderRPct + '%' : '—', status: hUnderRSt,
-        brain: overBrain(hUnderRSt, ['Basal Ganglia'], ['Basal Ganglia', 'FEF']),
-        note:  overNote(hUnderRSt, 'BG 欠衝嚴重，啟動不足 ⚠️', 'BG 欠衝中度，強化啟動訓練', 'BG/FEF 啟動輕度不足') },
-      { label: '水平 Saccade 右眼 Missed',    value: hMissRPct  !== null ? hMissRPct  + '%' : '—', status: hMissRSt,
-        brain: overBrain(hMissRSt, ['PPRF', 'FEF'], ['PPRF', 'FEF']),
-        note:  overNote(hMissRSt, 'PPRF/FEF 嚴重不足 ⚠️', 'PPRF/FEF 中度不足', 'PPRF/FEF 輕度不足') },
-      { label: '水平 Saccade 左眼 Overshot',  value: hOverLPct  !== null ? hOverLPct  + '%' : '—', status: hOverLSt,
-        brain: overBrain(hOverLSt, ['CB（小腦抑制不足）'], ['CB（小腦）']),
-        note:  overNote(hOverLSt, '小腦 Overshoot 抑制嚴重異常 ⚠️', 'CB 過衝中度，低速精準控制訓練', 'CB 過衝輕度，建議精準控制訓練') },
-      { label: '水平 Saccade 左眼 Undershot', value: hUnderLPct !== null ? hUnderLPct + '%' : '—', status: hUnderLSt,
-        brain: overBrain(hUnderLSt, ['Basal Ganglia'], ['Basal Ganglia', 'FEF']),
-        note:  overNote(hUnderLSt, 'BG 欠衝嚴重，啟動不足 ⚠️', 'BG 欠衝中度，強化啟動訓練', 'BG/FEF 啟動輕度不足') },
-      { label: '水平 Saccade 左眼 Missed',    value: hMissLPct  !== null ? hMissLPct  + '%' : '—', status: hMissLSt,
-        brain: overBrain(hMissLSt, ['PPRF', 'FEF'], ['PPRF', 'FEF']),
-        note:  overNote(hMissLSt, 'PPRF/FEF 嚴重不足 ⚠️', 'PPRF/FEF 中度不足', 'PPRF/FEF 輕度不足') },
+      { label: '水平 Saccade 右向 Overshoot',  value: hOverRPct  !== null ? hOverRPct  + '%' : '—', status: hOverRSt,
+        brain: overBrain(hOverRSt, ['Right CB'], ['Right CB']),
+        note:  overNote(hOverRSt, 'Right CB 過衝抑制嚴重異常 ⚠️', 'Right CB 過衝中度，低速精準控制訓練', 'Right CB 過衝輕度，建議精準控制訓練') },
+      { label: '水平 Saccade 右向 Undershoot', value: hUnderRPct !== null ? hUnderRPct + '%' : '—', status: hUnderRSt,
+        brain: overBrain(hUnderRSt, ['Left CB'], ['Left CB']),
+        note:  overNote(hUnderRSt, 'Left CB 欠衝嚴重，右向啟動不足 ⚠️', 'Left CB 欠衝中度，強化啟動訓練', 'Left CB 啟動輕度不足') },
+      { label: '水平 Saccade 右向 Missed',    value: hMissRPct  !== null ? hMissRPct  + '%' : '—', status: hMissRSt,
+        brain: overBrain(hMissRSt, ['Right PPRF', 'Left FEF'], ['Right PPRF', 'Left FEF']),
+        note:  overNote(hMissRSt, 'Right PPRF/Left FEF 嚴重不足 ⚠️', 'Right PPRF/Left FEF 中度不足', 'Right PPRF/Left FEF 輕度不足') },
+      { label: '水平 Saccade 左向 Overshoot',  value: hOverLPct  !== null ? hOverLPct  + '%' : '—', status: hOverLSt,
+        brain: overBrain(hOverLSt, ['Left CB'], ['Left CB']),
+        note:  overNote(hOverLSt, 'Left CB 過衝抑制嚴重異常 ⚠️', 'Left CB 過衝中度，低速精準控制訓練', 'Left CB 過衝輕度，建議精準控制訓練') },
+      { label: '水平 Saccade 左向 Undershoot', value: hUnderLPct !== null ? hUnderLPct + '%' : '—', status: hUnderLSt,
+        brain: overBrain(hUnderLSt, ['Right CB'], ['Right CB']),
+        note:  overNote(hUnderLSt, 'Right CB 欠衝嚴重，左向啟動不足 ⚠️', 'Right CB 欠衝中度，強化啟動訓練', 'Right CB 啟動輕度不足') },
+      { label: '水平 Saccade 左向 Missed',    value: hMissLPct  !== null ? hMissLPct  + '%' : '—', status: hMissLSt,
+        brain: overBrain(hMissLSt, ['Left PPRF', 'Right FEF'], ['Left PPRF', 'Right FEF']),
+        note:  overNote(hMissLSt, 'Left PPRF/Right FEF 嚴重不足 ⚠️', 'Left PPRF/Right FEF 中度不足', 'Left PPRF/Right FEF 輕度不足') },
     ] : []),
     ...(vTotal ? [
-      { label: '垂直 Saccade 右眼 Overshot',  value: vOverRPct  !== null ? vOverRPct  + '%' : '—', status: vOverRSt,
+      { label: '垂直 Saccade 上向 Overshoot',  value: vOverRPct  !== null ? vOverRPct  + '%' : '—', status: vOverRSt,
         brain: overBrain(vOverRSt, ['CB Vermis'], ['CB Vermis']),
         note:  overNote(vOverRSt, '小腦蚓部 Overshoot 嚴重異常 ⚠️', 'CB Vermis 過衝中度，低速精準訓練', 'CB Vermis 過衝輕度') },
-      { label: '垂直 Saccade 右眼 Undershot', value: vUnderRPct !== null ? vUnderRPct + '%' : '—', status: vUnderRSt,
+      { label: '垂直 Saccade 上向 Undershoot', value: vUnderRPct !== null ? vUnderRPct + '%' : '—', status: vUnderRSt,
         brain: overBrain(vUnderRSt, ['riMLF'], ['riMLF']),
         note:  overNote(vUnderRSt, 'riMLF 垂直啟動嚴重不足 ⚠️', 'riMLF 垂直啟動中度不足', 'riMLF 垂直啟動輕度不足') },
-      { label: '垂直 Saccade 右眼 Missed',    value: vMissRPct  !== null ? vMissRPct  + '%' : '—', status: vMissRSt,
+      { label: '垂直 Saccade 上向 Missed',    value: vMissRPct  !== null ? vMissRPct  + '%' : '—', status: vMissRSt,
         brain: overBrain(vMissRSt, ['riMLF', 'Superior Colliculus'], ['riMLF', 'Superior Colliculus']),
         note:  overNote(vMissRSt, 'riMLF/SC 嚴重不足 ⚠️', 'riMLF/SC 中度不足', 'riMLF/SC 輕度不足') },
-      { label: '垂直 Saccade 左眼 Overshot',  value: vOverLPct  !== null ? vOverLPct  + '%' : '—', status: vOverLSt,
+      { label: '垂直 Saccade 下向 Overshoot',  value: vOverLPct  !== null ? vOverLPct  + '%' : '—', status: vOverLSt,
         brain: overBrain(vOverLSt, ['CB Vermis'], ['CB Vermis']),
         note:  overNote(vOverLSt, '小腦蚓部 Overshoot 嚴重異常 ⚠️', 'CB Vermis 過衝中度，低速精準訓練', 'CB Vermis 過衝輕度') },
-      { label: '垂直 Saccade 左眼 Undershot', value: vUnderLPct !== null ? vUnderLPct + '%' : '—', status: vUnderLSt,
+      { label: '垂直 Saccade 下向 Undershoot', value: vUnderLPct !== null ? vUnderLPct + '%' : '—', status: vUnderLSt,
         brain: overBrain(vUnderLSt, ['riMLF'], ['riMLF']),
         note:  overNote(vUnderLSt, 'riMLF 垂直啟動嚴重不足 ⚠️', 'riMLF 垂直啟動中度不足', 'riMLF 垂直啟動輕度不足') },
-      { label: '垂直 Saccade 左眼 Missed',    value: vMissLPct  !== null ? vMissLPct  + '%' : '—', status: vMissLSt,
+      { label: '垂直 Saccade 下向 Missed',    value: vMissLPct  !== null ? vMissLPct  + '%' : '—', status: vMissLSt,
         brain: overBrain(vMissLSt, ['riMLF', 'Superior Colliculus'], ['riMLF', 'Superior Colliculus']),
         note:  overNote(vMissLSt, 'riMLF/SC 嚴重不足 ⚠️', 'riMLF/SC 中度不足', 'riMLF/SC 輕度不足') },
     ] : []),
+    // ── PLD 側性指標 ──
+    ...(pldRight !== null ? [{
+      label: 'SP 右向 PLD', value: pldRight.toFixed(1) + ' mm', status: pldRSt,
+      brain: (pldRSt === 'mild' || pldRSt === 'severe') ? ['Right Parietal Cortex'] : [],
+      note: pldRSt === 'severe' ? 'Right Parietal Cortex 嚴重弱化（右向追蹤 PLD 偏負） ⚠️' : pldRSt === 'mild' ? 'Right Parietal Cortex 輕度弱化（右向追蹤 PLD 偏負）' : '',
+    }] : []),
+    ...(pldLeft !== null ? [{
+      label: 'SP 左向 PLD', value: pldLeft.toFixed(1) + ' mm', status: pldLSt,
+      brain: (pldLSt === 'mild' || pldLSt === 'severe') ? ['Left CB'] : [],
+      note: pldLSt === 'severe' ? 'Left CB 嚴重弱化（左向追蹤 PLD 偏大） ⚠️' : pldLSt === 'mild' ? 'Left CB 輕度弱化（左向追蹤 PLD 偏大）' : '',
+    }] : []),
+    // ── Orthogonal 垂直眼動指標 ──
+    ...(orthAbn(orthRight) ? [{
+      label: 'SP 右追蹤 Orthogonal', value: orthRight === 'up' ? '向上偏移' : '向下偏移', status: 'severe',
+      brain: ['Right CB'],
+      note: '右向追蹤出現垂直眼動偏移 → Right CB 弱化 ⚠️',
+    }] : []),
+    ...(orthAbn(orthLeft) ? [{
+      label: 'SP 左追蹤 Orthogonal', value: orthLeft === 'up' ? '向上偏移' : '向下偏移', status: 'severe',
+      brain: ['Left CB'],
+      note: '左向追蹤出現垂直眼動偏移 → Left CB 弱化 ⚠️',
+    }] : []),
+    // ── 個別方向 Saccadic Velocity ──
+    ...(svRight !== null ? [{
+      label: '右向 Saccade 速度', value: svRight + ' d/s', status: svRSt,
+      brain: (svRSt === 'mild' || svRSt === 'severe') ? ['Right PPRF', 'Left FEF'] : [],
+      note: svRSt === 'severe' ? 'Right PPRF + Left FEF 嚴重不足 ⚠️' : svRSt === 'mild' ? 'Right PPRF + Left FEF 輕度弱化' : '',
+    }] : []),
+    ...(svLeft !== null ? [{
+      label: '左向 Saccade 速度', value: svLeft + ' d/s', status: svLSt,
+      brain: (svLSt === 'mild' || svLSt === 'severe') ? ['Left PPRF', 'Right FEF'] : [],
+      note: svLSt === 'severe' ? 'Left PPRF + Right FEF 嚴重不足 ⚠️' : svLSt === 'mild' ? 'Left PPRF + Right FEF 輕度弱化' : '',
+    }] : []),
+    ...(svUp !== null ? [{
+      label: '上向 Saccade 速度', value: svUp + ' d/s', status: svUSt,
+      brain: (svUSt === 'mild' || svUSt === 'severe') ? ['Bilateral riMLF', 'Superior Colliculus'] : [],
+      note: svUSt === 'severe' ? 'riMLF/SC 上向嚴重不足 ⚠️' : svUSt === 'mild' ? 'riMLF/SC 上向輕度弱化' : '',
+    }] : []),
+    ...(svDown !== null ? [{
+      label: '下向 Saccade 速度', value: svDown + ' d/s', status: svDSt,
+      brain: (svDSt === 'mild' || svDSt === 'severe') ? ['Bilateral Midbrain', 'Bilateral riMLF'] : [],
+      note: svDSt === 'severe' ? 'Midbrain/riMLF 下向嚴重不足 ⚠️' : svDSt === 'mild' ? 'Midbrain/riMLF 下向輕度弱化' : '',
+    }] : []),
   ];
 
   const brainRegions = new Set();
@@ -1820,13 +2281,21 @@ function computeRightEyeRx(data) {
   }
 
   // === Overshoot / Undershoot / Missed → 處方 ===
-  // Overshoot（水平）→ CB 小腦抑制不足 → M2 低速精準控制
-  if (hOverRSt === 'severe' || hOverLSt === 'severe') {
-    addRx({ mode: 'M2', name: 'Saccade左右', angle: '0°（水平，CB 過衝抑制-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 水平 Overshoot 嚴重（>50%）→ CB 小腦抑制訓練，低速精準'], priority: 2 });
-  } else if (hOverRSt === 'moderate' || hOverLSt === 'moderate') {
-    addRx({ mode: 'M2', name: 'Saccade左右', angle: '0°（水平，CB 過衝抑制-中度）', speed: 'S2', dist: 'D3', reps: '13', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 水平 Overshoot 中度（30-50%）→ CB 小腦抑制訓練'], priority: 2 });
-  } else if (hOverRSt === 'mild' || hOverLSt === 'mild') {
-    addRx({ mode: 'M2', name: 'Saccade左右', angle: '0°（水平，CB 過衝輕度）', speed: 'S2', dist: 'D3', reps: '10', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 水平 Overshoot 輕度（10-30%）→ CB 小腦抑制訓練'], priority: 3 });
+  // 右向 Overshoot → Right CB 抑制不足 → M2 R90 低速精準
+  if (hOverRSt === 'severe') {
+    addRx({ mode: 'M2', name: 'Saccade右向', angle: 'R90（Right CB 過衝-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 右向 Overshoot >50% → Right CB 精準抑制訓練'], priority: 2 });
+  } else if (hOverRSt === 'moderate') {
+    addRx({ mode: 'M2', name: 'Saccade右向', angle: 'R90（Right CB 過衝-中度）', speed: 'S2', dist: 'D3', reps: '13', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 右向 Overshoot 30-50% → Right CB 精準訓練'], priority: 2 });
+  } else if (hOverRSt === 'mild') {
+    addRx({ mode: 'M2', name: 'Saccade右向', angle: 'R90（Right CB 過衝輕度）', speed: 'S2', dist: 'D3', reps: '10', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 右向 Overshoot 10-30% → Right CB 輕度訓練'], priority: 3 });
+  }
+  // 左向 Overshoot → Left CB 抑制不足 → M2 L90 低速精準
+  if (hOverLSt === 'severe') {
+    addRx({ mode: 'M2', name: 'Saccade左向', angle: 'L90（Left CB 過衝-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 左向 Overshoot >50% → Left CB 精準抑制訓練'], priority: 2 });
+  } else if (hOverLSt === 'moderate') {
+    addRx({ mode: 'M2', name: 'Saccade左向', angle: 'L90（Left CB 過衝-中度）', speed: 'S2', dist: 'D3', reps: '13', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 左向 Overshoot 30-50% → Left CB 精準訓練'], priority: 2 });
+  } else if (hOverLSt === 'mild') {
+    addRx({ mode: 'M2', name: 'Saccade左向', angle: 'L90（Left CB 過衝輕度）', speed: 'S2', dist: 'D3', reps: '10', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 左向 Overshoot 10-30% → Left CB 輕度訓練'], priority: 3 });
   }
   // Overshoot（垂直）→ CB Vermis 抑制不足 → M3 低速
   if (vOverRSt === 'severe' || vOverLSt === 'severe') {
@@ -1836,13 +2305,21 @@ function computeRightEyeRx(data) {
   } else if (vOverRSt === 'mild' || vOverLSt === 'mild') {
     addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑', angle: 'R0/L0（垂直，CB Vermis 輕度）', speed: 'S2', dist: 'D3', reps: '10', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 垂直 Overshoot 輕度（10-30%）→ CB Vermis 抑制訓練'], priority: 3 });
   }
-  // Undershoot（水平）→ Basal Ganglia 啟動不足 → M2 中高速啟動訓練
-  if (hUnderRSt === 'severe' || hUnderLSt === 'severe') {
-    addRx({ mode: 'M2', name: 'Saccade左右', angle: '0°（水平，BG 欠衝-嚴重）', speed: 'S4', dist: 'D5', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 水平 Undershoot 嚴重（>60%）→ Basal Ganglia 啟動訓練，大幅度高速'], priority: 2 });
-  } else if (hUnderRSt === 'moderate' || hUnderLSt === 'moderate') {
-    addRx({ mode: 'M2', name: 'Saccade左右', angle: '0°（水平，BG 欠衝-中度）', speed: 'S3', dist: 'D4', reps: '18', target: '有', bg: '空白背板', notes: ['RightEye: 水平 Undershoot 中度（40-60%）→ Basal Ganglia 中度啟動訓練'], priority: 2 });
-  } else if (hUnderRSt === 'mild' || hUnderLSt === 'mild') {
-    addRx({ mode: 'M2', name: 'Saccade左右', angle: '0°（水平，BG 欠衝輕度）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 水平 Undershoot 輕度（20-40%）→ BG 啟動強化'], priority: 3 });
+  // 右向 Undershoot → Left CB 啟動不足 → M2 R90 中高速啟動訓練
+  if (hUnderRSt === 'severe') {
+    addRx({ mode: 'M2', name: 'Saccade右向', angle: 'R90（Left CB → 右向欠衝-嚴重）', speed: 'S4', dist: 'D5', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Undershoot >60% → Left CB 啟動訓練'], priority: 2 });
+  } else if (hUnderRSt === 'moderate') {
+    addRx({ mode: 'M2', name: 'Saccade右向', angle: 'R90（Left CB → 右向欠衝-中度）', speed: 'S3', dist: 'D4', reps: '18', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Undershoot 40-60% → Left CB 中度啟動訓練'], priority: 2 });
+  } else if (hUnderRSt === 'mild') {
+    addRx({ mode: 'M2', name: 'Saccade右向', angle: 'R90（Left CB → 右向欠衝輕度）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Undershoot 20-40% → Left CB 啟動強化'], priority: 3 });
+  }
+  // 左向 Undershoot → Right CB 啟動不足 → M2 L90 中高速啟動訓練
+  if (hUnderLSt === 'severe') {
+    addRx({ mode: 'M2', name: 'Saccade左向', angle: 'L90（Right CB → 左向欠衝-嚴重）', speed: 'S4', dist: 'D5', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Undershoot >60% → Right CB 啟動訓練'], priority: 2 });
+  } else if (hUnderLSt === 'moderate') {
+    addRx({ mode: 'M2', name: 'Saccade左向', angle: 'L90（Right CB → 左向欠衝-中度）', speed: 'S3', dist: 'D4', reps: '18', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Undershoot 40-60% → Right CB 中度啟動訓練'], priority: 2 });
+  } else if (hUnderLSt === 'mild') {
+    addRx({ mode: 'M2', name: 'Saccade左向', angle: 'L90（Right CB → 左向欠衝輕度）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Undershoot 20-40% → Right CB 啟動強化'], priority: 3 });
   }
   // Undershoot（垂直）→ riMLF 垂直啟動不足 → M4 高速
   if (vUnderRSt === 'severe' || vUnderLSt === 'severe') {
@@ -1852,13 +2329,21 @@ function computeRightEyeRx(data) {
   } else if (vUnderRSt === 'mild' || vUnderLSt === 'mild') {
     addRx({ mode: 'M4', name: 'Saccade↑+Pursuit↓', angle: 'R0/L0（垂直，riMLF 輕度）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 垂直 Undershoot 輕度（20-40%）→ riMLF 訓練'], priority: 3 });
   }
-  // Missed（水平）→ PPRF/FEF 不足 → M2
-  if (hMissRSt === 'severe' || hMissLSt === 'severe') {
-    addRx({ mode: 'M2', name: 'Saccade左右', angle: 'R90/L90（PPRF/FEF Missed-嚴重）', speed: 'S5', dist: 'D4', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 水平 Missed 嚴重（>30%）→ PPRF/FEF 緊急強化 ⚠️'], priority: 1 });
-  } else if (hMissRSt === 'moderate' || hMissLSt === 'moderate') {
-    addRx({ mode: 'M2', name: 'Saccade左右', angle: 'R90/L90（PPRF/FEF Missed-中度）', speed: 'S4', dist: 'D4', reps: '18', target: '有', bg: '空白背板', notes: ['RightEye: 水平 Missed 中度（15-30%）→ PPRF/FEF 強化'], priority: 2 });
-  } else if (hMissRSt === 'mild' || hMissLSt === 'mild') {
-    addRx({ mode: 'M2', name: 'Saccade左右', angle: 'R90/L90（PPRF 輕度 Missed）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 水平 Missed 輕度（5-15%）→ PPRF 強化'], priority: 3 });
+  // 右向 Missed → Right PPRF/Left FEF → M2 R90
+  if (hMissRSt === 'severe') {
+    addRx({ mode: 'M2', name: 'Saccade右向', angle: 'R90（Right PPRF/Left FEF Missed-嚴重）', speed: 'S5', dist: 'D4', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Missed >30% → Right PPRF/Left FEF 緊急強化 ⚠️'], priority: 1 });
+  } else if (hMissRSt === 'moderate') {
+    addRx({ mode: 'M2', name: 'Saccade右向', angle: 'R90（Right PPRF/Left FEF Missed-中度）', speed: 'S4', dist: 'D4', reps: '18', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Missed 15-30% → Right PPRF/Left FEF 強化'], priority: 2 });
+  } else if (hMissRSt === 'mild') {
+    addRx({ mode: 'M2', name: 'Saccade右向', angle: 'R90（Right PPRF 輕度 Missed）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Missed 5-15% → Right PPRF 強化'], priority: 3 });
+  }
+  // 左向 Missed → Left PPRF/Right FEF → M2 L90
+  if (hMissLSt === 'severe') {
+    addRx({ mode: 'M2', name: 'Saccade左向', angle: 'L90（Left PPRF/Right FEF Missed-嚴重）', speed: 'S5', dist: 'D4', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Missed >30% → Left PPRF/Right FEF 緊急強化 ⚠️'], priority: 1 });
+  } else if (hMissLSt === 'moderate') {
+    addRx({ mode: 'M2', name: 'Saccade左向', angle: 'L90（Left PPRF/Right FEF Missed-中度）', speed: 'S4', dist: 'D4', reps: '18', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Missed 15-30% → Left PPRF/Right FEF 強化'], priority: 2 });
+  } else if (hMissLSt === 'mild') {
+    addRx({ mode: 'M2', name: 'Saccade左向', angle: 'L90（Left PPRF 輕度 Missed）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Missed 5-15% → Left PPRF 強化'], priority: 3 });
   }
   // Missed（垂直）→ riMLF/SC → M3
   if (vMissRSt === 'severe' || vMissLSt === 'severe') {
@@ -1868,9 +2353,31 @@ function computeRightEyeRx(data) {
   } else if (vMissRSt === 'mild' || vMissLSt === 'mild') {
     addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑', angle: 'R0/L0（riMLF 輕度 Missed）', speed: 'S3', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 垂直 Missed 輕度（5-15%）→ riMLF 強化'], priority: 3 });
   }
-  // 左右眼不對稱 Overshoot → 單側 CB/FEF → M2 不對稱訓練
+  // 左右不對稱 Overshoot → 強化較弱側 CB
   if (saccAsymAbn) {
-    addRx({ mode: 'M2', name: 'Saccade左右', angle: '0°（不對稱，單側 CB/FEF）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: bgPlate(hOverRPct > hOverLPct, hOverLPct > hOverRPct), notes: ['RightEye: Overshoot 左右不對稱 → 單側 CB/FEF 強化'], priority: 3 });
+    const asymAngle = hOverRPct > hOverLPct ? 'R90（Right CB 不對稱）' : hOverLPct > hOverRPct ? 'L90（Left CB 不對稱）' : 'R90/L90（不對稱）';
+    addRx({ mode: 'M2', name: 'Saccade不對稱強化', angle: asymAngle, speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: Overshoot 左右不對稱 → 單側 CB 強化'], priority: 3 });
+  }
+  // PLD 側性 → Parietal Cortex 訓練
+  if (pldRSt !== 'normal' && pldRSt !== 'na') {
+    addRx({ mode: 'M1', name: 'Pursuit右向', angle: 'R90（Right Parietal Cortex）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 右向 PLD 異常 → Right Parietal Cortex 訓練'], priority: 3 });
+  }
+  if (pldLSt !== 'normal' && pldLSt !== 'na') {
+    addRx({ mode: 'M1', name: 'Pursuit左向穩定', angle: 'L90（Left CB PLD）', speed: 'S2', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 左向 PLD 偏大 → Left CB 協調訓練'], priority: 3 });
+  }
+  // Orthogonal 垂直眼動 → CB 穩定訓練
+  if (orthAbn(orthRight)) {
+    addRx({ mode: 'M1', name: 'Pursuit右向穩定', angle: 'R90（Right CB Orth）', speed: 'S2', dist: 'D4', reps: '15', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 右向追蹤垂直偏移 → Right CB 穩定訓練'], priority: 3 });
+  }
+  if (orthAbn(orthLeft)) {
+    addRx({ mode: 'M1', name: 'Pursuit左向穩定', angle: 'L90（Left CB Orth）', speed: 'S2', dist: 'D4', reps: '15', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 左向追蹤垂直偏移 → Left CB 穩定訓練'], priority: 3 });
+  }
+  // 個別方向 Saccade 速度 → 方向性 PPRF/FEF 訓練
+  if (svRight !== null && svRSt !== 'normal' && svRSt !== 'na') {
+    addRx({ mode: 'M2', name: 'Saccade右向速度', angle: 'R90（Right PPRF + Left FEF）', speed: svRSt === 'severe' ? 'S5' : 'S3', dist: 'D4', reps: svRSt === 'severe' ? '10' : '15', target: '有', bg: '空白背板', notes: ['RightEye: 右向速度↓ → Right PPRF + Left FEF 強化'], priority: svRSt === 'severe' ? 1 : 3 });
+  }
+  if (svLeft !== null && svLSt !== 'normal' && svLSt !== 'na') {
+    addRx({ mode: 'M2', name: 'Saccade左向速度', angle: 'L90（Left PPRF + Right FEF）', speed: svLSt === 'severe' ? 'S5' : 'S3', dist: 'D4', reps: svLSt === 'severe' ? '10' : '15', target: '有', bg: '空白背板', notes: ['RightEye: 左向速度↓ → Left PPRF + Right FEF 強化'], priority: svLSt === 'severe' ? 1 : 3 });
   }
 
   rx.sort((a, b) => (a.priority || 9) - (b.priority || 9));
@@ -1890,7 +2397,7 @@ function computeRightEyeRx(data) {
   return { indicators, brainRegions, rx, priorityLines, hasAbnormal, ST_ICON, ST_LABEL };
 }
 
-function renderRightEyeSection({ indicators, brainRegions, rx, priorityLines, ST_ICON, ST_LABEL }) {
+function renderRightEyeSection({ indicators, brainRegions, rx, priorityLines, ST_ICON, ST_LABEL }, standalone = false) {
   const PC = { 1: '#dc2626', 2: '#d97706', 3: '#16a34a', 4: '#2563eb' };
   const PB = { 1: '#fef2f2', 2: '#fffbeb', 3: '#f0fdf4', 4: '#eff6ff' };
 
@@ -1920,22 +2427,27 @@ function renderRightEyeSection({ indicators, brainRegions, rx, priorityLines, ST
       }).join('')}
     </div>` : '';
 
+  const lateralAngle = r => standalone && /^[RL]\d/.test(r.angle) && r.angle.includes('/');
   const rxHTML = rx.length > 0 ? `
     <div>
+      ${standalone ? `<div style="margin-bottom:10px;padding:8px 12px;background:#fff7ed;border-left:3px solid #f97316;border-radius:4px;font-size:12px;color:#c2410c;font-weight:600">⚠️ 板面角度需配合肌肉張力測試才能確定側性。含 R/L 的角度為建議範圍，實際側性請依 BCF 評估結果決定。</div>` : ''}
       <div style="font-size:12px;font-weight:600;color:var(--gray-600);margin-bottom:6px;letter-spacing:.3px">▶ RightEye 眼動機處方參數</div>
       <div style="overflow-x:auto">
         <table class="data-table" style="margin:0;font-size:12px">
           <thead>
-            <tr><th>順序</th><th>模式</th><th>訓練類型</th><th>板面角度</th><th>速度</th><th>距離</th><th>次數</th><th>目標物</th><th>背板</th><th>處方依據</th></tr>
+            <tr><th>順序</th><th>模式</th><th>訓練類型</th><th>板面角度${standalone ? ' <span style="color:#ea580c;font-size:10px;font-weight:400">⚠️ 需配合BCF</span>' : ''}</th><th>速度</th><th>距離</th><th>次數</th><th>目標物</th><th>背板</th><th>處方依據</th></tr>
           </thead>
           <tbody>
             ${rx.map(r => {
               const icon = r.priority === 1 ? '🔴' : r.priority === 2 ? '🟡' : r.priority === 3 ? '🟢' : '🔵';
+              const aCell = lateralAngle(r)
+                ? '<span style="color:#ea580c;font-weight:700">' + r.angle + '</span><br><span style="font-size:10px;color:#ea580c">⚠️ 側性需BCF確認</span>'
+                : r.angle;
               return '<tr>' +
                 '<td style="text-align:center;font-size:15px">' + icon + '</td>' +
                 '<td><span class="badge badge-primary" style="font-size:11px;font-weight:700">' + r.mode + '</span></td>' +
                 '<td><strong style="font-size:12px">' + r.name + '</strong></td>' +
-                '<td style="color:var(--gray-700);font-size:11px">' + r.angle + '</td>' +
+                '<td style="color:var(--gray-700);font-size:11px">' + aCell + '</td>' +
                 '<td><span class="badge badge-info">' + r.speed + '</span></td>' +
                 '<td><span class="badge badge-warning">' + r.dist + '</span></td>' +
                 '<td style="font-weight:600;color:var(--gray-800)">' + r.reps + '</td>' +
@@ -2122,16 +2634,23 @@ function renderCrossValidationSection({ checks, consistent, total, pct, suppleme
 function generateBCFResults() {
   const parseNum = v => { const n = parseFloat(v); return isNaN(n) ? null : n; };
   const reData = {
-    spH:      parseNum(document.getElementById('re-spH')?.value),
-    spV:      parseNum(document.getElementById('re-spV')?.value),
-    spC:      parseNum(document.getElementById('re-spC')?.value),
-    eso:      parseNum(document.getElementById('re-eso')?.value),
-    svH:      parseNum(document.getElementById('re-svH')?.value),
-    svV:      parseNum(document.getElementById('re-svV')?.value),
-    syncH:    parseNum(document.getElementById('re-syncH')?.value),
-    syncV:    parseNum(document.getElementById('re-syncV')?.value),
+    spH:       parseNum(document.getElementById('re-spH')?.value),
+    spV:       parseNum(document.getElementById('re-spV')?.value),
+    spC:       parseNum(document.getElementById('re-spC')?.value),
+    eso:       parseNum(document.getElementById('re-eso')?.value),
+    svH:       parseNum(document.getElementById('re-svH')?.value),
+    svV:       parseNum(document.getElementById('re-svV')?.value),
+    svRight:   parseNum(document.getElementById('re-sv-right')?.value),
+    svLeft:    parseNum(document.getElementById('re-sv-left')?.value),
+    svUp:      parseNum(document.getElementById('re-sv-up')?.value),
+    svDown:    parseNum(document.getElementById('re-sv-down')?.value),
+    pldRight:  parseNum(document.getElementById('re-pld-right')?.value),
+    pldLeft:   parseNum(document.getElementById('re-pld-left')?.value),
+    orthRight: document.getElementById('re-orth-right')?.value || null,
+    orthLeft:  document.getElementById('re-orth-left')?.value || null,
+    syncH:     parseNum(document.getElementById('re-syncH')?.value),
+    syncV:     parseNum(document.getElementById('re-syncV')?.value),
     intrusion: document.getElementById('re-intrusion')?.value || 'none',
-    // Saccade Over/Under/Missed
     hTotal:    parseNum(document.getElementById('re-h-total')?.value),
     hOverR:    parseNum(document.getElementById('re-h-over-r')?.value),
     hUnderR:   parseNum(document.getElementById('re-h-under-r')?.value),
@@ -2421,6 +2940,11 @@ function generateBCFResults() {
         ${crossValidHTML}
         ${flyingChairHTML}
         ${rightEyeHTML}
+
+        <div style="padding:20px 0 8px;border-top:1px solid var(--gray-200);text-align:center;margin-top:4px">
+          <button class="btn btn-primary" onclick="generateIntegratedPrescription()" style="font-size:14px;padding:10px 28px;letter-spacing:.3px">🔀 產生整合處方</button>
+          <p style="font-size:11px;color:var(--gray-400);margin-top:6px">合併 BCF + RightEye 診斷 · 側性來源標註 · 嚴重程度標註 · 優先序整合治療處方</p>
+        </div>
       </div>`;
   }
 
@@ -2428,6 +2952,302 @@ function generateBCFResults() {
   const saveBtn = document.getElementById('bcf-save-btn');
   if (saveBtn) saveBtn.style.display = '';
   resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ===== INTEGRATED PRESCRIPTION =====
+function generateIntegratedPrescription() {
+  const parseNum = v => { const n = parseFloat(v); return isNaN(n) ? null : n; };
+
+  // ── RightEye data ──
+  const reData = {
+    spH:       parseNum(document.getElementById('re-spH')?.value),
+    spV:       parseNum(document.getElementById('re-spV')?.value),
+    spC:       parseNum(document.getElementById('re-spC')?.value),
+    eso:       parseNum(document.getElementById('re-eso')?.value),
+    svH:       parseNum(document.getElementById('re-svH')?.value),
+    svV:       parseNum(document.getElementById('re-svV')?.value),
+    svRight:   parseNum(document.getElementById('re-sv-right')?.value),
+    svLeft:    parseNum(document.getElementById('re-sv-left')?.value),
+    svUp:      parseNum(document.getElementById('re-sv-up')?.value),
+    svDown:    parseNum(document.getElementById('re-sv-down')?.value),
+    pldRight:  parseNum(document.getElementById('re-pld-right')?.value),
+    pldLeft:   parseNum(document.getElementById('re-pld-left')?.value),
+    orthRight: document.getElementById('re-orth-right')?.value || null,
+    orthLeft:  document.getElementById('re-orth-left')?.value || null,
+    syncH:     parseNum(document.getElementById('re-syncH')?.value),
+    syncV:     parseNum(document.getElementById('re-syncV')?.value),
+    intrusion: document.getElementById('re-intrusion')?.value || 'none',
+    hTotal:    parseNum(document.getElementById('re-h-total')?.value),
+    hOverR:    parseNum(document.getElementById('re-h-over-r')?.value),
+    hUnderR:   parseNum(document.getElementById('re-h-under-r')?.value),
+    hMissedR:  parseNum(document.getElementById('re-h-missed-r')?.value),
+    hOverL:    parseNum(document.getElementById('re-h-over-l')?.value),
+    hUnderL:   parseNum(document.getElementById('re-h-under-l')?.value),
+    hMissedL:  parseNum(document.getElementById('re-h-missed-l')?.value),
+    vTotal:    parseNum(document.getElementById('re-v-total')?.value),
+    vOverR:    parseNum(document.getElementById('re-v-over-r')?.value),
+    vUnderR:   parseNum(document.getElementById('re-v-under-r')?.value),
+    vMissedR:  parseNum(document.getElementById('re-v-missed-r')?.value),
+    vOverL:    parseNum(document.getElementById('re-v-over-l')?.value),
+    vUnderL:   parseNum(document.getElementById('re-v-under-l')?.value),
+    vMissedL:  parseNum(document.getElementById('re-v-missed-l')?.value),
+  };
+  const reResult = computeRightEyeRx(reData);
+
+  // ── BCF affected items ──
+  const affectedBrainRegions = new Set();
+  const affectedItems = [];
+
+  BCF_EYE_MOVEMENTS.forEach(e => {
+    const val = document.querySelector(`input[name="${e.id}"]:checked`)?.value || 'none';
+    if (val === 'none') return;
+    const mapped = EYE_BRAIN_MAP[e.id]?.(val);
+    const brain = mapped?.brain || [];
+    const training = mapped?.training || '';
+    affectedItems.push({ code: e.id, type: '眼球作動', name: e.icon + ' ' + e.dir, armResponse: ARM_LABELS[val] || val, brain, training });
+    brain.forEach(b => affectedBrainRegions.add(b));
+  });
+  BCF_CERVICAL.forEach(v => {
+    const val = document.querySelector(`input[name="${v.id}"]:checked`)?.value || 'none';
+    if (val === 'none') return;
+    const mapped = CERVICAL_BRAIN_MAP[v.id]?.(val);
+    const brain = mapped?.brain || [];
+    const training = mapped?.training || '';
+    affectedItems.push({ code: v.id, type: '頸椎作動', name: v.icon + ' ' + v.dir, armResponse: ARM_LABELS[val] || val, canal: v.canal, brain, training });
+    brain.forEach(b => affectedBrainRegions.add(b));
+  });
+  BCF_VISUAL_STIM.forEach(c => {
+    if (document.querySelector(`input[name="${c.id}"]`)?.checked)
+      affectedItems.push({ code: c.id, type: '視覺/聽覺', name: `${c.dir}（${c.type}）`, brain: [] });
+  });
+  BCF_STANCE.forEach(s => {
+    const val = document.querySelector(`input[name="${s.id}"]:checked`)?.value || 'none';
+    if (val === 'none') return;
+    const brain = val === 'left-long' ? ['Left CB'] : ['Right CB'];
+    const training = val === 'left-long' ? '訓練Left CB' : '訓練Right CB';
+    affectedItems.push({ code: s.id, type: '站立測試', name: s.label, armResponse: ARM_LABELS[val] || val, brain, training });
+    brain.forEach(b => affectedBrainRegions.add(b));
+  });
+  BCF_CONVERGENCE.forEach(c => {
+    if (document.querySelector(`input[name="${c.id}"]:checked`)?.value === 'abnormal') {
+      affectedItems.push({ code: 'CONV', type: 'Convergence', name: c.label, brain: [c.brain] });
+      affectedBrainRegions.add(c.brain);
+    }
+  });
+  const activeMCodes = CONV_M_MAP.filter(m => document.querySelector(`input[name="${m.sub}"]`)?.checked);
+
+  const bcfHasData = affectedItems.length > 0 || activeMCodes.length > 0;
+  if (!bcfHasData && !reResult.hasAbnormal) {
+    showToast('請先完成 BCF 肌肉張力測試或 RightEye 評估再產生整合處方', 'error');
+    return;
+  }
+
+  // ── BCF eye machine Rx (also adds temporal lobe to affectedBrainRegions) ──
+  const { rec: bcfRx } = computeEyeMachineRx(affectedBrainRegions, affectedItems, activeMCodes);
+
+  // ── BCF decision + EEG Rx ──
+  const decision = computeBCFDecision(affectedBrainRegions);
+  const filteredRegions = decision.trainSide
+    ? [...affectedBrainRegions].filter(r => decision.keptSet.has(r) || BILATERAL_REGIONS.has(r) || !REGION_SIDE_TYPE[r])
+    : [...affectedBrainRegions];
+
+  const eegPrescriptions = [];
+  const seenEeg = new Set();
+  filteredRegions.forEach(region => {
+    const rxEntry = BRAIN_REGION_RX[region];
+    if (!rxEntry) return;
+    const key = rxEntry.electrode + '|' + rxEntry.freq;
+    if (!seenEeg.has(key)) { seenEeg.add(key); eegPrescriptions.push({ region, ...rxEntry }); }
+  });
+
+  // ── Functional training ──
+  const filteredTrainings = new Set();
+  affectedItems.forEach(item => {
+    if (!item.training) return;
+    if (!decision.trainSide) { filteredTrainings.add(item.training); return; }
+    const brain = item.brain || [];
+    const hasClassified = brain.some(b => REGION_SIDE_TYPE[b]);
+    if (!hasClassified) { filteredTrainings.add(item.training); return; }
+    if (!brain.every(b => decision.excludedSet.has(b))) filteredTrainings.add(item.training);
+  });
+
+  // ── Cross validation ──
+  const crossResult = computeCrossValidation(reData, affectedItems, activeMCodes);
+
+  // ── Merge eye machine Rx by mode ──
+  // BCF provides specific lateralized angles; RightEye provides severity/urgency
+  const modeMap = new Map();
+  bcfRx.forEach(r => {
+    if (!modeMap.has(r.mode)) modeMap.set(r.mode, { bcf: null, re: null });
+    const m = modeMap.get(r.mode);
+    if (!m.bcf || r.priority < m.bcf.priority) m.bcf = r;
+  });
+  reResult.rx.forEach(r => {
+    if (!modeMap.has(r.mode)) modeMap.set(r.mode, { bcf: null, re: null });
+    const m = modeMap.get(r.mode);
+    if (!m.re || r.priority < m.re.priority) m.re = r;
+  });
+
+  const mergedRx = [];
+  modeMap.forEach(({ bcf, re }, mode) => {
+    const both = !!(bcf && re);
+    const base = bcf || re;
+    const angleBilateral = !bcf && re && /^[RL]\d/.test(re.angle) && re.angle.includes('/');
+    mergedRx.push({
+      mode,
+      name: base.name,
+      angle: base.angle,
+      angleBilateral,
+      angleSideNote: bcf ? '側性來自肌肉張力測試' : null,
+      speed: base.speed,
+      dist: base.dist,
+      reps: base.reps,
+      target: base.target,
+      bg: base.bg,
+      priority: Math.min(bcf?.priority || 9, re?.priority || 9),
+      source: both ? '兩系統' : bcf ? 'BCF' : 'RightEye',
+      severityNote: re ? '嚴重程度來自RightEye' : null,
+      notes: [...new Set([...(bcf?.notes || []), ...(re?.notes || [])])],
+    });
+  });
+  mergedRx.sort((a, b) => a.priority - b.priority);
+
+  // ── Patient info ──
+  const patientId = document.getElementById('bcf-patient-select')?.value;
+  const date = document.getElementById('bcf-date')?.value;
+  const pt = getPatient(patientId);
+
+  // ── Render ──
+  const SC = crossResult.pct === null ? '#6b7280'
+           : crossResult.pct >= 80 ? '#16a34a' : crossResult.pct >= 60 ? '#d97706' : '#dc2626';
+  const SB = crossResult.pct === null ? '#f9fafb'
+           : crossResult.pct >= 80 ? '#f0fdf4' : crossResult.pct >= 60 ? '#fffbeb' : '#fef2f2';
+  const SL = crossResult.pct === null ? '—'
+           : crossResult.pct >= 80 ? '高度一致' : crossResult.pct >= 60 ? '部分一致' : '需進一步評估';
+  const SRC = {
+    '兩系統': `<span style="background:#dbeafe;color:#1d4ed8;border:1px solid #93c5fd;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:700">兩系統 ✓</span>`,
+    'BCF':    `<span style="background:#fef3c7;color:#92400e;border:1px solid #fcd34d;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:700">BCF</span>`,
+    'RightEye': `<span style="background:#ede9fe;color:#5b21b6;border:1px solid #c4b5fd;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:700">RightEye</span>`,
+  };
+  const PC = { 1: '#dc2626', 2: '#d97706', 3: '#16a34a', 4: '#2563eb' };
+  const PN = { 1: '優先', 2: '次要', 3: '輔助', 4: '補充' };
+  const bgSwatch = bg => {
+    if (bg === '黃藍/彩色條紋') return '<span style="display:inline-block;width:12px;height:12px;background:linear-gradient(to right,#FBBF24 50%,#3B82F6 50%);border-radius:2px;vertical-align:middle;margin-right:3px"></span>';
+    if (bg === '紅白條紋')     return '<span style="display:inline-block;width:12px;height:12px;background:linear-gradient(to right,#EF4444 50%,#fff 50%);border:1px solid #ddd;border-radius:2px;vertical-align:middle;margin-right:3px"></span>';
+    return '<span style="display:inline-block;width:12px;height:12px;background:#F3F4F6;border:1px solid #ddd;border-radius:2px;vertical-align:middle;margin-right:3px"></span>';
+  };
+
+  const rxRows = mergedRx.map(r => {
+    const pc = PC[r.priority] || '#6b7280';
+    const pn = PN[r.priority] || '—';
+    const angleCell = r.angleBilateral
+      ? `<span style="color:#ea580c;font-weight:600">${r.angle}</span><br><span style="font-size:10px;color:#ea580c">⚠️ 側性未確認，需BCF評估</span>`
+      : r.angleSideNote
+      ? `${r.angle}<br><span style="font-size:10px;color:#1d4ed8">${r.angleSideNote}</span>`
+      : `<span style="font-size:11px;color:var(--gray-600)">${r.angle}</span>`;
+    const basisParts = [
+      r.severityNote ? `<span style="color:#5b21b6;font-size:10px">${r.severityNote}</span>` : '',
+      r.angleSideNote ? `<span style="color:#92400e;font-size:10px">${r.angleSideNote}</span>` : '',
+      r.angleBilateral ? `<span style="color:#ea580c;font-size:10px">⚠️ 需BCF確認側性</span>` : '',
+    ].filter(Boolean);
+    return `
+    <tr style="background:${r.source === '兩系統' ? '#f0f9ff' : 'transparent'}">
+      <td><span style="background:${pc};color:#fff;padding:1px 7px;border-radius:10px;font-size:11px;font-weight:700">${pn}</span></td>
+      <td><span class="badge badge-primary" style="font-size:11px;font-weight:700">${r.mode}</span></td>
+      <td><strong style="font-size:12px">${r.name}</strong></td>
+      <td>${SRC[r.source] || r.source}</td>
+      <td style="font-size:11px;min-width:130px;line-height:1.6">${angleCell}</td>
+      <td><span class="badge badge-info">${r.speed}</span></td>
+      <td><span class="badge badge-warning">${r.dist}</span></td>
+      <td style="font-weight:600">${r.reps}</td>
+      <td style="font-size:11px">${r.target}</td>
+      <td style="font-size:11px;white-space:nowrap">${bgSwatch(r.bg)}${r.bg}</td>
+      <td style="min-width:120px;line-height:1.8">${basisParts.join('<br>') || '<span style="color:var(--gray-300);font-size:11px">—</span>'}</td>
+    </tr>`;
+  }).join('');
+
+  document.getElementById('integratedRxContent').innerHTML = `
+    <div style="padding:12px 16px;background:var(--gray-50);border-radius:8px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:16px">
+      <div style="font-size:14px;font-weight:700;color:var(--gray-800)">${pt ? pt.name + '（' + pt.id + '）' : '未選擇病人'}</div>
+      <div style="font-size:12px;color:var(--gray-500)">評估日期：${date || '—'} ｜ BCF 異常 ${affectedItems.length} 項 ｜ RightEye ${reResult.hasAbnormal ? '有異常' : '正常'}</div>
+    </div>
+
+    ${crossResult.hasData ? `
+    <div style="padding:16px 20px;background:${SB};border-radius:12px;border:1px solid ${SC}40;display:flex;align-items:center;gap:20px;flex-wrap:wrap;margin-bottom:20px">
+      <div style="text-align:center;min-width:72px">
+        <div style="font-size:40px;font-weight:900;color:${SC};line-height:1">${crossResult.pct}%</div>
+        <div style="font-size:11px;color:${SC};font-weight:700;margin-top:3px">${SL}</div>
+      </div>
+      <div style="flex:1;min-width:200px">
+        <div style="font-size:14px;font-weight:700;color:var(--gray-800);margin-bottom:4px">🔗 跨系統診斷一致性</div>
+        <div style="font-size:12px;color:var(--gray-600)">${crossResult.consistent} / ${crossResult.total} 項 BCF ↔ RightEye 互相驗證</div>
+        <div style="font-size:11px;color:var(--gray-500);margin-top:3px">
+          ${crossResult.pct >= 80 ? '兩系統高度吻合，建議優先執行「兩系統 ✓」標記項目'
+          : crossResult.pct >= 60 ? '兩系統部分吻合，共同項目優先，單一系統項目輔助執行'
+          : '一致性偏低，建議重新確認評估數值或增加額外評估項目'}
+        </div>
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px">
+        <span style="padding:3px 10px;background:#dbeafe;border-radius:16px;font-size:11px;font-weight:600;color:#1d4ed8">${mergedRx.filter(r=>r.source==='兩系統').length} 項兩系統共同</span>
+        <span style="padding:3px 10px;background:#fef3c7;border-radius:16px;font-size:11px;font-weight:600;color:#92400e">${mergedRx.filter(r=>r.source==='BCF').length} 項 BCF 獨立</span>
+        <span style="padding:3px 10px;background:#ede9fe;border-radius:16px;font-size:11px;font-weight:600;color:#5b21b6">${mergedRx.filter(r=>r.source==='RightEye').length} 項 RightEye 獨立</span>
+      </div>
+    </div>` : `
+    <div style="padding:10px 14px;background:#fff7ed;border-left:4px solid #f97316;border-radius:6px;font-size:12px;color:#c2410c;margin-bottom:16px">
+      ⚠️ 尚未填入 RightEye 數值，無法計算跨系統一致性分數。請至「RightEye 報告」頁籤填入數值以計算一致性。
+    </div>`}
+
+    ${mergedRx.length > 0 ? `
+    <div style="margin-bottom:20px">
+      <div style="font-size:13px;font-weight:700;color:var(--gray-800);margin-bottom:8px;display:flex;align-items:center;gap:8px">
+        眼動機訓練整合處方
+        <span style="font-size:11px;font-weight:400;color:var(--gray-400)">藍底 = 兩系統共同推薦，優先執行</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="data-table" style="margin:0;font-size:12px">
+          <thead>
+            <tr><th>優先序</th><th>模式</th><th>訓練類型</th><th>來源</th><th>板面角度</th><th>速度</th><th>距離</th><th>次數</th><th>目標物</th><th>背板</th><th>依據</th></tr>
+          </thead>
+          <tbody>${rxRows}</tbody>
+        </table>
+      </div>
+    </div>` : '<p style="color:var(--gray-400);font-size:13px;margin-bottom:16px">暫無眼動機處方資料</p>'}
+
+    ${eegPrescriptions.length > 0 ? `
+    <div style="margin-bottom:20px">
+      <div style="font-size:13px;font-weight:700;color:var(--gray-800);margin-bottom:8px">
+        EEG 電刺激處方
+        <span style="font-size:11px;font-weight:400;color:#92400e">（側性來自肌肉張力測試）</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table class="data-table" style="margin:0;font-size:12px">
+          <thead><tr><th>目標腦區</th><th>電極位置</th><th>頻率</th><th>刺激模式</th><th>訓練項目</th></tr></thead>
+          <tbody>
+            ${eegPrescriptions.map(p => `<tr>
+              <td><span class="bcf-brain-region-tag" style="font-size:11px">🧠 ${p.region}</span></td>
+              <td><strong style="font-family:monospace">${p.electrode}</strong></td>
+              <td><span class="badge badge-info">${p.freq} Hz</span></td>
+              <td><span style="font-size:11px">${p.mode}</span></td>
+              <td style="font-size:12px;color:var(--gray-600)">${p.rx}</td>
+            </tr>`).join('')}
+          </tbody>
+        </table>
+      </div>
+    </div>` : ''}
+
+    ${filteredTrainings.size > 0 ? `
+    <div>
+      <div style="font-size:13px;font-weight:700;color:var(--gray-800);margin-bottom:8px">
+        功能訓練處方
+        <span style="font-size:11px;font-weight:400;color:#92400e">（來源：BCF 肌肉張力測試）</span>
+      </div>
+      <div class="bcf-training-list">
+        ${[...filteredTrainings].map(t => `<div class="bcf-training-item">▶ ${t}</div>`).join('')}
+      </div>
+    </div>` : ''}
+  `;
+
+  openModal('integratedRxModal');
 }
 
 function saveBCFAssessment() {
@@ -2545,17 +3365,40 @@ function renderRightEyeInterface() {
               <div class="form-group" style="margin-bottom:8px"><label>水平</label><input type="number" id="re-spH" class="input" min="0" max="100" step="0.1" placeholder="正常 >90"></div>
               <div class="form-group" style="margin-bottom:8px"><label>垂直</label><input type="number" id="re-spV" class="input" min="0" max="100" step="0.1" placeholder="正常 >90"></div>
               <div class="form-group" style="margin-bottom:14px"><label>圓形</label><input type="number" id="re-spC" class="input" min="0" max="100" step="0.1" placeholder="正常 >90"></div>
-              <div class="re-num-group">Saccadic Velocity (d/s)</div>
-              <div class="form-group" style="margin-bottom:8px"><label>水平</label><input type="number" id="re-svH" class="input" min="0" step="1" placeholder="正常 >150"></div>
-              <div class="form-group" style="margin-bottom:14px"><label>垂直</label><input type="number" id="re-svV" class="input" min="0" step="1" placeholder="正常 >150"></div>
+              <div class="re-num-group">SP Pathway Length Diff（mm）</div>
+              <div class="form-group" style="margin-bottom:8px"><label>右向 PLD</label><input type="number" id="re-pld-right" class="input" step="0.1" placeholder="正常 <5mm"></div>
+              <div class="form-group" style="margin-bottom:14px"><label>左向 PLD</label><input type="number" id="re-pld-left" class="input" step="0.1" placeholder="正常 <5mm"></div>
+              <div class="re-num-group">SP Orthogonal 垂直偏移</div>
+              <div class="form-group" style="margin-bottom:8px"><label>右向追蹤</label>
+                <select id="re-orth-right" class="select">
+                  <option value="none">無偏移</option>
+                  <option value="up">向上偏移</option>
+                  <option value="down">向下偏移</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:14px"><label>左向追蹤</label>
+                <select id="re-orth-left" class="select">
+                  <option value="none">無偏移</option>
+                  <option value="up">向上偏移</option>
+                  <option value="down">向下偏移</option>
+                </select>
+              </div>
+              <div class="re-num-group">Saccadic Velocity 平均（d/s）</div>
+              <div class="form-group" style="margin-bottom:8px"><label>水平平均</label><input type="number" id="re-svH" class="input" min="0" step="1" placeholder="正常 >150"></div>
+              <div class="form-group" style="margin-bottom:14px"><label>垂直平均</label><input type="number" id="re-svV" class="input" min="0" step="1" placeholder="正常 >150"></div>
+              <div class="re-num-group">個別方向速度（d/s）</div>
+              <div class="form-group" style="margin-bottom:6px"><label>右向</label><input type="number" id="re-sv-right" class="input" min="0" step="1" placeholder="正常 >150"></div>
+              <div class="form-group" style="margin-bottom:6px"><label>左向</label><input type="number" id="re-sv-left" class="input" min="0" step="1" placeholder="正常 >150"></div>
+              <div class="form-group" style="margin-bottom:6px"><label>上向</label><input type="number" id="re-sv-up" class="input" min="0" step="1" placeholder="正常 >150"></div>
+              <div class="form-group" style="margin-bottom:14px"><label>下向</label><input type="number" id="re-sv-down" class="input" min="0" step="1" placeholder="正常 >150"></div>
               <div class="re-num-group">Saccade 水平（次數）</div>
               <div class="form-group" style="margin-bottom:6px"><label>總次數</label><input type="number" id="re-h-total" class="input" min="0" step="1" placeholder="如 22"></div>
-              <div class="form-group" style="margin-bottom:6px"><label>右眼 Overshot</label><input type="number" id="re-h-over-r" class="input" min="0" step="1" placeholder="9-18+18-36mm 合計"></div>
-              <div class="form-group" style="margin-bottom:6px"><label>右眼 Undershot</label><input type="number" id="re-h-under-r" class="input" min="0" step="1" placeholder="9-18+18-36mm 合計"></div>
-              <div class="form-group" style="margin-bottom:6px"><label>右眼 Missed</label><input type="number" id="re-h-missed-r" class="input" min="0" step="1" placeholder=">36mm"></div>
-              <div class="form-group" style="margin-bottom:6px"><label>左眼 Overshot</label><input type="number" id="re-h-over-l" class="input" min="0" step="1" placeholder="9-18+18-36mm 合計"></div>
-              <div class="form-group" style="margin-bottom:6px"><label>左眼 Undershot</label><input type="number" id="re-h-under-l" class="input" min="0" step="1" placeholder="9-18+18-36mm 合計"></div>
-              <div class="form-group" style="margin-bottom:0"><label>左眼 Missed</label><input type="number" id="re-h-missed-l" class="input" min="0" step="1" placeholder=">36mm"></div>
+              <div class="form-group" style="margin-bottom:6px"><label>右向 Overshoot</label><input type="number" id="re-h-over-r" class="input" min="0" step="1" placeholder="9-18+18-36mm 合計"></div>
+              <div class="form-group" style="margin-bottom:6px"><label>右向 Undershoot</label><input type="number" id="re-h-under-r" class="input" min="0" step="1" placeholder="9-18+18-36mm 合計"></div>
+              <div class="form-group" style="margin-bottom:6px"><label>右向 Missed</label><input type="number" id="re-h-missed-r" class="input" min="0" step="1" placeholder=">36mm"></div>
+              <div class="form-group" style="margin-bottom:6px"><label>左向 Overshoot</label><input type="number" id="re-h-over-l" class="input" min="0" step="1" placeholder="9-18+18-36mm 合計"></div>
+              <div class="form-group" style="margin-bottom:6px"><label>左向 Undershoot</label><input type="number" id="re-h-under-l" class="input" min="0" step="1" placeholder="9-18+18-36mm 合計"></div>
+              <div class="form-group" style="margin-bottom:0"><label>左向 Missed</label><input type="number" id="re-h-missed-l" class="input" min="0" step="1" placeholder=">36mm"></div>
             </div>
             <div>
               <div class="re-num-group">ESO（平均值）</div>
@@ -2575,12 +3418,12 @@ function renderRightEyeInterface() {
               </div>
               <div class="re-num-group">Saccade 垂直（次數）</div>
               <div class="form-group" style="margin-bottom:6px"><label>總次數</label><input type="number" id="re-v-total" class="input" min="0" step="1" placeholder="如 23"></div>
-              <div class="form-group" style="margin-bottom:6px"><label>右眼 Overshot</label><input type="number" id="re-v-over-r" class="input" min="0" step="1" placeholder="9-18+18-36mm 合計"></div>
-              <div class="form-group" style="margin-bottom:6px"><label>右眼 Undershot</label><input type="number" id="re-v-under-r" class="input" min="0" step="1" placeholder="9-18+18-36mm 合計"></div>
-              <div class="form-group" style="margin-bottom:6px"><label>右眼 Missed</label><input type="number" id="re-v-missed-r" class="input" min="0" step="1" placeholder=">36mm"></div>
-              <div class="form-group" style="margin-bottom:6px"><label>左眼 Overshot</label><input type="number" id="re-v-over-l" class="input" min="0" step="1" placeholder="9-18+18-36mm 合計"></div>
-              <div class="form-group" style="margin-bottom:6px"><label>左眼 Undershot</label><input type="number" id="re-v-under-l" class="input" min="0" step="1" placeholder="9-18+18-36mm 合計"></div>
-              <div class="form-group" style="margin-bottom:14px"><label>左眼 Missed</label><input type="number" id="re-v-missed-l" class="input" min="0" step="1" placeholder=">36mm"></div>
+              <div class="form-group" style="margin-bottom:6px"><label>上向 Overshoot</label><input type="number" id="re-v-over-r" class="input" min="0" step="1" placeholder="9-18+18-36mm 合計"></div>
+              <div class="form-group" style="margin-bottom:6px"><label>上向 Undershoot</label><input type="number" id="re-v-under-r" class="input" min="0" step="1" placeholder="9-18+18-36mm 合計"></div>
+              <div class="form-group" style="margin-bottom:6px"><label>上向 Missed</label><input type="number" id="re-v-missed-r" class="input" min="0" step="1" placeholder=">36mm"></div>
+              <div class="form-group" style="margin-bottom:6px"><label>下向 Overshoot</label><input type="number" id="re-v-over-l" class="input" min="0" step="1" placeholder="9-18+18-36mm 合計"></div>
+              <div class="form-group" style="margin-bottom:6px"><label>下向 Undershoot</label><input type="number" id="re-v-under-l" class="input" min="0" step="1" placeholder="9-18+18-36mm 合計"></div>
+              <div class="form-group" style="margin-bottom:14px"><label>下向 Missed</label><input type="number" id="re-v-missed-l" class="input" min="0" step="1" placeholder=">36mm"></div>
               <div class="form-group" style="margin-bottom:0">
                 <label>備註</label>
                 <textarea class="textarea" id="re-notes" rows="2" placeholder="臨床觀察備註…"></textarea>
@@ -2687,11 +3530,16 @@ function updateREImageLabel(id, label) {
 }
 
 function clearRightEyeForm() {
-  ['re-spH','re-spV','re-spC','re-eso','re-svH','re-svV','re-syncH','re-syncV'].forEach(id => {
+  ['re-spH','re-spV','re-spC','re-eso','re-svH','re-svV','re-syncH','re-syncV',
+   're-sv-right','re-sv-left','re-sv-up','re-sv-down','re-pld-right','re-pld-left'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   const reInt = document.getElementById('re-intrusion');
   if (reInt) reInt.value = 'none';
+  const reOrthR = document.getElementById('re-orth-right');
+  if (reOrthR) reOrthR.value = 'none';
+  const reOrthL = document.getElementById('re-orth-left');
+  if (reOrthL) reOrthL.value = 'none';
   const reNotes = document.getElementById('re-notes');
   if (reNotes) reNotes.value = '';
   const pid = getREPatientId();
@@ -2705,112 +3553,71 @@ function clearRightEyeForm() {
 }
 
 // ===== RIGHTEYE AI ANALYSIS =====
-function getOrPromptAPIKey() {
-  let key = sessionStorage.getItem('anthropic_api_key');
-  if (key) return key;
-  key = prompt('請輸入 Anthropic API Key\n（僅本次工作階段暫存，關閉分頁後自動清除）：');
-  if (!key) return null;
-  key = key.trim();
-  if (!key.startsWith('sk-ant-')) {
-    showToast('API Key 格式不正確（應以 sk-ant- 開頭）', 'error');
-    return null;
-  }
-  sessionStorage.setItem('anthropic_api_key', key);
-  return key;
-}
-
-function clearREApiKey(e) {
-  if (e) e.preventDefault();
-  sessionStorage.removeItem('anthropic_api_key');
-  showToast('API Key 已清除', 'success');
-}
-
 async function readRightEyeWithAI() {
   if (RE_IMAGES.length === 0) {
     showToast('請先上傳 RightEye 截圖再使用 AI 讀取', 'error');
     return;
   }
-  const apiKey = getOrPromptAPIKey();
-  if (!apiKey) return;
 
   const btn = document.getElementById('re-ai-btn');
   const origText = btn?.textContent || '🤖 AI 讀取截圖';
   if (btn) { btn.disabled = true; btn.textContent = '⏳ AI 分析中…'; }
 
   try {
-    const imageBlocks = RE_IMAGES.map(img => {
-      const base64 = img.dataUrl.includes(',') ? img.dataUrl.split(',')[1] : img.dataUrl;
-      return { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: base64 } };
+    const compressDataUrl = (dataUrl) => new Promise(resolve => {
+      const img = new Image();
+      img.onload = () => {
+        const MAX = 1920;
+        const scale = img.width > MAX ? MAX / img.width : 1;
+        const canvas = document.createElement('canvas');
+        canvas.width  = Math.round(img.width  * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d').drawImage(img, 0, 0, canvas.width, canvas.height);
+        resolve(canvas.toDataURL('image/jpeg', 0.8));
+      };
+      img.onerror = () => resolve(dataUrl);
+      img.src = dataUrl;
     });
 
-    const systemPrompt = '你是一位眼科儀器資料讀取助理，專門從 RightEye 眼動檢測報告截圖中提取數值。請仔細讀取圖片中的所有數字，只回傳 JSON，不附加任何說明文字。';
-    const userPrompt = `請從以上 RightEye 截圖中讀取數值，輸出以下 JSON（找不到的填 null）：
-{
-  "spH": <Smooth Pursuit 水平 %，正常 >90>,
-  "spV": <Smooth Pursuit 垂直 %，正常 >90>,
-  "spC": <Smooth Pursuit 圓形 %，正常 >90>,
-  "eso": <ESO 平均值，正常 <1.0>,
-  "svH": <Saccadic Velocity 水平 d/s，正常 >150>,
-  "svV": <Saccadic Velocity 垂直 d/s，正常 >150>,
-  "syncH": <Synchronization SP 水平 0~1，正常 >0.85>,
-  "syncV": <Synchronization SP 垂直 0~1，正常 >0.85>,
-  "intrusion": <"none" | "up" | "bilateral">,
-  "hTotal": <Horizontal Saccade 總次數（整數）>,
-  "hOverR": <Horizontal 右眼 Overshoot 次數>,
-  "hUnderR": <Horizontal 右眼 Undershoot 次數>,
-  "hMissedR": <Horizontal 右眼 Missed 次數>,
-  "hOverL": <Horizontal 左眼 Overshoot 次數>,
-  "hUnderL": <Horizontal 左眼 Undershoot 次數>,
-  "hMissedL": <Horizontal 左眼 Missed 次數>,
-  "vTotal": <Vertical Saccade 總次數（整數）>,
-  "vOverR": <Vertical 右眼 Overshoot 次數>,
-  "vUnderR": <Vertical 右眼 Undershoot 次數>,
-  "vMissedR": <Vertical 右眼 Missed 次數>,
-  "vOverL": <Vertical 左眼 Overshoot 次數>,
-  "vUnderL": <Vertical 左眼 Undershoot 次數>,
-  "vMissedL": <Vertical 左眼 Missed 次數>
-}`;
+    const images = await Promise.all(RE_IMAGES.map(async img => {
+      const compressed = await compressDataUrl(img.dataUrl || '');
+      return {
+        data: compressed.includes(',') ? compressed.split(',')[1] : compressed,
+        mediaType: 'image/jpeg',
+      };
+    }));
 
-    const resp = await fetch('https://bcf-anthropic-proxy.bcf-karl.workers.dev', {
+    const resp = await fetch('/api/analyze-righteye', {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': apiKey,
-      },
-      body: JSON.stringify({
-        model: 'claude-opus-4-7',
-        max_tokens: 1024,
-        system: systemPrompt,
-        messages: [{
-          role: 'user',
-          content: [...imageBlocks, { type: 'text', text: userPrompt }],
-        }],
-      }),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ images }),
     });
 
     if (!resp.ok) {
       const errBody = await resp.json().catch(() => ({}));
-      throw new Error(errBody.error?.message || `HTTP ${resp.status}`);
+      throw new Error(errBody.error || `HTTP ${resp.status}`);
     }
 
-    const data = await resp.json();
-    const text = (data.content?.[0]?.text || '').trim();
-    const jsonMatch = text.match(/\{[\s\S]*\}/);
-    if (!jsonMatch) throw new Error('無法從 AI 回覆中解析 JSON');
-    const vals = JSON.parse(jsonMatch[0]);
+    const vals = await resp.json();
 
     const fillNum = (id, v) => {
       const el = document.getElementById(id);
       if (el && v !== null && v !== undefined) el.value = v;
     };
-    fillNum('re-spH',  vals.spH);
-    fillNum('re-spV',  vals.spV);
-    fillNum('re-spC',  vals.spC);
-    fillNum('re-eso',  vals.eso);
-    fillNum('re-svH',  vals.svH);
-    fillNum('re-svV',  vals.svV);
-    fillNum('re-syncH', vals.syncH);
-    fillNum('re-syncV', vals.syncV);
+    fillNum('re-spH',    vals.spH);
+    fillNum('re-spV',    vals.spV);
+    fillNum('re-spC',    vals.spC);
+    fillNum('re-eso',    vals.eso);
+    fillNum('re-svH',    vals.svH);
+    fillNum('re-svV',    vals.svV);
+    fillNum('re-sv-right', vals.svRight);
+    fillNum('re-sv-left',  vals.svLeft);
+    fillNum('re-sv-up',    vals.svUp);
+    fillNum('re-sv-down',  vals.svDown);
+    fillNum('re-pld-right', vals.pldRight);
+    fillNum('re-pld-left',  vals.pldLeft);
+    fillNum('re-syncH',  vals.syncH);
+    fillNum('re-syncV',  vals.syncV);
     fillNum('re-h-total',    vals.hTotal);
     fillNum('re-h-over-r',   vals.hOverR);
     fillNum('re-h-under-r',  vals.hUnderR);
@@ -2829,6 +3636,9 @@ async function readRightEyeWithAI() {
       const intEl = document.getElementById('re-intrusion');
       if (intEl) intEl.value = vals.intrusion;
     }
+    const fillSel = (id, v) => { if (v && v !== 'none') { const el = document.getElementById(id); if (el) el.value = v; } };
+    fillSel('re-orth-right', vals.orthRight);
+    fillSel('re-orth-left',  vals.orthLeft);
 
     showToast('AI 已自動填入數值，請確認後按「分析並產生處方」', 'success');
   } catch (err) {
@@ -2841,16 +3651,23 @@ async function readRightEyeWithAI() {
 function analyzeRightEyeStandalone() {
   const parseNum = v => { const n = parseFloat(v); return isNaN(n) ? null : n; };
   const reData = {
-    spH:      parseNum(document.getElementById('re-spH')?.value),
-    spV:      parseNum(document.getElementById('re-spV')?.value),
-    spC:      parseNum(document.getElementById('re-spC')?.value),
-    eso:      parseNum(document.getElementById('re-eso')?.value),
-    svH:      parseNum(document.getElementById('re-svH')?.value),
-    svV:      parseNum(document.getElementById('re-svV')?.value),
-    syncH:    parseNum(document.getElementById('re-syncH')?.value),
-    syncV:    parseNum(document.getElementById('re-syncV')?.value),
+    spH:       parseNum(document.getElementById('re-spH')?.value),
+    spV:       parseNum(document.getElementById('re-spV')?.value),
+    spC:       parseNum(document.getElementById('re-spC')?.value),
+    eso:       parseNum(document.getElementById('re-eso')?.value),
+    svH:       parseNum(document.getElementById('re-svH')?.value),
+    svV:       parseNum(document.getElementById('re-svV')?.value),
+    svRight:   parseNum(document.getElementById('re-sv-right')?.value),
+    svLeft:    parseNum(document.getElementById('re-sv-left')?.value),
+    svUp:      parseNum(document.getElementById('re-sv-up')?.value),
+    svDown:    parseNum(document.getElementById('re-sv-down')?.value),
+    pldRight:  parseNum(document.getElementById('re-pld-right')?.value),
+    pldLeft:   parseNum(document.getElementById('re-pld-left')?.value),
+    orthRight: document.getElementById('re-orth-right')?.value || null,
+    orthLeft:  document.getElementById('re-orth-left')?.value || null,
+    syncH:     parseNum(document.getElementById('re-syncH')?.value),
+    syncV:     parseNum(document.getElementById('re-syncV')?.value),
     intrusion: document.getElementById('re-intrusion')?.value || 'none',
-    // Saccade Over/Under/Missed
     hTotal:    parseNum(document.getElementById('re-h-total')?.value),
     hOverR:    parseNum(document.getElementById('re-h-over-r')?.value),
     hUnderR:   parseNum(document.getElementById('re-h-under-r')?.value),
@@ -2901,7 +3718,7 @@ function analyzeRightEyeStandalone() {
         <span class="badge badge-warning">${abnCount} 項異常</span>
       </div>
       <div class="bcf-results-body">
-        ${renderRightEyeSection(reResult)}
+        ${renderRightEyeSection(reResult, true)}
         ${imgSection}
       </div>`;
   }
@@ -3402,29 +4219,38 @@ function printReport() {
 }
 
 // ===== AUTH =====
-function getTherapistPw() {
-  return localStorage.getItem('bcf_pw_therapist') || 'BCF2026';
-}
-function getAdminPw() {
-  return localStorage.getItem('bcf_pw_admin') || 'Cpt8094005';
+const ROLE_PAGES = {
+  admin:     new Set(['dashboard','patients','assessments','prescriptions','sessions','reports','settings']),
+  therapist: new Set(['dashboard','patients','assessments','prescriptions','sessions','reports']),
+  reception: new Set(['patients']),
+};
+
+function currentRole() {
+  return sessionStorage.getItem('bcf_auth') || '';
 }
 function isAdmin() {
-  return sessionStorage.getItem('bcf_auth') === 'admin';
+  return currentRole() === 'admin';
+}
+
+function getAccounts() {
+  return [
+    { username: 'admin',     password: localStorage.getItem('bcf_pw_admin')     || 'Cpt8094005', role: 'admin'     },
+    { username: 'therapist', password: localStorage.getItem('bcf_pw_therapist') || 'bcf2026',    role: 'therapist' },
+    { username: 'reception', password: localStorage.getItem('bcf_pw_reception') || 'bcf2026',    role: 'reception' },
+  ];
 }
 
 function submitLogin() {
+  const username = (document.getElementById('loginUsername')?.value || '').trim();
   const pw = document.getElementById('loginPassword').value;
   const errEl = document.getElementById('loginError');
-  if (pw === getTherapistPw()) {
-    sessionStorage.setItem('bcf_auth', 'therapist');
-    document.getElementById('loginScreen').classList.add('hidden');
-    initApp();
-  } else if (pw === getAdminPw()) {
-    sessionStorage.setItem('bcf_auth', 'admin');
+  const account = getAccounts().find(a => a.username === username && a.password === pw);
+  if (account) {
+    sessionStorage.setItem('bcf_auth', account.role);
     document.getElementById('loginScreen').classList.add('hidden');
     initApp();
   } else {
-    errEl.textContent = '密碼錯誤，請重新輸入';
+    errEl.textContent = '帳號或密碼錯誤，請重新輸入';
     document.getElementById('loginPassword').value = '';
     document.getElementById('loginPassword').focus();
   }
@@ -3446,15 +4272,17 @@ function saveNewPassword(role) {
 
 // ===== EVENT LISTENERS =====
 function initApp() {
-  if (isAdmin()) {
-    const navSettings = document.getElementById('nav-settings');
-    if (navSettings) navSettings.style.display = '';
-  }
+  // 根據角色顯示/隱藏導覽項目
+  const allowed = ROLE_PAGES[currentRole()] || new Set();
+  document.querySelectorAll('.nav-item[data-page]').forEach(item => {
+    item.style.display = allowed.has(item.dataset.page) ? '' : 'none';
+  });
 
-  loadFromStorage();   // 必須在所有 render 之前
+  loadFromStorage();
   updateDate();
   renderDashboard();
   populatePatientSelects();
+  loadPatientsFromServer();
 
   // Sidebar navigation
   document.querySelectorAll('.nav-item').forEach(item => {
@@ -3517,13 +4345,17 @@ function initApp() {
 
   // Date display update every minute
   setInterval(updateDate, 60000);
+
+  // 導向角色的起始頁面
+  const startPage = currentRole() === 'reception' ? 'patients' : 'dashboard';
+  navigateTo(startPage);
 }
 
 document.addEventListener('DOMContentLoaded', () => {
   if (!sessionStorage.getItem('bcf_auth')) {
-    document.getElementById('loginPassword').addEventListener('keydown', e => {
-      if (e.key === 'Enter') submitLogin();
-    });
+    const onEnter = e => { if (e.key === 'Enter') submitLogin(); };
+    document.getElementById('loginUsername')?.addEventListener('keydown', onEnter);
+    document.getElementById('loginPassword').addEventListener('keydown', onEnter);
     return;
   }
   document.getElementById('loginScreen').classList.add('hidden');

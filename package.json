@@ -1,0 +1,20 @@
+{
+  "name": "brain-rehab",
+  "version": "1.0.0",
+  "description": "BCF 大腦活化復健管理系統",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.55.0",
+    "dotenv": "^16.4.0",
+    "express": "^4.21.0",
+    "mongoose": "^8.23.1",
+    "multer": "^2.1.1"
+  }
+}
