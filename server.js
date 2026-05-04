@@ -1,9 +1,9 @@
 require('dotenv').config();
-const express   = require('express');
-const Anthropic  = require('@anthropic-ai/sdk');
-const multer    = require('multer');
-const path      = require('path');
-const fs        = require('fs');
+const express  = require('express');
+const Anthropic = require('@anthropic-ai/sdk');
+const multer   = require('multer');
+const path     = require('path');
+const fs       = require('fs');
 
 const app    = express();
 const PORT   = process.env.PORT || 3000;
@@ -16,68 +16,169 @@ app.use(express.static(path.join(__dirname)));
 
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
-// ===== PATIENTS STORE（MongoDB 優先，本機 fallback 到 patients.json）=====
-let PatientModel = null;
+// ===== MONGODB =====
+let Patient    = null;
+let Assessment = null;
+let dbReady    = false;
 
 if (process.env.MONGODB_URI) {
   const mongoose = require('mongoose');
-  mongoose.connect(process.env.MONGODB_URI)
-    .then(() => console.log('✅ MongoDB 連接成功'))
-    .catch(err => console.error('❌ MongoDB 連接失敗:', err.message));
 
-  const schema = new mongoose.Schema({ _id: String, list: mongoose.Schema.Types.Mixed });
-  PatientModel = mongoose.model('PatientStore', schema);
+  const patientSchema = new mongoose.Schema(
+    { _id: String },
+    { strict: false, versionKey: false }
+  );
+  const assessmentSchema = new mongoose.Schema(
+    { _id: String, patientId: { type: String, index: true }, date: String },
+    { strict: false, versionKey: false }
+  );
+
+  Patient    = mongoose.model('Patient',    patientSchema,    'patients');
+  Assessment = mongoose.model('Assessment', assessmentSchema, 'assessments');
+
+  mongoose.connect(process.env.MONGODB_URI)
+    .then(async () => {
+      console.log('✅ MongoDB 連接成功');
+      dbReady = true;
+      await migrateFromFile();
+    })
+    .catch(err => console.error('❌ MongoDB 連接失敗:', err.message));
 }
 
+// Auto-migrate patients.json → MongoDB on first run
 const PATIENTS_FILE = path.join(__dirname, 'patients.json');
+async function migrateFromFile() {
+  if (!Patient) return;
+  try {
+    const count = await Patient.countDocuments();
+    if (count > 0) return;
+    if (!fs.existsSync(PATIENTS_FILE)) return;
+    const list = JSON.parse(fs.readFileSync(PATIENTS_FILE, 'utf8'));
+    if (!Array.isArray(list) || list.length === 0) return;
+    const ops = list.map(p => ({
+      updateOne: { filter: { _id: p.id || p._id }, update: { $set: { ...p, _id: p.id || p._id } }, upsert: true },
+    }));
+    await Patient.bulkWrite(ops);
+    console.log(`✅ 已從 patients.json 遷移 ${list.length} 位病人`);
+  } catch (e) {
+    console.error('patients.json 遷移失敗:', e.message);
+  }
+}
 
-async function readPatients() {
-  if (PatientModel) {
+// ===== PATIENTS ENDPOINTS =====
+app.get('/api/patients', async (req, res) => {
+  if (Patient && dbReady) {
     try {
-      const doc = await PatientModel.findById('bcf');
-      return doc ? doc.list : null;
+      const docs = await Patient.find().lean();
+      return res.json({ patients: docs });
     } catch (e) {
-      console.error('MongoDB 讀取失敗:', e.message);
-      return null;
+      console.error('patients find 失敗:', e.message);
     }
   }
+  // file fallback
   try {
     if (fs.existsSync(PATIENTS_FILE)) {
-      return JSON.parse(fs.readFileSync(PATIENTS_FILE, 'utf8'));
+      return res.json({ patients: JSON.parse(fs.readFileSync(PATIENTS_FILE, 'utf8')) });
     }
-  } catch (e) {
-    console.error('patients.json 讀取失敗:', e.message);
-  }
-  return null;
-}
-
-async function writePatients(patients) {
-  if (PatientModel) {
-    await PatientModel.findByIdAndUpdate('bcf', { list: patients }, { upsert: true });
-    return;
-  }
-  fs.writeFileSync(PATIENTS_FILE, JSON.stringify(patients, null, 2), 'utf8');
-}
-
-app.get('/api/patients', async (req, res) => {
-  const patients = await readPatients();
-  res.json({ patients: patients || [] });
+  } catch (e) {}
+  res.json({ patients: [] });
 });
 
 app.post('/api/patients', async (req, res) => {
   const { patients } = req.body;
   if (!Array.isArray(patients)) return res.status(400).json({ error: '格式錯誤' });
-  await writePatients(patients);
+  if (Patient && dbReady) {
+    try {
+      const existingIds = (await Patient.find({}, '_id').lean()).map(d => d._id);
+      const incomingIds = patients.map(p => p.id || p._id).filter(Boolean);
+      const toDelete = existingIds.filter(id => !incomingIds.includes(id));
+      const ops = patients.map(p => {
+        const id = p.id || p._id;
+        return { updateOne: { filter: { _id: id }, update: { $set: { ...p, _id: id } }, upsert: true } };
+      });
+      if (ops.length) await Patient.bulkWrite(ops);
+      if (toDelete.length) await Patient.deleteMany({ _id: { $in: toDelete } });
+      return res.json({ ok: true, count: patients.length });
+    } catch (e) {
+      console.error('patients write 失敗:', e.message);
+      return res.status(500).json({ error: e.message });
+    }
+  }
+  fs.writeFileSync(PATIENTS_FILE, JSON.stringify(patients, null, 2), 'utf8');
   res.json({ ok: true, count: patients.length });
 });
 
 app.post('/api/migrate-patients', async (req, res) => {
   const { patients } = req.body;
   if (!Array.isArray(patients)) return res.status(400).json({ error: '格式錯誤' });
-  const existing = await readPatients();
-  if (existing !== null) return res.json({ ok: true, migrated: false });
-  await writePatients(patients);
+  if (Patient && dbReady) {
+    const count = await Patient.countDocuments();
+    if (count > 0) return res.json({ ok: true, migrated: false });
+    const ops = patients.map(p => {
+      const id = p.id || p._id;
+      return { updateOne: { filter: { _id: id }, update: { $set: { ...p, _id: id } }, upsert: true } };
+    });
+    if (ops.length) await Patient.bulkWrite(ops);
+    return res.json({ ok: true, migrated: true, count: patients.length });
+  }
+  if (fs.existsSync(PATIENTS_FILE)) return res.json({ ok: true, migrated: false });
+  fs.writeFileSync(PATIENTS_FILE, JSON.stringify(patients, null, 2), 'utf8');
   res.json({ ok: true, migrated: true, count: patients.length });
+});
+
+// ===== ASSESSMENTS ENDPOINTS =====
+app.get('/api/assessments', async (req, res) => {
+  if (Assessment && dbReady) {
+    try {
+      const filter = req.query.patientId ? { patientId: req.query.patientId } : {};
+      const docs = await Assessment.find(filter).lean();
+      return res.json({ assessments: docs });
+    } catch (e) {
+      console.error('assessments find 失敗:', e.message);
+      return res.status(500).json({ error: e.message });
+    }
+  }
+  res.json({ assessments: [] });
+});
+
+app.post('/api/assessments', async (req, res) => {
+  const assessment = req.body;
+  if (!assessment || !assessment.id) return res.status(400).json({ error: '缺少 id' });
+  if (Assessment && dbReady) {
+    try {
+      await Assessment.updateOne(
+        { _id: assessment.id },
+        { $set: { ...assessment, _id: assessment.id } },
+        { upsert: true }
+      );
+      return res.json({ ok: true });
+    } catch (e) {
+      console.error('assessment upsert 失敗:', e.message);
+      return res.status(500).json({ error: e.message });
+    }
+  }
+  res.json({ ok: true, stored: false });
+});
+
+app.post('/api/assessments/bulk', async (req, res) => {
+  const { assessments } = req.body;
+  if (!Array.isArray(assessments)) return res.status(400).json({ error: '格式錯誤' });
+  if (Assessment && dbReady) {
+    try {
+      const count = await Assessment.countDocuments();
+      if (count > 0) return res.json({ ok: true, migrated: false, existing: count });
+      if (assessments.length === 0) return res.json({ ok: true, migrated: false, existing: 0 });
+      const ops = assessments.map(a => ({
+        updateOne: { filter: { _id: a.id }, update: { $set: { ...a, _id: a.id } }, upsert: true },
+      }));
+      await Assessment.bulkWrite(ops);
+      return res.json({ ok: true, migrated: true, count: assessments.length });
+    } catch (e) {
+      console.error('assessments bulk 失敗:', e.message);
+      return res.status(500).json({ error: e.message });
+    }
+  }
+  res.json({ ok: true, stored: false });
 });
 
 // ===== AI ENDPOINTS =====
@@ -226,12 +327,10 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
 
 // ===== START SERVER =====
 if (IS_PROD) {
-  // Railway / 雲端：Railway 在邊緣處理 TLS，這裡只需 HTTP
   app.listen(PORT, '0.0.0.0', () => {
     console.log(`✅ BCF Server running (HTTP port ${PORT}) — TLS handled by Railway`);
   });
 } else {
-  // 本機開發：自簽憑證 HTTPS
   const https = require('https');
   const sslOptions = {
     key:  fs.readFileSync(path.join(__dirname, 'key.pem')),

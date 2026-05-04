@@ -120,6 +120,45 @@ async function loadPatientsFromServer() {
   if (activePage?.id === 'patients') renderPatients();
 }
 
+async function saveAssessmentToServer(assessment) {
+  try {
+    await fetch('/api/assessments', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(assessment),
+    });
+  } catch(e) {
+    console.warn('評估記錄同步失敗', e);
+  }
+}
+
+async function loadAssessmentsFromServer() {
+  try {
+    const resp = await fetch('/api/assessments');
+    if (!resp.ok) return;
+    const data = await resp.json();
+    if (Array.isArray(data.assessments) && data.assessments.length > 0) {
+      DB.assessments = data.assessments;
+      saveToStorage();
+      return;
+    }
+    // MongoDB empty — migrate from localStorage
+    if (DB.assessments.length > 0) {
+      const mResp = await fetch('/api/assessments/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assessments: DB.assessments }),
+      });
+      if (mResp.ok) {
+        const result = await mResp.json();
+        if (result.migrated) showToast(`已將 ${result.count} 筆評估記錄遷移至伺服器`, 'success');
+      }
+    }
+  } catch(e) {
+    console.warn('伺服器評估記錄讀取失敗，使用本機資料', e);
+  }
+}
+
 function exportBackup() {
   const data = {
     exportedAt:    new Date().toISOString(),
@@ -3275,7 +3314,7 @@ function saveBCFAssessment() {
   const prev = DB.assessments.filter(a => a.patientId === patientId && a.type === 'BCF眼動機評估')
     .sort((a, b) => new Date(b.date) - new Date(a.date))[0]?.score ?? totalItems;
 
-  DB.assessments.unshift({
+  const bcfRec = {
     id: genId('BCF'), patientId, date,
     type: 'BCF眼動機評估',
     score: totalItems - diffCount,
@@ -3283,7 +3322,9 @@ function saveBCFAssessment() {
     prev,
     therapist: document.getElementById('bcf-therapist')?.value || '王小明',
     notes: document.getElementById('bcf-notes')?.value || '',
-  });
+  };
+  DB.assessments.unshift(bcfRec);
+  saveAssessmentToServer(bcfRec);
 
   showToast('BCF評估已儲存', 'success');
   const saveBtn = document.getElementById('bcf-save-btn');
@@ -3752,7 +3793,7 @@ function saveRightEyeAssessment() {
     .filter(a => a.patientId === patientId && a.type === 'RightEye眼動評估')
     .sort((a, b) => new Date(b.date) - new Date(a.date))[0]?.score ?? maxScore;
 
-  DB.assessments.unshift({
+  const reRec = {
     id: genId('RE'), patientId, date,
     type: 'RightEye眼動評估',
     score: maxScore - abnCount,
@@ -3760,7 +3801,9 @@ function saveRightEyeAssessment() {
     prev,
     therapist: document.getElementById('re-therapist')?.value || '王小明',
     notes: document.getElementById('re-notes')?.value || '',
-  });
+  };
+  DB.assessments.unshift(reRec);
+  saveAssessmentToServer(reRec);
 
   showToast('RightEye評估已儲存', 'success');
   document.getElementById('re-save-btn').style.display = 'none';
@@ -4283,6 +4326,7 @@ function initApp() {
   renderDashboard();
   populatePatientSelects();
   loadPatientsFromServer();
+  loadAssessmentsFromServer();
 
   // Sidebar navigation
   document.querySelectorAll('.nav-item').forEach(item => {
