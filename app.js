@@ -1357,7 +1357,7 @@ async function _transcribeAudio(blob, mimeType) {
     const formData = new FormData();
     formData.append('audio', blob, `recording.${ext}`);
 
-    const resp = await fetch('/api/transcribe', { method: 'POST', body: formData });
+    const resp = await fetch('https://brain-rehab-production.up.railway.app/api/transcribe', { method: 'POST', body: formData });
     if (!resp.ok) {
       const err = await resp.json().catch(() => ({}));
       throw new Error(err.error || `HTTP ${resp.status}`);
@@ -1384,7 +1384,7 @@ async function parseBCFVoice() {
   if (parseBtn) { parseBtn.disabled = true; parseBtn.textContent = '解析中…'; }
 
   try {
-    const resp = await fetch('/api/parse-voice', {
+    const resp = await fetch('https://brain-rehab-production.up.railway.app/api/parse-voice', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ text }),
