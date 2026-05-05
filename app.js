@@ -4329,8 +4329,8 @@ function isAdmin() {
 
 function getAccounts() {
   return [
-    { username: 'admin',     password: localStorage.getItem('bcf_pw_admin')     || 'Cpt8094005', role: 'admin'     },
-    { username: 'therapist', password: localStorage.getItem('bcf_pw_therapist') || 'bcf2026',    role: 'therapist' },
+    { username: 'admin',     password: localStorage.getItem('bcf_pw_admin')     || 'BCF2026admin', role: 'admin'     },
+    { username: 'therapist', password: localStorage.getItem('bcf_pw_therapist') || 'BCF2026',     role: 'therapist' },
     { username: 'reception', password: localStorage.getItem('bcf_pw_reception') || 'bcf2026',    role: 'reception' },
   ];
 }
