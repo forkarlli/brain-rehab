@@ -1205,99 +1205,22 @@ function renderBCFInterface() {
 }
 
 // ===== VOICE INPUT — BCF =====
-let _bcfRecog = null;
 let _bcfVoiceOn = false;
 let _bcfVoiceParsed = null;
 let _bcfMediaRecorder = null;
-
-function _isIOS() {
-  return /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-    (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
-}
-
-function _useWebSpeech() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  return !!SR && !_isIOS();
-}
 
 function toggleBCFVoice() {
   if (_bcfVoiceOn) {
     _bcfVoiceOn = false;
     if (_bcfMediaRecorder && _bcfMediaRecorder.state === 'recording') {
       _bcfMediaRecorder.stop();
-    } else if (_bcfRecog) {
-      _bcfRecog.stop();
     }
   } else {
-    startBCFVoice();
-  }
-}
-
-function startBCFVoice() {
-  if (_useWebSpeech()) {
-    _startWebSpeech();
-  } else if (window.MediaRecorder) {
     _startMediaRecorder();
-  } else {
-    const warn = document.getElementById('bcf-voice-warn');
-    if (warn) { warn.style.display = 'block'; warn.textContent = '⚠️ 請使用 Chrome、Edge 或 iOS Safari 以使用語音輸入'; }
   }
 }
 
-function _startWebSpeech() {
-  const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
-  const warn = document.getElementById('bcf-voice-warn');
-  if (warn) warn.style.display = 'none';
-
-  _bcfRecog = new SpeechRecognition();
-  _bcfRecog.lang = 'zh-TW';
-  _bcfRecog.interimResults = true;
-  _bcfRecog.continuous = true;
-
-  const transcriptEl = document.getElementById('bcf-voice-transcript');
-  const btn          = document.getElementById('bcf-voice-btn');
-  const statusEl     = document.getElementById('bcf-voice-status');
-  const parseBtn     = document.getElementById('bcf-parse-btn');
-  let finalText = '';
-
-  _bcfRecog.onstart = () => {
-    _bcfVoiceOn = true;
-    if (btn) { btn.textContent = '⏹ 停止錄音'; btn.classList.add('bcf-voice-recording'); }
-    if (statusEl) statusEl.textContent = '🔴 錄音中…';
-  };
-
-  _bcfRecog.onresult = e => {
-    let interim = '';
-    for (let i = e.resultIndex; i < e.results.length; i++) {
-      if (e.results[i].isFinal) finalText += e.results[i][0].transcript;
-      else interim += e.results[i][0].transcript;
-    }
-    if (transcriptEl) transcriptEl.value = finalText + interim;
-    if (parseBtn) parseBtn.disabled = !(finalText + interim).trim();
-  };
-
-  _bcfRecog.onend = () => {
-    if (_bcfVoiceOn) {
-      try { _bcfRecog.start(); } catch (e) {}
-      return;
-    }
-    if (btn) { btn.textContent = '🎤 開始語音輸入'; btn.classList.remove('bcf-voice-recording'); }
-    if (statusEl) statusEl.textContent = finalText ? '✅ 錄音完成' : '';
-    if (transcriptEl) transcriptEl.value = finalText;
-    if (parseBtn && finalText.trim()) parseBtn.disabled = false;
-  };
-
-  _bcfRecog.onerror = e => {
-    if (e.error === 'no-speech' && _bcfVoiceOn) {
-      try { _bcfRecog.start(); } catch (err) {}
-      return;
-    }
-    _bcfVoiceOn = false;
-    if (btn) { btn.textContent = '🎤 開始語音輸入'; btn.classList.remove('bcf-voice-recording'); }
-    if (statusEl) statusEl.textContent = `⚠️ 語音錯誤：${e.error}`;
-  };
-
-  _bcfRecog.start();
+  }
 }
 
 async function _startMediaRecorder() {
@@ -1305,6 +1228,11 @@ async function _startMediaRecorder() {
   const statusEl = document.getElementById('bcf-voice-status');
   const warn     = document.getElementById('bcf-voice-warn');
   if (warn) warn.style.display = 'none';
+
+  if (!window.MediaRecorder) {
+    if (warn) { warn.style.display = 'block'; warn.textContent = '⚠️ 您的瀏覽器不支援錄音，請使用 Chrome 或 Safari'; }
+    return;
+  }
 
   let stream;
   try {
@@ -1327,7 +1255,6 @@ async function _startMediaRecorder() {
 
   recorder.onstop = async () => {
     stream.getTracks().forEach(t => t.stop());
-    _bcfVoiceOn = false;
     if (btn) { btn.textContent = '🎤 開始語音輸入'; btn.classList.remove('bcf-voice-recording'); }
     const blobType = recorder.mimeType || mimeType || 'audio/webm';
     const blob = new Blob(chunks, { type: blobType });
@@ -1349,9 +1276,7 @@ async function _startMediaRecorder() {
 async function _transcribeAudio(blob, mimeType) {
   const statusEl    = document.getElementById('bcf-voice-status');
   const transcriptEl = document.getElementById('bcf-voice-transcript');
-  const parseBtn    = document.getElementById('bcf-parse-btn');
-
-  if (statusEl) statusEl.textContent = '⏳ 上傳並轉錄音檔…';
+  if (statusEl) statusEl.textContent = '⏳ 上傳並轉錄中…';
 
   try {
     const ext = (mimeType.includes('mp4') || mimeType.includes('m4a')) ? 'm4a' : 'webm';
@@ -1364,9 +1289,13 @@ async function _transcribeAudio(blob, mimeType) {
       throw new Error(err.error || `HTTP ${resp.status}`);
     }
     const { text } = await resp.json();
-    if (transcriptEl) transcriptEl.value = text;
-    if (parseBtn && text?.trim()) parseBtn.disabled = false;
-    if (statusEl) statusEl.textContent = '✅ 轉錄完成，請確認文字後按「確認並解析」';
+    if (transcriptEl) transcriptEl.value = text || '';
+    if (!text?.trim()) {
+      if (statusEl) statusEl.textContent = '⚠️ 未偵測到語音，請重試';
+      return;
+    }
+    if (statusEl) statusEl.textContent = '⏳ AI 解析並填入中…';
+    await parseBCFVoice();
   } catch (err) {
     if (statusEl) statusEl.textContent = `⚠️ 轉錄失敗：${err.message}`;
     showToast(`音檔轉錄失敗：${err.message}`, 'error');
