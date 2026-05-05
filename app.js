@@ -66,7 +66,7 @@ function loadFromStorage() {
 
 async function savePatientsToServer() {
   try {
-    await fetch('/api/patients', {
+    await fetch('https://brain-rehab-production.up.railway.app/api/patients', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ patients: DB.patients }),
@@ -82,7 +82,7 @@ async function migrateLocalStoragePatients() {
     if (!raw) return false;
     const saved = JSON.parse(raw);
     if (!Array.isArray(saved.patients) || saved.patients.length === 0) return false;
-    const resp = await fetch('/api/migrate-patients', {
+    const resp = await fetch('https://brain-rehab-production.up.railway.app/api/migrate-patients', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ patients: saved.patients }),
@@ -103,7 +103,7 @@ async function migrateLocalStoragePatients() {
 
 async function loadPatientsFromServer() {
   try {
-    const resp = await fetch('/api/patients');
+    const resp = await fetch('https://brain-rehab-production.up.railway.app/api/patients');
     if (!resp.ok) return;
     const data = await resp.json();
     if (Array.isArray(data.patients) && data.patients.length > 0) {
@@ -122,7 +122,7 @@ async function loadPatientsFromServer() {
 
 async function saveAssessmentToServer(assessment) {
   try {
-    await fetch('/api/assessments', {
+    await fetch('https://brain-rehab-production.up.railway.app/api/assessments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(assessment),
@@ -134,7 +134,7 @@ async function saveAssessmentToServer(assessment) {
 
 async function loadAssessmentsFromServer() {
   try {
-    const resp = await fetch('/api/assessments');
+    const resp = await fetch('https://brain-rehab-production.up.railway.app/api/assessments');
     if (!resp.ok) return;
     const data = await resp.json();
     if (Array.isArray(data.assessments) && data.assessments.length > 0) {
@@ -144,7 +144,7 @@ async function loadAssessmentsFromServer() {
     }
     // MongoDB empty — migrate from localStorage
     if (DB.assessments.length > 0) {
-      const mResp = await fetch('/api/assessments/bulk', {
+      const mResp = await fetch('https://brain-rehab-production.up.railway.app/api/assessments/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ assessments: DB.assessments }),
