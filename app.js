@@ -368,7 +368,7 @@ function getAvatarColor(name) {
 
 // ===== POPULATE PATIENT SELECTS =====
 function populatePatientSelects() {
-  const selects = ['a-patient', 'rx-patient', 's-patient', 'assessPatientFilter', 'rxPatientFilter', 'sessionPatientFilter', 'reportPatientFilter', 'assess-patient-select'];
+  const selects = ['a-patient', 'rx-patient', 's-patient', 'rxPatientFilter', 'sessionPatientFilter', 'reportPatientFilter', 'assess-patient-select'];
   selects.forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -3845,11 +3845,9 @@ function renderAssessments() {
   if (reEl) reEl.style.display = 'none';
   if (pageActions) pageActions.style.display = '';
 
-  const patientFilter = document.getElementById('assessPatientFilter')?.value || '';
   const tabTypeMap = { cognitive: ['MMSE','MoCA'], motor: ['Fugl-Meyer'], balance: ['Berg'], language: ['Barthel','語言'] };
 
   let data = DB.assessments;
-  if (patientFilter) data = data.filter(a => a.patientId === patientFilter);
   if (activeTab && tabTypeMap[activeTab]) data = data.filter(a => tabTypeMap[activeTab].some(t => a.type.includes(t)));
 
   if (data.length === 0) {
@@ -4414,7 +4412,6 @@ function initApp() {
   });
 
   // Assessment patient filter
-  document.getElementById('assessPatientFilter')?.addEventListener('change', renderAssessments);
 
   // Rx patient filter
   document.getElementById('rxPatientFilter')?.addEventListener('change', renderPrescriptions);
