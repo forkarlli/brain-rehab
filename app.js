@@ -1222,6 +1222,7 @@ function _useWebSpeech() {
 
 function toggleBCFVoice() {
   if (_bcfVoiceOn) {
+    _bcfVoiceOn = false;
     if (_bcfMediaRecorder && _bcfMediaRecorder.state === 'recording') {
       _bcfMediaRecorder.stop();
     } else if (_bcfRecog) {
@@ -1276,7 +1277,10 @@ function _startWebSpeech() {
   };
 
   _bcfRecog.onend = () => {
-    _bcfVoiceOn = false;
+    if (_bcfVoiceOn) {
+      try { _bcfRecog.start(); } catch (e) {}
+      return;
+    }
     if (btn) { btn.textContent = '🎤 開始語音輸入'; btn.classList.remove('bcf-voice-recording'); }
     if (statusEl) statusEl.textContent = finalText ? '✅ 錄音完成' : '';
     if (transcriptEl) transcriptEl.value = finalText;
@@ -1284,6 +1288,10 @@ function _startWebSpeech() {
   };
 
   _bcfRecog.onerror = e => {
+    if (e.error === 'no-speech' && _bcfVoiceOn) {
+      try { _bcfRecog.start(); } catch (err) {}
+      return;
+    }
     _bcfVoiceOn = false;
     if (btn) { btn.textContent = '🎤 開始語音輸入'; btn.classList.remove('bcf-voice-recording'); }
     if (statusEl) statusEl.textContent = `⚠️ 語音錯誤：${e.error}`;
