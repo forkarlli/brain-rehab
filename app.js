@@ -4335,7 +4335,6 @@ function getAccounts() {
 function submitLogin() {
   const username = (document.getElementById('loginUsername')?.value || '').trim();
   const pw = document.getElementById('loginPassword').value;
-  alert('login called: ' + username + ' / ' + pw);
   const errEl = document.getElementById('loginError');
   let role = null;
   if (username === 'therapist' && pw === 'BCF2026') role = 'therapist';
