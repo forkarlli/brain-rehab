@@ -1980,7 +1980,8 @@ function computeRightEyeRx(data) {
           svRight, svLeft, svUp, svDown,
           hTotal, hOverR, hUnderR, hMissedR, hOverL, hUnderL, hMissedL,
           vTotal, vOverR, vUnderR, vMissedR, vOverL, vUnderL, vMissedL,
-          hOverRGrade, hUnderRGrade, hOverLGrade, hUnderLGrade } = data;
+          hOverRGrade, hUnderRGrade, hOverLGrade, hUnderLGrade,
+          vpLateralDrift, vsLateralDrift } = data;
 
   const spSt   = v => v === null ? 'na' : v > 90   ? 'normal' : v >= 80   ? 'mild' : 'severe';
   const esoSt  = v => v === null ? 'na' : v < 1.0  ? 'normal' : v <= 2.0  ? 'mild' : 'severe';
@@ -2062,6 +2063,16 @@ function computeRightEyeRx(data) {
   const saccAbnH = [hOverRSt, hUnderRSt, hMissRSt, hOverLSt, hUnderLSt, hMissLSt].some(isAbnSacc);
   const saccAbnV = [vOverRSt, vUnderRSt, vMissRSt, vOverLSt, vUnderLSt, vMissLSt].some(isAbnSacc);
   const saccAsymAbn = [hOverAsymSt, hUnderAsymSt, vMissAsymSt].some(s => s === 'mild' || s === 'severe');
+
+  // ── Lateral Pulsion（垂直追隨/跳視水平偏移）判斷 ──
+  const lpSt = v => v === null ? 'na' : Math.abs(v) <= 2 ? 'normal' : Math.abs(v) <= 8 ? 'mild' : 'severe';
+  const lpVPSt = lpSt(vpLateralDrift);
+  const lpVSSt = lpSt(vsLateralDrift);
+  // 偏左（負）→ Right CB Vermis 不足；偏右（正）→ Left CB Vermis 不足
+  const lpVPDir = vpLateralDrift != null && vpLateralDrift !== 0 ? (vpLateralDrift < 0 ? 'left' : 'right') : null;
+  const lpVSDir = vsLateralDrift != null && vsLateralDrift !== 0 ? (vsLateralDrift < 0 ? 'left' : 'right') : null;
+  const isAbnLP = s => s === 'mild' || s === 'severe';
+  const lateralPulsionDetected = isAbnLP(lpVPSt) || isAbnLP(lpVSSt);
 
   // helpers for indicator brain/note lookup
   function overBrain(st, severe, mild) { return (st === 'severe' || st === 'moderate') ? severe : st === 'mild' ? mild : []; }
@@ -2212,6 +2223,24 @@ function computeRightEyeRx(data) {
       label: '下向 Saccade 速度', value: svDown + ' d/s', status: svDSt,
       brain: (svDSt === 'mild' || svDSt === 'severe') ? ['Bilateral Midbrain', 'Bilateral riMLF'] : [],
       note: svDSt === 'severe' ? 'Midbrain/riMLF 下向嚴重不足 ⚠️' : svDSt === 'mild' ? 'Midbrain/riMLF 下向輕度弱化' : '',
+    }] : []),
+    // ── Lateral Pulsion 指標 ──
+    ...(vpLateralDrift !== null ? [{
+      label: '垂直追隨 Lateral Pulsion',
+      value: vpLateralDrift === 0 ? '0mm（無偏移）' : `${vpLateralDrift > 0 ? '右偏 +' : '左偏 '}${vpLateralDrift}mm`,
+      status: lpVPSt,
+      brain: isAbnLP(lpVPSt) ? (lpVPDir === 'left' ? ['Right CB Vermis', 'Vestibulocerebellum'] : ['Left CB Vermis', 'Vestibulocerebellum']) : [],
+      note: isAbnLP(lpVPSt) ? `${lpVPDir === 'left' ? '右側' : '左側'} CB Vermis 側向抑制不足，Vestibulocerebellum 對稱性失調${lpVPSt === 'severe' ? ' ⚠️' : ''}` : '',
+    }] : []),
+    ...(vsLateralDrift !== null ? [{
+      label: '垂直跳視 Lateral Pulsion',
+      value: vsLateralDrift === 0 ? '0mm（無偏移）' : `${vsLateralDrift > 0 ? '右偏 +' : '左偏 '}${vsLateralDrift}mm`,
+      status: lpVSSt,
+      brain: isAbnLP(lpVSSt) ? [
+        ...(lpVSDir === 'left' ? ['Right CB Vermis'] : lpVSDir === 'right' ? ['Left CB Vermis'] : ['Bilateral CB Vermis']),
+        ...(lpVSSt === 'severe' ? ['riMLF'] : []),
+      ] : [],
+      note: isAbnLP(lpVSSt) ? `CB Vermis 垂直跳視側偏${lpVSSt === 'severe' ? ' + riMLF 垂直整合異常 ⚠️' : ''}` : '',
     }] : []),
   ];
 
@@ -2402,6 +2431,16 @@ function computeRightEyeRx(data) {
   }
   if (svLeft !== null && svLSt !== 'normal' && svLSt !== 'na') {
     addRx({ mode: 'M2', name: 'Saccade左向速度', angle: 'L90（Left PPRF + Right FEF）', speed: svLSt === 'severe' ? 'S5' : 'S3', dist: 'D4', reps: svLSt === 'severe' ? '10' : '15', target: '有', bg: '空白背板', notes: ['RightEye: 左向速度↓ → Left PPRF + Right FEF 強化'], priority: svLSt === 'severe' ? 1 : 3 });
+  }
+
+  // ── Lateral Pulsion → M7 垂直向心穩定 + M3/M4 精準垂直訓練 ──
+  if (lateralPulsionDetected) {
+    const lpSev = lpVPSt === 'severe' || lpVSSt === 'severe';
+    const lateralCBDir = lpVPDir || lpVSDir;
+    const lpAngle = lateralCBDir === 'left' ? 'R45（Right CB Vermis 活化）' : lateralCBDir === 'right' ? 'L45（Left CB Vermis 活化）' : 'R0/L0（垂直向心）';
+    addRx({ mode: 'M7', name: '垂直向心複合Saccade（LP）', angle: lpAngle, speed: lpSev ? 'S4' : 'S3', dist: 'D4', reps: '10', target: '有', bg: '空白背板', notes: ['Lateral Pulsion：垂直向心穩定訓練，CB Vermis 對稱性重建', '建議 PBM 照射枕下/小腦區'], priority: lpSev ? 1 : 2 });
+    addRx({ mode: 'M3', name: 'V-Saccade精準（LP）', angle: 'R0/L0（垂直，精準度優先）', speed: 'S2', dist: 'D3', reps: '15', target: '有（小目標）', bg: '空白背板', notes: ['Lateral Pulsion：速度降 15%，垂直跳視精準控制訓練'], priority: lpSev ? 2 : 3 });
+    addRx({ mode: 'M4', name: 'V-Pursuit穩定（LP）', angle: 'U0/D0（垂直追隨側偏矯正）', speed: 'S2', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['Lateral Pulsion：垂直追隨水平偏移訓練'], priority: lpSev ? 2 : 3 });
   }
 
   rx.sort((a, b) => (a.priority || 9) - (b.priority || 9));
@@ -2693,6 +2732,8 @@ function generateBCFResults() {
     hUnderRGrade: reAIGrades.rightward_undershoot,
     hOverLGrade:  reAIGrades.leftward_overshoot,
     hUnderLGrade: reAIGrades.leftward_undershoot,
+    vpLateralDrift: parseNum(document.getElementById('re-vp-lateral-drift')?.value),
+    vsLateralDrift: parseNum(document.getElementById('re-vs-lateral-drift')?.value),
   };
   const reResult = computeRightEyeRx(reData);
 
@@ -3023,6 +3064,8 @@ function generateIntegratedPrescription() {
     hUnderRGrade: reAIGrades.rightward_undershoot,
     hOverLGrade:  reAIGrades.leftward_overshoot,
     hUnderLGrade: reAIGrades.leftward_undershoot,
+    vpLateralDrift: parseNum(document.getElementById('re-vp-lateral-drift')?.value),
+    vsLateralDrift: parseNum(document.getElementById('re-vs-lateral-drift')?.value),
   };
   const reResult = computeRightEyeRx(reData);
 
@@ -3422,6 +3465,10 @@ function renderRightEyeInterface() {
               <div class="re-num-group">Synchronization SP (0–1)</div>
               <div class="form-group" style="margin-bottom:8px"><label>水平</label><input type="number" id="re-syncH" class="input" min="0" max="1" step="0.01" placeholder="正常 >0.85"></div>
               <div class="form-group" style="margin-bottom:14px"><label>垂直</label><input type="number" id="re-syncV" class="input" min="0" max="1" step="0.01" placeholder="正常 >0.85"></div>
+              <div class="re-num-group">Lateral Pulsion（mm）</div>
+              <div style="font-size:11px;color:var(--gray-400);margin-bottom:6px">垂直追隨/跳視的水平偏移：左偏負值，右偏正值</div>
+              <div class="form-group" style="margin-bottom:6px"><label>垂直追隨偏移</label><input type="number" id="re-vp-lateral-drift" class="input" step="0.1" placeholder="左偏 -mm / 右偏 +mm"></div>
+              <div class="form-group" style="margin-bottom:14px"><label>垂直跳視偏移</label><input type="number" id="re-vs-lateral-drift" class="input" step="0.1" placeholder="左偏 -mm / 右偏 +mm"></div>
               <div class="re-num-group">Intrusion（眼球侵入）</div>
               <div class="form-group" style="margin-bottom:14px"><label>類型</label>
                 <select id="re-intrusion" class="select">
@@ -3547,7 +3594,8 @@ function updateREImageLabel(id, label) {
 
 function clearRightEyeForm() {
   ['re-spH','re-spV','re-spC','re-eso','re-svH','re-svV','re-syncH','re-syncV',
-   're-sv-right','re-sv-left','re-sv-up','re-sv-down','re-pld-right','re-pld-left'].forEach(id => {
+   're-sv-right','re-sv-left','re-sv-up','re-sv-down','re-pld-right','re-pld-left',
+   're-vp-lateral-drift','re-vs-lateral-drift'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   const reInt = document.getElementById('re-intrusion');
@@ -3670,6 +3718,8 @@ async function readRightEyeWithAI() {
     fillNum('re-pld-left',  vals.pldLeft);
     fillNum('re-syncH',  vals.syncH);
     fillNum('re-syncV',  vals.syncV);
+    fillNum('re-vp-lateral-drift', vals.vpLateralDrift);
+    fillNum('re-vs-lateral-drift', vals.vsLateralDrift);
     fillNum('re-h-total',    vals.hTotal);
     fillNum('re-h-over-r',   vals.hOverR);
     fillNum('re-h-under-r',  vals.hUnderR);
@@ -3747,6 +3797,8 @@ function analyzeRightEyeStandalone() {
     hUnderRGrade: reAIGrades.rightward_undershoot,
     hOverLGrade:  reAIGrades.leftward_overshoot,
     hUnderLGrade: reAIGrades.leftward_undershoot,
+    vpLateralDrift: parseNum(document.getElementById('re-vp-lateral-drift')?.value),
+    vsLateralDrift: parseNum(document.getElementById('re-vs-lateral-drift')?.value),
   };
   const reResult = computeRightEyeRx(reData);
   const resultsEl = document.getElementById('re-results');
@@ -3825,6 +3877,10 @@ function saveRightEyeAssessment() {
     prev,
     therapist: document.getElementById('assess-therapist')?.value || '王小明',
     notes: document.getElementById('re-notes')?.value || '',
+    vpLateralDrift: parseNum(document.getElementById('re-vp-lateral-drift')?.value),
+    vsLateralDrift: parseNum(document.getElementById('re-vs-lateral-drift')?.value),
+    syncV: parseNum(document.getElementById('re-syncV')?.value),
+    svV:   parseNum(document.getElementById('re-svV')?.value),
   };
   DB.assessments.unshift(reRec);
   saveAssessmentToServer(reRec);
@@ -4263,6 +4319,51 @@ function generateReport() {
           </tbody>
         </table>
       </div>
+
+      ${(() => {
+        const reAssess = ptAssess
+          .filter(a => a.type === 'RightEye眼動評估')
+          .sort((a, b) => new Date(a.date) - new Date(b.date));
+        if (reAssess.length < 2) return '';
+        const first = reAssess[0];
+        const last  = reAssess[reAssess.length - 1];
+
+        const lpFirst = first.vpLateralDrift !== null && first.vpLateralDrift !== undefined ? Math.abs(first.vpLateralDrift) : null;
+        const lpLast  = last.vpLateralDrift  !== null && last.vpLateralDrift  !== undefined ? Math.abs(last.vpLateralDrift)  : null;
+        const lpImprove = lpFirst !== null && lpLast !== null && lpFirst > 0 && lpLast <= lpFirst * 0.8;
+
+        const syncFirst = first.syncV;
+        const syncLast  = last.syncV;
+        const syncImprove = syncFirst !== null && syncLast !== null && syncLast > syncFirst + 0.05;
+
+        const svVFirst = first.svV;
+        const svVLast  = last.svV;
+        const svVImprove = svVFirst !== null && svVLast !== null && svVLast > svVFirst * 1.1;
+
+        if (!lpImprove && !syncImprove && !svVImprove) return '';
+
+        const badges = [
+          lpImprove    ? '✅ 小腦側向抑制功能顯著改善（Lateral Drift ↓ ≥20%）' : null,
+          syncImprove  ? '✅ Cerebellar Correction 進步（Vertical Sync SP ↑）' : null,
+          svVImprove   ? '✅ 垂直跳視效率提升，提示基底核→丘腦去抑制路徑功能改善，動作發起精準度優化（GPi → VA Thalamus De-inhibition）' : null,
+        ].filter(Boolean);
+
+        return `
+        <div class="report-section">
+          <h3>👁 RightEye 神經功能追蹤（Pre/Post 比對）</h3>
+          <table class="data-table" style="margin-bottom:12px">
+            <thead><tr><th>指標</th><th>前測（${formatDate(first.date)}）</th><th>後測（${formatDate(last.date)}）</th><th>變化</th></tr></thead>
+            <tbody>
+              ${lpFirst !== null && lpLast !== null ? `<tr><td>垂直追隨 Lateral Drift (mm)</td><td>${lpFirst.toFixed(1)}</td><td>${lpLast.toFixed(1)}</td><td>${lpImprove ? '<span style="color:var(--success)">↓ 改善</span>' : lpLast > lpFirst ? '<span style="color:var(--danger)">↑ 惡化</span>' : '—'}</td></tr>` : ''}
+              ${syncFirst !== null && syncLast !== null ? `<tr><td>Vertical Sync SP</td><td>${syncFirst.toFixed(2)}</td><td>${syncLast.toFixed(2)}</td><td>${syncImprove ? '<span style="color:var(--success)">↑ 改善</span>' : syncLast < syncFirst ? '<span style="color:var(--danger)">↓ 惡化</span>' : '—'}</td></tr>` : ''}
+              ${svVFirst !== null && svVLast !== null ? `<tr><td>垂直 Saccade 速度 (d/s)</td><td>${svVFirst}</td><td>${svVLast}</td><td>${svVImprove ? '<span style="color:var(--success)">↑ 改善</span>' : svVLast < svVFirst ? '<span style="color:var(--danger)">↓ 惡化</span>' : '—'}</td></tr>` : ''}
+            </tbody>
+          </table>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            ${badges.map(b => `<div style="background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:10px 14px;font-size:13px;color:#166534">${b}</div>`).join('')}
+          </div>
+        </div>`;
+      })()}
 
       <div class="report-section">
         <h3>治療師綜合建議</h3>

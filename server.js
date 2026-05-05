@@ -264,7 +264,9 @@ app.post('/api/analyze-righteye', async (req, res) => {
   "rightward_overshoot":  <往右 Saccade Overshoot 程度: "none" | "mild" | "moderate" | "severe">,
   "rightward_undershoot": <往右 Saccade Undershoot 程度: "none" | "mild" | "moderate" | "severe">,
   "leftward_overshoot":   <往左 Saccade Overshoot 程度: "none" | "mild" | "moderate" | "severe">,
-  "leftward_undershoot":  <往左 Saccade Undershoot 程度: "none" | "mild" | "moderate" | "severe">
+  "leftward_undershoot":  <往左 Saccade Undershoot 程度: "none" | "mild" | "moderate" | "severe">,
+  "vpLateralDrift": <垂直追隨水平偏移 mm（左偏負值，右偏正值，無偏移填 0）>,
+  "vsLateralDrift": <垂直跳視水平偏移 mm（左偏負值，右偏正值，無偏移填 0）>
 }`;
   try {
     const response = await anthropic.messages.create({
@@ -280,7 +282,15 @@ app.post('/api/analyze-righteye', async (req, res) => {
    - 提取 Pathway Length Difference（PLD）Left 和 Right 數值（mm，可為負數）
    - PLD Right 若為負值表示右向追蹤不足；PLD Left 若偏大（絕對值大）表示左側協調問題
 
-2. Horizontal Saccade 方向性判讀（最重要）：
+2. Vertical Smooth Pursuit Lateral Pulsion：
+   分析垂直追隨（上下移動目標）時，眼球軌跡是否有水平偏移（Ocular Lateropulsion）。
+   - 偏向左側（負值）→ 右側 CB Vermis 側向抑制不足
+   - 偏向右側（正值）→ 左側 CB Vermis 側向抑制不足
+   - 估計偏移量（mm）：無偏移填 0，左偏填負數，右偏填正數
+   - 同樣分析 Vertical Saccade（上下跳視）是否出現水平漂移
+   - 回傳 vpLateralDrift（垂直追隨水平偏移 mm）和 vsLateralDrift（垂直跳視水平偏移 mm）
+
+3. Horizontal Saccade 方向性判讀（最重要）：
    圖形左右各有一個目標圓圈，眼球在兩圓圈間跳動。
    - 往右跳（左→右）的軌跡是否超過右側目標圓圈 → Rightward Overshoot → ↓ Right CB
    - 往右跳（左→右）的軌跡是否不足右側目標圓圈 → Rightward Undershoot → ↓ Left CB
