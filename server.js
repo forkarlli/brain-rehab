@@ -165,6 +165,7 @@ app.post('/api/assessments', async (req, res) => {
       return res.status(500).json({ error: e.message });
     }
   }
+  console.warn('assessment POST: MongoDB 未就緒，記錄未儲存', assessment.id);
   res.json({ ok: true, stored: false });
 });
 

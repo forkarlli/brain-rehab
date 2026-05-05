@@ -122,13 +122,27 @@ async function loadPatientsFromServer() {
 
 async function saveAssessmentToServer(assessment) {
   try {
-    await fetch('https://brain-rehab-production.up.railway.app/api/assessments', {
+    const resp = await fetch('https://brain-rehab-production.up.railway.app/api/assessments', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(assessment),
     });
+    if (!resp.ok) {
+      console.warn('評估記錄同步失敗 HTTP', resp.status);
+      showToast('評估已儲存本機，雲端同步失敗（HTTP ' + resp.status + '）', 'error');
+      return false;
+    }
+    const result = await resp.json();
+    if (result.stored === false) {
+      console.warn('評估記錄未寫入 MongoDB（DB 未就緒）');
+      showToast('評估已儲存本機，資料庫未就緒，將於下次連線時補傳', 'error');
+      return false;
+    }
+    return true;
   } catch(e) {
     console.warn('評估記錄同步失敗', e);
+    showToast('評估已儲存本機，無法連線雲端', 'error');
+    return false;
   }
 }
 
@@ -140,9 +154,28 @@ async function loadAssessmentsFromServer() {
     if (!resp.ok) return;
     const data = await resp.json();
     const serverList = Array.isArray(data.assessments) ? data.assessments : [];
+    const serverIds = new Set(serverList.map(a => a.id || a._id));
+
+    // Find local non-sample assessments not yet on server (catches failed POSTs)
+    const toUpload = DB.assessments.filter(a => {
+      const aid = a.id || a._id;
+      return aid && !SAMPLE_ASSESSMENT_IDS.has(aid) && !serverIds.has(aid);
+    });
+    if (toUpload.length > 0) {
+      const mResp = await fetch('https://brain-rehab-production.up.railway.app/api/assessments/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assessments: toUpload }),
+      });
+      if (mResp.ok) {
+        const result = await mResp.json();
+        if (result.migrated) showToast(`已補傳 ${result.count} 筆未同步評估記錄`, 'success');
+        // Merge uploaded records into server list so local view is complete
+        serverList.push(...toUpload);
+      }
+    }
 
     if (serverList.length > 0) {
-      // Server is authoritative — fully replace local data
       DB.assessments = serverList;
       saveToStorage();
       renderDashboard();
@@ -151,7 +184,7 @@ async function loadAssessmentsFromServer() {
       return;
     }
 
-    // Server empty — migrate real (non-sample) local assessments
+    // Server completely empty — migrate all non-sample local assessments
     const toMigrate = DB.assessments.filter(a => {
       const aid = a.id || a._id;
       return aid && !SAMPLE_ASSESSMENT_IDS.has(aid);
