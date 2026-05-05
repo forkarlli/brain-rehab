@@ -1220,9 +1220,6 @@ function toggleBCFVoice() {
   }
 }
 
-  }
-}
-
 async function _startMediaRecorder() {
   const btn      = document.getElementById('bcf-voice-btn');
   const statusEl = document.getElementById('bcf-voice-status');
