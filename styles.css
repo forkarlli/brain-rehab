@@ -1181,9 +1181,9 @@ body {
   gap: 6px;
   background: var(--gray-50);
   transition: border-color .15s, background .15s;
-  min-height: 90px;
   cursor: default;
 }
+.bcf-arm-options { display: flex !important; }
 .bcf-eye-cell.bcf-has-diff {
   border-color: var(--danger);
   background: #fff5f5;

@@ -1113,7 +1113,7 @@ function renderBCFInterface() {
           <label class="bcf-radio-label diff-radio"><input type="radio" name="${c.id}" value="abnormal" onchange="toggleConvSublayer('${c.id}',true);markBCFItem('${c.id}',true)"> 有差異</label>
         </div>
       </div>
-      <div class="bcf-conv-sublayer" id="conv-sub-${c.id}" style="display:none">
+      <div class="bcf-conv-sublayer" id="conv-sub-${c.id}" style="display:block">
         <div class="bcf-sublayer-hint">找到哪個頭部位置讓手臂反應恢復一致：</div>
         <div class="bcf-sublayer-options">
           ${c.subs.map(s => `
@@ -1142,16 +1142,9 @@ function renderBCFInterface() {
           <label style="font-size:12px;font-weight:600;color:var(--gray-600);display:block;margin-bottom:4px">辨識文字</label>
           <textarea id="bcf-voice-transcript" class="textarea" rows="3" readonly style="background:var(--gray-50);resize:vertical" placeholder="按下「開始語音輸入」，辨識文字即時顯示於此…"></textarea>
         </div>
-        <div>
-          <button class="btn btn-primary" id="bcf-parse-btn" onclick="parseBCFVoice()" disabled>✨ 確認並解析</button>
-        </div>
-        <div id="bcf-voice-result" style="display:none">
-          <div style="font-size:13px;font-weight:700;color:var(--gray-700);margin-bottom:8px">AI 解析結果預覽</div>
-          <div id="bcf-voice-result-body" style="background:var(--gray-50);border:1px solid var(--gray-200);border-radius:var(--radius-sm);padding:12px;overflow-x:auto;font-size:12px"></div>
-          <div style="display:flex;gap:8px;margin-top:12px">
-            <button class="btn btn-success" onclick="fillBCFFromVoice()">✍️ 填入表單</button>
-            <button class="btn btn-outline" onclick="clearBCFVoiceState()">重新語音</button>
-          </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn btn-primary" id="bcf-parse-btn" onclick="parseBCFVoice()" disabled>✨ 解析並填入</button>
+          <button class="btn btn-outline" onclick="clearBCFVoiceState()">🔄 重新語音</button>
         </div>
       </div>
     </div>
@@ -1378,8 +1371,6 @@ async function parseBCFVoice() {
   if (!text) { showToast('請先完成語音輸入', 'warning'); return; }
 
   const parseBtn     = document.getElementById('bcf-parse-btn');
-  const resultDiv    = document.getElementById('bcf-voice-result');
-  const resultBody   = document.getElementById('bcf-voice-result-body');
 
   if (parseBtn) { parseBtn.disabled = true; parseBtn.textContent = '解析中…'; }
 
@@ -1394,9 +1385,8 @@ async function parseBCFVoice() {
       throw new Error(err.error || `HTTP ${resp.status}`);
     }
     _bcfVoiceParsed = await resp.json();
-    if (resultDiv)  resultDiv.style.display = 'block';
-    if (resultBody) resultBody.innerHTML = _renderVoicePreview(_bcfVoiceParsed);
-    showToast('AI 解析完成，請確認後填入', 'success');
+    const matched = _applyVoiceDataToBCF(_bcfVoiceParsed.muscles, _bcfVoiceParsed.generalNote);
+    showToast(`AI 解析完成，已自動填入 ${matched} 個評估欄位`, 'success');
   } catch (err) {
     showToast(`解析失敗：${err.message}`, 'error');
   } finally {
