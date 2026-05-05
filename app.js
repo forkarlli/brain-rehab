@@ -214,6 +214,9 @@ let currentDetailPatient = null;
 // RightEye uploaded screenshots
 const RE_IMAGES = [];
 
+// AI-detected directional saccade grades (filled by readRightEyeWithAI)
+let reAIGrades = { rightward_overshoot: null, rightward_undershoot: null, leftward_overshoot: null, leftward_undershoot: null };
+
 function getREPatientId() {
   return document.getElementById('assess-patient-select')?.value || '';
 }
@@ -1976,7 +1979,8 @@ function computeRightEyeRx(data) {
           pldRight, pldLeft, orthRight, orthLeft,
           svRight, svLeft, svUp, svDown,
           hTotal, hOverR, hUnderR, hMissedR, hOverL, hUnderL, hMissedL,
-          vTotal, vOverR, vUnderR, vMissedR, vOverL, vUnderL, vMissedL } = data;
+          vTotal, vOverR, vUnderR, vMissedR, vOverL, vUnderL, vMissedL,
+          hOverRGrade, hUnderRGrade, hOverLGrade, hUnderLGrade } = data;
 
   const spSt   = v => v === null ? 'na' : v > 90   ? 'normal' : v >= 80   ? 'mild' : 'severe';
   const esoSt  = v => v === null ? 'na' : v < 1.0  ? 'normal' : v <= 2.0  ? 'mild' : 'severe';
@@ -2030,11 +2034,12 @@ function computeRightEyeRx(data) {
   const vUnderLPct  = pct(vUnderL,  vTotal);
   const vMissLPct   = pct(vMissedL, vTotal);
 
-  const hOverRSt  = overGrade(hOverRPct);
-  const hUnderRSt = underGrade(hUnderRPct);
+  const VALID_GRADES = new Set(['none','mild','moderate','severe']);
+  const hOverRSt  = (hOverRGrade  && VALID_GRADES.has(hOverRGrade))  ? hOverRGrade  : overGrade(hOverRPct);
+  const hUnderRSt = (hUnderRGrade && VALID_GRADES.has(hUnderRGrade)) ? hUnderRGrade : underGrade(hUnderRPct);
   const hMissRSt  = missGrade(hMissRPct);
-  const hOverLSt  = overGrade(hOverLPct);
-  const hUnderLSt = underGrade(hUnderLPct);
+  const hOverLSt  = (hOverLGrade  && VALID_GRADES.has(hOverLGrade))  ? hOverLGrade  : overGrade(hOverLPct);
+  const hUnderLSt = (hUnderLGrade && VALID_GRADES.has(hUnderLGrade)) ? hUnderLGrade : underGrade(hUnderLPct);
   const hMissLSt  = missGrade(hMissLPct);
   const vOverRSt  = overGrade(vOverRPct);
   const vUnderRSt = underGrade(vUnderRPct);
@@ -2684,6 +2689,10 @@ function generateBCFResults() {
     vOverL:    parseNum(document.getElementById('re-v-over-l')?.value),
     vUnderL:   parseNum(document.getElementById('re-v-under-l')?.value),
     vMissedL:  parseNum(document.getElementById('re-v-missed-l')?.value),
+    hOverRGrade:  reAIGrades.rightward_overshoot,
+    hUnderRGrade: reAIGrades.rightward_undershoot,
+    hOverLGrade:  reAIGrades.leftward_overshoot,
+    hUnderLGrade: reAIGrades.leftward_undershoot,
   };
   const reResult = computeRightEyeRx(reData);
 
@@ -3010,6 +3019,10 @@ function generateIntegratedPrescription() {
     vOverL:    parseNum(document.getElementById('re-v-over-l')?.value),
     vUnderL:   parseNum(document.getElementById('re-v-under-l')?.value),
     vMissedL:  parseNum(document.getElementById('re-v-missed-l')?.value),
+    hOverRGrade:  reAIGrades.rightward_overshoot,
+    hUnderRGrade: reAIGrades.rightward_undershoot,
+    hOverLGrade:  reAIGrades.leftward_overshoot,
+    hUnderLGrade: reAIGrades.leftward_undershoot,
   };
   const reResult = computeRightEyeRx(reData);
 
@@ -3401,6 +3414,7 @@ function renderRightEyeInterface() {
               <div class="form-group" style="margin-bottom:6px"><label>左向 Overshoot</label><input type="number" id="re-h-over-l" class="input" min="0" step="1" placeholder="9-18+18-36mm 合計"></div>
               <div class="form-group" style="margin-bottom:6px"><label>左向 Undershoot</label><input type="number" id="re-h-under-l" class="input" min="0" step="1" placeholder="9-18+18-36mm 合計"></div>
               <div class="form-group" style="margin-bottom:0"><label>左向 Missed</label><input type="number" id="re-h-missed-l" class="input" min="0" step="1" placeholder=">36mm"></div>
+              <div id="re-ai-saccade-summary" style="display:none"></div>
             </div>
             <div>
               <div class="re-num-group">ESO（平均值）</div>
@@ -3548,6 +3562,9 @@ function clearRightEyeForm() {
   if (pid) localStorage.removeItem('righteye_images_' + pid);
   RE_IMAGES.length = 0;
   renderREThumbs();
+  reAIGrades = { rightward_overshoot: null, rightward_undershoot: null, leftward_overshoot: null, leftward_undershoot: null };
+  const aiSummary = document.getElementById('re-ai-saccade-summary');
+  if (aiSummary) aiSummary.style.display = 'none';
   const resultsEl = document.getElementById('re-results');
   if (resultsEl) resultsEl.style.display = 'none';
   const saveBtn = document.getElementById('re-save-btn');
@@ -3555,6 +3572,39 @@ function clearRightEyeForm() {
 }
 
 // ===== RIGHTEYE AI ANALYSIS =====
+function renderAISaccadeSummary() {
+  const el = document.getElementById('re-ai-saccade-summary');
+  if (!el) return;
+  const gradeIcon = g => ({ none: '🟢', mild: '🟡', moderate: '🟠', severe: '🔴' }[g] || '⚪');
+  const gradeLabel = g => ({ none: '無', mild: '輕度', moderate: '中度', severe: '嚴重' }[g] || '未偵測');
+  const rows = [
+    { dir: '往右 Overshoot',  grade: reAIGrades.rightward_overshoot,  brain: 'Right CB' },
+    { dir: '往右 Undershoot', grade: reAIGrades.rightward_undershoot, brain: 'Left CB' },
+    { dir: '往左 Overshoot',  grade: reAIGrades.leftward_overshoot,   brain: 'Left CB' },
+    { dir: '往左 Undershoot', grade: reAIGrades.leftward_undershoot,  brain: 'Right CB' },
+  ];
+  const hasAny = rows.some(r => r.grade && r.grade !== 'none');
+  if (!hasAny) { el.style.display = 'none'; return; }
+  el.style.display = 'block';
+  el.innerHTML = `
+    <div class="re-num-group" style="margin-top:16px">AI 方向性 Saccade 判讀</div>
+    <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px">
+      <thead><tr style="background:var(--gray-100)">
+        <th style="padding:6px 8px;text-align:left;font-weight:600">方向</th>
+        <th style="padding:6px 8px;text-align:center;font-weight:600">程度</th>
+        <th style="padding:6px 8px;text-align:left;font-weight:600">側性腦區</th>
+      </tr></thead>
+      <tbody>${rows.map(r => {
+        const abn = r.grade && r.grade !== 'none' && r.grade !== null;
+        return `<tr style="border-top:1px solid var(--gray-100)${abn ? ';background:#fffbeb' : ''}">
+          <td style="padding:5px 8px">${r.dir}</td>
+          <td style="padding:5px 8px;text-align:center">${gradeIcon(r.grade)} ${gradeLabel(r.grade)}</td>
+          <td style="padding:5px 8px;color:${abn ? 'var(--warning-dark,#92400e)' : 'var(--gray-400)'}">${abn ? '↓ ' + r.brain : '—'}</td>
+        </tr>`;
+      }).join('')}</tbody>
+    </table>`;
+}
+
 async function readRightEyeWithAI() {
   if (RE_IMAGES.length === 0) {
     showToast('請先上傳 RightEye 截圖再使用 AI 讀取', 'error');
@@ -3642,6 +3692,15 @@ async function readRightEyeWithAI() {
     fillSel('re-orth-right', vals.orthRight);
     fillSel('re-orth-left',  vals.orthLeft);
 
+    // Store directional saccade grades from AI
+    reAIGrades = {
+      rightward_overshoot:  vals.rightward_overshoot  || null,
+      rightward_undershoot: vals.rightward_undershoot || null,
+      leftward_overshoot:   vals.leftward_overshoot   || null,
+      leftward_undershoot:  vals.leftward_undershoot  || null,
+    };
+    renderAISaccadeSummary();
+
     showToast('AI 已自動填入數值，請確認後按「分析並產生處方」', 'success');
   } catch (err) {
     showToast('AI 讀取失敗：' + err.message, 'error');
@@ -3684,6 +3743,10 @@ function analyzeRightEyeStandalone() {
     vOverL:    parseNum(document.getElementById('re-v-over-l')?.value),
     vUnderL:   parseNum(document.getElementById('re-v-under-l')?.value),
     vMissedL:  parseNum(document.getElementById('re-v-missed-l')?.value),
+    hOverRGrade:  reAIGrades.rightward_overshoot,
+    hUnderRGrade: reAIGrades.rightward_undershoot,
+    hOverLGrade:  reAIGrades.leftward_overshoot,
+    hUnderLGrade: reAIGrades.leftward_undershoot,
   };
   const reResult = computeRightEyeRx(reData);
   const resultsEl = document.getElementById('re-results');

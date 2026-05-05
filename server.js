@@ -260,7 +260,11 @@ app.post('/api/analyze-righteye', async (req, res) => {
   "vMissedR": <Vertical 上向 Missed 次數>,
   "vOverL": <Vertical 下向 Overshoot 次數>,
   "vUnderL": <Vertical 下向 Undershoot 次數>,
-  "vMissedL": <Vertical 下向 Missed 次數>
+  "vMissedL": <Vertical 下向 Missed 次數>,
+  "rightward_overshoot":  <往右 Saccade Overshoot 程度: "none" | "mild" | "moderate" | "severe">,
+  "rightward_undershoot": <往右 Saccade Undershoot 程度: "none" | "mild" | "moderate" | "severe">,
+  "leftward_overshoot":   <往左 Saccade Overshoot 程度: "none" | "mild" | "moderate" | "severe">,
+  "leftward_undershoot":  <往左 Saccade Undershoot 程度: "none" | "mild" | "moderate" | "severe">
 }`;
   try {
     const response = await anthropic.messages.create({
@@ -276,17 +280,30 @@ app.post('/api/analyze-righteye', async (req, res) => {
    - 提取 Pathway Length Difference（PLD）Left 和 Right 數值（mm，可為負數）
    - PLD Right 若為負值表示右向追蹤不足；PLD Left 若偏大（絕對值大）表示左側協調問題
 
-2. Saccade 圖形分析：
+2. Horizontal Saccade 方向性判讀（最重要）：
+   圖形左右各有一個目標圓圈，眼球在兩圓圈間跳動。
+   - 往右跳（左→右）的軌跡是否超過右側目標圓圈 → Rightward Overshoot → ↓ Right CB
+   - 往右跳（左→右）的軌跡是否不足右側目標圓圈 → Rightward Undershoot → ↓ Left CB
+   - 往左跳（右→左）的軌跡是否超過左側目標圓圈 → Leftward Overshoot → ↓ Left CB
+   - 往左跳（右→左）的軌跡是否不足左側目標圓圈 → Leftward Undershoot → ↓ Right CB
+   估計比例：
+   - none   = 幾乎無（<5%）
+   - mild   = 少量（5–25%）
+   - moderate = 中量（25–50%）
+   - severe = 多量（>50%）
+   回傳 rightward_overshoot, rightward_undershoot, leftward_overshoot, leftward_undershoot
+
+3. 其他 Saccade 圖形分析：
    - 分別判斷往右（right-going）和往左（left-going）的 Overshoot 和 Undershoot 次數
    - 提取左眼（OD）和右眼（OS）分開的 Saccadic Velocity（若報告有呈現方向性速度）
    - 識別 Missed saccade（眼球未啟動的次數）
 
-3. 側性判斷輸出：
+4. 側性判斷輸出：
    - 明確標示數值的側性（Left/Right）
    - 只有在數據真正呈現雙側相當時才使用 Bilateral
    - orthogonal 偏移方向請明確填入 "up" 或 "down"，無偏移填 "none"
 
-4. 數值提取：仔細讀取圖片中所有數字，包括小數點。找不到的欄位填 null。
+5. 數值提取：仔細讀取圖片中所有數字，包括小數點。找不到的欄位填 null。
 
 只回傳 JSON，不附加任何說明文字。`,
       messages: [{ role: 'user', content: [...imageBlocks, { type: 'text', text: userPrompt }] }],
