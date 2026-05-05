@@ -4339,7 +4339,10 @@ function submitLogin() {
   const username = (document.getElementById('loginUsername')?.value || '').trim();
   const pw = document.getElementById('loginPassword').value;
   const errEl = document.getElementById('loginError');
-  const account = getAccounts().find(a => a.username === username && a.password === pw);
+  const accounts = getAccounts();
+  console.log('[Login] 輸入帳號:', JSON.stringify(username), '輸入密碼:', JSON.stringify(pw));
+  accounts.forEach(a => console.log('[Login] 比對:', JSON.stringify(a.username), JSON.stringify(a.password), '相符:', a.username === username && a.password === pw));
+  const account = accounts.find(a => a.username === username && a.password === pw);
   if (account) {
     sessionStorage.setItem('bcf_auth', account.role);
     document.getElementById('loginScreen').classList.add('hidden');
