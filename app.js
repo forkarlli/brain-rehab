@@ -137,13 +137,33 @@ async function loadAssessmentsFromServer() {
     const resp = await fetch('https://brain-rehab-production.up.railway.app/api/assessments');
     if (!resp.ok) return;
     const data = await resp.json();
-    if (Array.isArray(data.assessments) && data.assessments.length > 0) {
-      DB.assessments = data.assessments;
+    const serverList = Array.isArray(data.assessments) ? data.assessments : [];
+    const serverIds = new Set(serverList.map(a => a.id || a._id));
+
+    // Find localStorage assessments not yet on server
+    const missing = DB.assessments.filter(a => {
+      const aid = a.id || a._id;
+      return aid && !serverIds.has(aid);
+    });
+
+    if (serverList.length > 0) {
+      // Merge server data with any local assessments not yet synced
+      DB.assessments = [...serverList, ...missing];
       saveToStorage();
-      return;
     }
-    // MongoDB empty — migrate from localStorage
-    if (DB.assessments.length > 0) {
+
+    if (missing.length > 0) {
+      const mResp = await fetch('https://brain-rehab-production.up.railway.app/api/assessments/bulk', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ assessments: missing }),
+      });
+      if (mResp.ok) {
+        const result = await mResp.json();
+        if (result.migrated) showToast(`已將 ${result.count} 筆評估記錄遷移至伺服器`, 'success');
+      }
+    } else if (serverList.length === 0 && DB.assessments.length > 0) {
+      // MongoDB completely empty — bulk migrate all localStorage assessments
       const mResp = await fetch('https://brain-rehab-production.up.railway.app/api/assessments/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -3934,13 +3954,14 @@ function saveAssessment() {
   const prev = DB.assessments.filter(a => a.patientId === patientId && a.type === typeNames[type])
     .sort((a, b) => new Date(b.date) - new Date(a.date))[0]?.score || 0;
 
-  DB.assessments.unshift({
+  const rec = {
     id: genId('A'), patientId, date, type: typeNames[type],
     score, maxScore: maxMap[type] || 100, prev,
     therapist: '王小明', notes: document.getElementById('a-notes').value,
-  });
-
+  };
+  DB.assessments.unshift(rec);
   saveToStorage();
+  saveAssessmentToServer(rec);
   closeModal('addAssessModal');
   renderAssessments();
   showToast('評估記錄已儲存', 'success');

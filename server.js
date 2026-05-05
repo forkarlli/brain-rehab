@@ -173,12 +173,11 @@ app.post('/api/assessments/bulk', async (req, res) => {
   if (!Array.isArray(assessments)) return res.status(400).json({ error: '格式錯誤' });
   if (Assessment && dbReady) {
     try {
-      const count = await Assessment.countDocuments();
-      if (count > 0) return res.json({ ok: true, migrated: false, existing: count });
-      if (assessments.length === 0) return res.json({ ok: true, migrated: false, existing: 0 });
-      const ops = assessments.map(a => ({
-        updateOne: { filter: { _id: a.id }, update: { $set: { ...a, _id: a.id } }, upsert: true },
-      }));
+      if (assessments.length === 0) return res.json({ ok: true, migrated: false, count: 0 });
+      const ops = assessments.map(a => {
+        const id = a.id || a._id;
+        return { updateOne: { filter: { _id: id }, update: { $set: { ...a, _id: id } }, upsert: true } };
+      });
       await Assessment.bulkWrite(ops);
       return res.json({ ok: true, migrated: true, count: assessments.length });
     } catch (e) {
