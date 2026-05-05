@@ -1503,8 +1503,8 @@ function _resolveArmValue(m) {
   const combined = ((m.side || '') + (m.note || '')).toLowerCase();
   if (combined.includes('左長') || combined.includes('left-long') || combined.includes('left long')) return 'left-long';
   if (combined.includes('右長') || combined.includes('左短') || combined.includes('right-long') || combined.includes('right long')) return 'right-long';
-  if (m.side === '左' && (m.score || 0) > 0) return 'left-long';
-  if (m.side === '右' && (m.score || 0) > 0) return 'right-long';
+  if (m.side === '左' || m.side === '左側') return 'left-long';
+  if (m.side === '右' || m.side === '右側') return 'right-long';
   if (m.score === 1) return 'left-long';
   if (m.score === 2) return 'right-long';
   return 'none';
@@ -1513,7 +1513,7 @@ function _resolveArmValue(m) {
 function _setBCFFieldValue(fieldId, armValue, score) {
   if (/^(E[1-8]|V\d+|L[12])$/.test(fieldId)) {
     const radio = document.querySelector(`input[name="${fieldId}"][value="${armValue}"]`);
-    if (radio) { radio.checked = true; radio.dispatchEvent(new Event('change')); }
+    if (radio) { radio.checked = true; handleBCFArm(fieldId); }
     return;
   }
   if (/^C[1-8]$/.test(fieldId)) {
