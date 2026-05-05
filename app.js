@@ -132,42 +132,35 @@ async function saveAssessmentToServer(assessment) {
   }
 }
 
+const SAMPLE_ASSESSMENT_IDS = new Set(['A001','A002','A003','A004','A005','A006']);
+
 async function loadAssessmentsFromServer() {
   try {
     const resp = await fetch('https://brain-rehab-production.up.railway.app/api/assessments');
     if (!resp.ok) return;
     const data = await resp.json();
     const serverList = Array.isArray(data.assessments) ? data.assessments : [];
-    const serverIds = new Set(serverList.map(a => a.id || a._id));
-
-    // Find localStorage assessments not yet on server
-    const missing = DB.assessments.filter(a => {
-      const aid = a.id || a._id;
-      return aid && !serverIds.has(aid);
-    });
 
     if (serverList.length > 0) {
-      // Merge server data with any local assessments not yet synced
-      DB.assessments = [...serverList, ...missing];
+      // Server is authoritative — fully replace local data
+      DB.assessments = serverList;
       saveToStorage();
+      renderDashboard();
+      const activePage = document.querySelector('.page.active');
+      if (activePage?.id === 'assessments') renderAssessments();
+      return;
     }
 
-    if (missing.length > 0) {
+    // Server empty — migrate real (non-sample) local assessments
+    const toMigrate = DB.assessments.filter(a => {
+      const aid = a.id || a._id;
+      return aid && !SAMPLE_ASSESSMENT_IDS.has(aid);
+    });
+    if (toMigrate.length > 0) {
       const mResp = await fetch('https://brain-rehab-production.up.railway.app/api/assessments/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assessments: missing }),
-      });
-      if (mResp.ok) {
-        const result = await mResp.json();
-        if (result.migrated) showToast(`已將 ${result.count} 筆評估記錄遷移至伺服器`, 'success');
-      }
-    } else if (serverList.length === 0 && DB.assessments.length > 0) {
-      // MongoDB completely empty — bulk migrate all localStorage assessments
-      const mResp = await fetch('https://brain-rehab-production.up.railway.app/api/assessments/bulk', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ assessments: DB.assessments }),
+        body: JSON.stringify({ assessments: toMigrate }),
       });
       if (mResp.ok) {
         const result = await mResp.json();
@@ -2090,8 +2083,8 @@ function computeRightEyeRx(data) {
         brain: overBrain(hOverRSt, ['Right CB'], ['Right CB']),
         note:  overNote(hOverRSt, 'Right CB 過衝抑制嚴重異常 ⚠️', 'Right CB 過衝中度，低速精準控制訓練', 'Right CB 過衝輕度，建議精準控制訓練') },
       { label: '水平 Saccade 右向 Undershoot', value: hUnderRPct !== null ? hUnderRPct + '%' : '—', status: hUnderRSt,
-        brain: overBrain(hUnderRSt, ['Left FEF', 'Basal Ganglia'], ['Left FEF', 'Basal Ganglia']),
-        note:  overNote(hUnderRSt, 'Left FEF/BG 欠衝嚴重，右向啟動不足 ⚠️', 'Left FEF/BG 欠衝中度，強化啟動訓練', 'Left FEF/BG 啟動輕度不足') },
+        brain: overBrain(hUnderRSt, ['Left BG', 'Right FEF'], ['Left BG', 'Right FEF']),
+        note:  overNote(hUnderRSt, 'Left BG + Right FEF 欠衝嚴重，右向啟動不足 ⚠️', 'Left BG + Right FEF 欠衝中度，強化啟動訓練', 'Left BG + Right FEF 啟動輕度不足') },
       { label: '水平 Saccade 右向 Missed',    value: hMissRPct  !== null ? hMissRPct  + '%' : '—', status: hMissRSt,
         brain: overBrain(hMissRSt, ['Right PPRF', 'Left FEF'], ['Right PPRF', 'Left FEF']),
         note:  overNote(hMissRSt, 'Right PPRF/Left FEF 嚴重不足 ⚠️', 'Right PPRF/Left FEF 中度不足', 'Right PPRF/Left FEF 輕度不足') },
@@ -2099,8 +2092,8 @@ function computeRightEyeRx(data) {
         brain: overBrain(hOverLSt, ['Left CB'], ['Left CB']),
         note:  overNote(hOverLSt, 'Left CB 過衝抑制嚴重異常 ⚠️', 'Left CB 過衝中度，低速精準控制訓練', 'Left CB 過衝輕度，建議精準控制訓練') },
       { label: '水平 Saccade 左向 Undershoot', value: hUnderLPct !== null ? hUnderLPct + '%' : '—', status: hUnderLSt,
-        brain: overBrain(hUnderLSt, ['Right FEF', 'Basal Ganglia'], ['Right FEF', 'Basal Ganglia']),
-        note:  overNote(hUnderLSt, 'Right FEF/BG 欠衝嚴重，左向啟動不足 ⚠️', 'Right FEF/BG 欠衝中度，強化啟動訓練', 'Right FEF/BG 啟動輕度不足') },
+        brain: overBrain(hUnderLSt, ['Right BG', 'Left FEF'], ['Right BG', 'Left FEF']),
+        note:  overNote(hUnderLSt, 'Right BG + Left FEF 欠衝嚴重，左向啟動不足 ⚠️', 'Right BG + Left FEF 欠衝中度，強化啟動訓練', 'Right BG + Left FEF 啟動輕度不足') },
       { label: '水平 Saccade 左向 Missed',    value: hMissLPct  !== null ? hMissLPct  + '%' : '—', status: hMissLSt,
         brain: overBrain(hMissLSt, ['Left PPRF', 'Right FEF'], ['Left PPRF', 'Right FEF']),
         note:  overNote(hMissLSt, 'Left PPRF/Right FEF 嚴重不足 ⚠️', 'Left PPRF/Right FEF 中度不足', 'Left PPRF/Right FEF 輕度不足') },
@@ -2305,21 +2298,21 @@ function computeRightEyeRx(data) {
   } else if (vOverRSt === 'mild' || vOverLSt === 'mild') {
     addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑', angle: 'R0/L0（垂直，CB Vermis 輕度）', speed: 'S2', dist: 'D3', reps: '10', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 垂直 Overshoot 輕度（10-30%）→ CB Vermis 抑制訓練'], priority: 3 });
   }
-  // 右向 Undershoot → Left FEF + BG 啟動不足 → M2 R90 中高速啟動訓練
+  // 右向 Undershoot → Left BG + Right FEF 啟動不足 → M2 R90 中高速啟動訓練
   if (hUnderRSt === 'severe') {
-    addRx({ mode: 'M2', name: 'Saccade右向', angle: 'R90（Left FEF/BG → 右向欠衝-嚴重）', speed: 'S4', dist: 'D5', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Undershoot >60% → Left FEF/BG 啟動訓練'], priority: 2 });
+    addRx({ mode: 'M2', name: 'Saccade右向', angle: 'R90（Left BG + Right FEF → 右向欠衝-嚴重）', speed: 'S4', dist: 'D5', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Undershoot >60% → Left BG + Right FEF 啟動訓練'], priority: 2 });
   } else if (hUnderRSt === 'moderate') {
-    addRx({ mode: 'M2', name: 'Saccade右向', angle: 'R90（Left FEF/BG → 右向欠衝-中度）', speed: 'S3', dist: 'D4', reps: '18', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Undershoot 40-60% → Left FEF/BG 中度啟動訓練'], priority: 2 });
+    addRx({ mode: 'M2', name: 'Saccade右向', angle: 'R90（Left BG + Right FEF → 右向欠衝-中度）', speed: 'S3', dist: 'D4', reps: '18', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Undershoot 40-60% → Left BG + Right FEF 中度啟動訓練'], priority: 2 });
   } else if (hUnderRSt === 'mild') {
-    addRx({ mode: 'M2', name: 'Saccade右向', angle: 'R90（Left FEF/BG → 右向欠衝輕度）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Undershoot 20-40% → Left FEF/BG 啟動強化'], priority: 3 });
+    addRx({ mode: 'M2', name: 'Saccade右向', angle: 'R90（Left BG + Right FEF → 右向欠衝輕度）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Undershoot 20-40% → Left BG + Right FEF 啟動強化'], priority: 3 });
   }
-  // 左向 Undershoot → Right FEF + BG 啟動不足 → M2 L90 中高速啟動訓練
+  // 左向 Undershoot → Right BG + Left FEF 啟動不足 → M2 L90 中高速啟動訓練
   if (hUnderLSt === 'severe') {
-    addRx({ mode: 'M2', name: 'Saccade左向', angle: 'L90（Right FEF/BG → 左向欠衝-嚴重）', speed: 'S4', dist: 'D5', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Undershoot >60% → Right FEF/BG 啟動訓練'], priority: 2 });
+    addRx({ mode: 'M2', name: 'Saccade左向', angle: 'L90（Right BG + Left FEF → 左向欠衝-嚴重）', speed: 'S4', dist: 'D5', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Undershoot >60% → Right BG + Left FEF 啟動訓練'], priority: 2 });
   } else if (hUnderLSt === 'moderate') {
-    addRx({ mode: 'M2', name: 'Saccade左向', angle: 'L90（Right FEF/BG → 左向欠衝-中度）', speed: 'S3', dist: 'D4', reps: '18', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Undershoot 40-60% → Right FEF/BG 中度啟動訓練'], priority: 2 });
+    addRx({ mode: 'M2', name: 'Saccade左向', angle: 'L90（Right BG + Left FEF → 左向欠衝-中度）', speed: 'S3', dist: 'D4', reps: '18', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Undershoot 40-60% → Right BG + Left FEF 中度啟動訓練'], priority: 2 });
   } else if (hUnderLSt === 'mild') {
-    addRx({ mode: 'M2', name: 'Saccade左向', angle: 'L90（Right FEF/BG → 左向欠衝輕度）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Undershoot 20-40% → Right FEF/BG 啟動強化'], priority: 3 });
+    addRx({ mode: 'M2', name: 'Saccade左向', angle: 'L90（Right BG + Left FEF → 左向欠衝輕度）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Undershoot 20-40% → Right BG + Left FEF 啟動強化'], priority: 3 });
   }
   // Undershoot（垂直）→ riMLF 垂直啟動不足 → M4 高速
   if (vUnderRSt === 'severe' || vUnderLSt === 'severe') {
@@ -4358,12 +4351,9 @@ function submitLogin() {
   const username = (document.getElementById('loginUsername')?.value || '').trim();
   const pw = document.getElementById('loginPassword').value;
   const errEl = document.getElementById('loginError');
-  let role = null;
-  if (username === 'therapist' && pw === 'BCF2026') role = 'therapist';
-  else if (username === 'admin' && pw === 'BCF2026admin') role = 'admin';
-  else if (username === 'reception' && pw === 'bcf2026') role = 'reception';
-  if (role) {
-    sessionStorage.setItem('bcf_auth', role);
+  const account = getAccounts().find(a => a.username === username && a.password === pw);
+  if (account) {
+    sessionStorage.setItem('bcf_auth', account.role);
     document.getElementById('loginScreen').classList.add('hidden');
     initApp();
   } else {
@@ -4384,7 +4374,8 @@ function saveNewPassword(role) {
   localStorage.setItem(`bcf_pw_${role}`, newPw);
   document.getElementById(`new-${role}-pw`).value = '';
   document.getElementById(`confirm-${role}-pw`).value = '';
-  showToast(`${role === 'therapist' ? '治療師' : '管理員'}密碼已更新`);
+  const roleLabels = { therapist: '治療師', admin: '管理員', reception: '前台' };
+  showToast(`${roleLabels[role] || role} 密碼已更新`);
 }
 
 // ===== EVENT LISTENERS =====
