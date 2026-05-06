@@ -744,7 +744,7 @@ function showAssessmentDetail(aid) {
   console.log('assessmentDetail:', JSON.stringify(a));
 
   const isRE  = a.type?.includes('RightEye');
-  const isBCF = a.type?.includes('BCF');
+  const isBCF = a.type?.includes('BCF') || a.type === '肌肉張力測試';
   const pt    = getPatient(a.patientId);
   const diff  = (a.score ?? 0) - (a.prev ?? 0);
   const scoreColor = a.maxScore > 0
@@ -978,6 +978,109 @@ function showAssessmentDetail(aid) {
           </div>`;
         }
       }
+    }
+
+    // Eye machine Rx
+    if (a.eyeMachineRx?.length) {
+      body += secTitle('眼動機訓練模式推薦');
+      body += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:#f3f4f6">
+          ${['模式','訓練類型','板面角度','速度','距離','次數','目標物'].map(h=>`<th style="padding:5px 8px;text-align:left;font-weight:600;color:#374151;border-bottom:1px solid #e5e7eb">${h}</th>`).join('')}
+        </tr></thead>
+        <tbody>${a.eyeMachineRx.map((rx,i) => `<tr style="background:${i%2?'#f9fafb':'#fff'}">
+          <td style="padding:5px 8px;font-weight:700;color:#1d4ed8">${rx.mode}</td>
+          <td style="padding:5px 8px">${rx.name}</td>
+          <td style="padding:5px 8px;font-size:11px">${rx.angle||'—'}</td>
+          <td style="padding:5px 8px"><span style="background:#dbeafe;color:#1d4ed8;padding:1px 6px;border-radius:8px;font-size:11px">${rx.speed||'—'}</span></td>
+          <td style="padding:5px 8px"><span style="background:#fefce8;color:#92400e;padding:1px 6px;border-radius:8px;font-size:11px">${rx.dist||'—'}</span></td>
+          <td style="padding:5px 8px;font-weight:600">${rx.reps||'—'}</td>
+          <td style="padding:5px 8px;font-size:11px">${rx.target||'—'}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>`;
+    }
+
+    // Flying chair data
+    if (a.flyingChairData) {
+      const fc = a.flyingChairData;
+      const svcColor = fc.severityLabel === '重度' ? '#dc2626' : fc.severityLabel === '中度' ? '#d97706' : '#16a34a';
+      const svcBg    = fc.severityLabel === '重度' ? '#fef2f2' : fc.severityLabel === '中度' ? '#fffbeb' : '#f0fdf4';
+      const POSTURE_ICON = { '背靠':'🛏', '趴臥':'🏊', '坐或趴':'🪑', '兩步驟':'🔄' };
+      body += secTitle('飛行椅訓練處方');
+      body += `<div style="display:flex;gap:12px;align-items:center;padding:10px 14px;background:${svcBg};border-left:3px solid ${svcColor};border-radius:6px;margin-bottom:10px">
+        <div style="text-align:center;min-width:48px">
+          <div style="font-size:11px;color:${svcColor};margin-bottom:1px">嚴重度</div>
+          <div style="font-size:20px;font-weight:800;color:${svcColor}">${fc.severityLabel}</div>
+        </div>
+        <div style="font-size:12px;color:#374151;line-height:1.8">
+          評分 <strong>${fc.score}</strong> 分 ｜ 步進 <strong>${fc.params.step}°</strong> ｜ 擺動 <strong>${fc.params.swingMin}–${fc.params.swingMax} 次</strong> ｜ 共 <strong>${fc.params.segments} 段</strong><br>
+          X 軸：起始 <strong>-41°</strong> → 結束 <strong>${fc.xEnd >= 0 ? '+' : ''}${fc.xEnd}°</strong>
+        </div>
+      </div>`;
+      const renderFcRows = (rows, axis, target) => {
+        const ac = axis === 'Z' ? '#0891b2' : '#4f46e5';
+        const tStr = target > 0 ? `+${target}°` : target < 0 ? `${target}°` : '固定 0°';
+        return `<table style="width:100%;border-collapse:collapse;font-size:11px;margin-top:4px">
+          <thead><tr style="background:#f3f4f6">
+            <th style="padding:3px 6px;text-align:left;font-weight:600;color:#374151;border-bottom:1px solid #e5e7eb">段次</th>
+            <th style="padding:3px 6px;text-align:left;font-weight:600;color:#374151;border-bottom:1px solid #e5e7eb">X 軸</th>
+            <th style="padding:3px 6px;text-align:left;font-weight:600;color:${ac};border-bottom:1px solid #e5e7eb">${axis} 軸 → ${tStr}</th>
+            <th style="padding:3px 6px;text-align:left;font-weight:600;color:#374151;border-bottom:1px solid #e5e7eb">擺動次數</th>
+          </tr></thead>
+          <tbody>${rows.map((r,i) => `<tr style="background:${i%2?'#f9fafb':'#fff'}">
+            <td style="padding:3px 6px;font-weight:600">第 ${r.seg} 段</td>
+            <td style="padding:3px 6px;color:#d97706;font-weight:600">${r.x >= 0 ? '+' : ''}${r.x}°</td>
+            <td style="padding:3px 6px;color:${ac};font-weight:600">${r.axisVal >= 0 ? '+' : ''}${r.axisVal}°</td>
+            <td style="padding:3px 6px">${fc.params.swingMin}–${fc.params.swingMax} 次</td>
+          </tr>`).join('')}</tbody>
+        </table>`;
+      };
+      fc.canalTargets.forEach(t => {
+        const icon = POSTURE_ICON[t.posture] || '';
+        body += `<div style="margin-bottom:10px;padding:10px 12px;background:#fafafa;border-radius:8px;border:1px solid #e5e7eb">
+          <div style="margin-bottom:6px">
+            <span style="background:#dbeafe;color:#1d4ed8;padding:1px 8px;border-radius:8px;font-size:12px;font-weight:600">${t.canal}</span>
+            <span style="background:#e0f2fe;color:#0369a1;padding:1px 7px;border-radius:8px;font-size:11px;margin-left:5px">${icon} ${t.posture}</span>
+            <span style="font-size:11px;color:#9ca3af;margin-left:6px">${t.sourceCode}</span>
+          </div>`;
+        if (t.isCB) {
+          body += `<div style="font-size:11px;font-weight:600;color:#7c3aed;margin-bottom:3px">步驟一：${t.cbSide} Post Canal（背靠）</div>`;
+          body += renderFcRows(t.rowsPost, 'Y', t.postTarget);
+          body += `<div style="font-size:11px;font-weight:600;color:#7c3aed;margin-top:8px;margin-bottom:3px">步驟二：${t.cbSide} Ant Canal（趴臥）</div>`;
+          body += renderFcRows(t.rowsAnt, 'Y', t.antTarget);
+        } else {
+          body += renderFcRows(t.rows, t.axis || 'Y', t.target || 0);
+        }
+        body += `</div>`;
+      });
+      if (fc.notes?.length) {
+        body += `<div style="padding:10px 14px;background:#fff7ed;border-left:3px solid #f97316;border-radius:6px;margin-bottom:4px">
+          <div style="font-size:11px;font-weight:700;color:#ea580c;margin-bottom:4px">⚠️ 訓練注意事項</div>
+          <ul style="margin:0;padding-left:16px;font-size:11px;color:#c2410c;line-height:1.9">${fc.notes.map(n=>`<li>${n}</li>`).join('')}</ul>
+        </div>`;
+      }
+    }
+
+    // EEG prescriptions
+    if (a.eegPrescriptions?.length) {
+      body += secTitle('EEG 電刺激處方');
+      body += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:#f3f4f6">
+          ${['目標腦區','電極位置','頻率','刺激模式','訓練項目'].map(h=>`<th style="padding:5px 8px;text-align:left;font-weight:600;color:#374151;border-bottom:1px solid #e5e7eb">${h}</th>`).join('')}
+        </tr></thead>
+        <tbody>${a.eegPrescriptions.map((p,i) => `<tr style="background:${i%2?'#f9fafb':'#fff'}">
+          <td style="padding:5px 8px"><span style="background:#dbeafe;color:#1d4ed8;padding:1px 7px;border-radius:8px;font-size:11px">🧠 ${p.region}</span></td>
+          <td style="padding:5px 8px;font-weight:700;font-family:monospace">${p.electrode}</td>
+          <td style="padding:5px 8px"><span style="background:#e0f2fe;color:#0369a1;padding:1px 6px;border-radius:8px;font-size:11px">${p.freq} Hz</span></td>
+          <td style="padding:5px 8px;font-size:11px">${p.mode}</td>
+          <td style="padding:5px 8px;font-size:12px;color:#374151">${p.rx}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>`;
+    }
+
+    // Functional trainings
+    if (a.functionalTrainings?.length) {
+      body += secTitle('功能訓練處方');
+      body += `<div style="display:flex;flex-direction:column;gap:4px">${a.functionalTrainings.map(t=>`<div style="padding:5px 10px;background:#f0fdf4;border-left:3px solid #16a34a;border-radius:0 4px 4px 0;font-size:12px;color:#15803d">▶ ${t}</div>`).join('')}</div>`;
     }
   }
 
@@ -2045,6 +2148,93 @@ function computeEyeMachineRx(affectedBrainRegions, affectedItems, convMCodes) {
   }
 
   return { rec, positionNote, headPos };
+}
+
+function _computeFlyingChairData(affectedItems, patient) {
+  const CANAL_MAP = {
+    V1:  { any:          { canal: 'Bilateral Post Canal',   posture: '背靠',   axis: 'Y', target:  0  } },
+    V2:  { 'left-long':  { canal: 'Left Post Canal',        posture: '背靠',   axis: 'Y', target: -41 },
+           'right-long': { canal: 'Right Ant Canal',        posture: '趴臥',   axis: 'Y', target: -41 } },
+    V3:  { 'right-long': { canal: 'Right Horizontal Canal', posture: '坐或趴', axis: 'Z', target: +45 },
+           'left-long':  { canal: 'Left Horizontal Canal',  posture: '坐或趴', axis: 'Z', target: -45 } },
+    V4:  { 'right-long': { canal: 'Right Post Canal',       posture: '背靠',   axis: 'Y', target: +41 },
+           'left-long':  { canal: 'Left Ant Canal',         posture: '趴臥',   axis: 'Y', target: +41 } },
+    V5:  { any:          { canal: 'Bilateral Ant Canal',    posture: '趴臥',   axis: 'Y', target:  0  } },
+    V6:  { 'left-long':  { canal: 'Left Post Canal',        posture: '背靠',   axis: 'Y', target: -41 },
+           'right-long': { canal: 'Right Ant Canal',        posture: '趴臥',   axis: 'Y', target: -41 } },
+    V7:  { 'right-long': { canal: 'Right Horizontal Canal', posture: '坐或趴', axis: 'Z', target: +45 },
+           'left-long':  { canal: 'Left Horizontal Canal',  posture: '坐或趴', axis: 'Z', target: -45 } },
+    V8:  { 'right-long': { canal: 'Right Post Canal',       posture: '背靠',   axis: 'Y', target: +41 },
+           'left-long':  { canal: 'Left Ant Canal',         posture: '趴臥',   axis: 'Y', target: +41 } },
+    V9:  { 'right-long': { canal: 'Right CB', posture: '兩步驟', isCB: true, cbSide: 'Right' },
+           'left-long':  { canal: 'Left CB',  posture: '兩步驟', isCB: true, cbSide: 'Left'  } },
+    V10: { 'right-long': { canal: 'Right CB', posture: '兩步驟', isCB: true, cbSide: 'Right' },
+           'left-long':  { canal: 'Left CB',  posture: '兩步驟', isCB: true, cbSide: 'Left'  } },
+  };
+  const SEVERITY_PARAMS = {
+    '重度': { step: 5,  swingMin: 3, swingMax: 5,  segments: 3 },
+    '中度': { step: 7,  swingMin: 4, swingMax: 7,  segments: 5 },
+    '輕度': { step: 10, swingMin: 5, swingMax: 10, segments: 6 },
+  };
+  const vItems = affectedItems.filter(i => i.type === '頸椎作動');
+  if (vItems.length === 0) return null;
+
+  const age = patient?.dob ? Math.floor((Date.now() - new Date(patient.dob)) / (365.25 * 86400 * 1000)) : 65;
+  const ageGrade = age > 75 ? 3 : age > 60 ? 2 : 1;
+  const bmiGrade = 1;
+  const abnormalCount = vItems.length;
+  const score = abnormalCount * 1 + ageGrade * 2 + bmiGrade * 3;
+  const severityLabel = score >= 14 ? '重度' : score >= 9 ? '中度' : '輕度';
+  const params = SEVERITY_PARAMS[severityLabel];
+
+  const buildRows = (target) => {
+    const rows = [];
+    const yStep = target !== 0 ? Math.ceil(Math.abs(target) / params.segments) : 0;
+    for (let i = 1; i <= params.segments; i++) {
+      const x = -41 + i * params.step;
+      let axisVal = 0;
+      if (target !== 0) {
+        const raw = yStep * i;
+        axisVal = target > 0 ? Math.min(raw, target) : Math.max(-raw, target);
+      }
+      rows.push({ seg: i, x, axisVal });
+    }
+    return rows;
+  };
+
+  const seenCanals = new Set();
+  const canalTargets = [];
+  vItems.forEach(item => {
+    const armKey = item.armResponse === '左長右短' ? 'left-long' : item.armResponse === '左短右長' ? 'right-long' : null;
+    const codeMap = CANAL_MAP[item.code];
+    if (!codeMap) return;
+    const entry = codeMap[armKey] || codeMap.any;
+    if (!entry) return;
+    if (seenCanals.has(entry.canal)) return;
+    seenCanals.add(entry.canal);
+    if (entry.isCB) {
+      const postTarget = entry.cbSide === 'Right' ? +41 : -41;
+      const antTarget  = entry.cbSide === 'Right' ? -41 : +41;
+      canalTargets.push({ ...entry, sourceCode: item.code, rowsPost: buildRows(postTarget), rowsAnt: buildRows(antTarget), postTarget, antTarget });
+    } else {
+      canalTargets.push({ ...entry, sourceCode: item.code, rows: buildRows(entry.target) });
+    }
+  });
+  if (canalTargets.length === 0) return null;
+
+  const xEnd = -41 + params.segments * params.step;
+  const notes = [
+    '訓練前確認病人已固定於飛行椅安全帶，確認緊急停止機制正常',
+    '全程監控頭暈、噁心、眼球震顫，出現症狀立即停止並讓病人休息',
+    '旁邊備有支撐人員，初次訓練建議治療師全程陪同',
+  ];
+  if (canalTargets.some(t => t.posture === '背靠'))           notes.push('背靠姿勢：確認枕部支撐到位，頸部自然延伸，避免頸椎過伸');
+  if (canalTargets.some(t => t.posture === '趴臥'))           notes.push('趴臥姿勢：確認呼吸道暢通，前額置於支撐架上');
+  if (canalTargets.some(t => t.isCB))                        notes.push('兩步驟訓練：步驟一完成後休息至少 2 分鐘，確認無症狀再進行步驟二');
+  if (canalTargets.some(t => t.canal?.includes('Bilateral'))) notes.push('雙側半規管異常：第一次訓練不超過 2 段，採最保守漸進方式');
+  if (severityLabel === '重度')                               notes.push('重度患者：每段訓練後休息 30 秒並評估症狀，視情況縮短段數或暫停');
+
+  return { severityLabel, score, ageGrade, bmiGrade, abnormalCount, params, xEnd, canalTargets, notes };
 }
 
 function computeFlyingChairRx(affectedItems, patient) {
@@ -3630,18 +3820,78 @@ async function saveBCFAssessment() {
     if (val === 'abnormal') convergenceItems[c.id] = true;
   });
 
-  // Compute brain regions + decision
-  const affectedRegions = new Set();
+  // Build affectedItems + brain regions (full structure for analysis)
+  const affectedBrainSet = new Set();
+  const affectedItems = [];
   BCF_EYE_MOVEMENTS.forEach(e => {
     const val = eyeItems[e.id]; if (!val || val === 'none') return;
-    (EYE_BRAIN_MAP[e.id]?.(val)?.brain || []).forEach(b => affectedRegions.add(b));
+    const mapped = EYE_BRAIN_MAP[e.id]?.(val);
+    const brain = mapped?.brain || [];
+    const training = mapped?.training || '';
+    affectedItems.push({ code: e.id, type: '眼球作動', name: e.icon + ' ' + e.dir, armResponse: ARM_LABELS[val] || val, brain, training });
+    brain.forEach(b => affectedBrainSet.add(b));
   });
   BCF_CERVICAL.forEach(v => {
     const val = cervicalItems[v.id]; if (!val || val === 'none') return;
-    (CERVICAL_BRAIN_MAP[v.id]?.(val)?.brain || []).forEach(b => affectedRegions.add(b));
+    const mapped = CERVICAL_BRAIN_MAP[v.id]?.(val);
+    const brain = mapped?.brain || [];
+    const training = mapped?.training || '';
+    affectedItems.push({ code: v.id, type: '頸椎作動', name: v.icon + ' ' + v.dir, armResponse: ARM_LABELS[val] || val, canal: v.canal, brain, training });
+    brain.forEach(b => affectedBrainSet.add(b));
   });
-  const brainRegions = [...affectedRegions];
+  BCF_VISUAL_STIM.forEach(c => {
+    if (visualStimItems.includes(c.id))
+      affectedItems.push({ code: c.id, type: '視覺/聽覺', name: `${c.dir}（${c.type}）`, brain: [] });
+  });
+  BCF_STANCE.forEach(s => {
+    const val = stanceItems[s.id]; if (!val || val === 'none') return;
+    const brain = val === 'left-long' ? ['Left CB'] : ['Right CB'];
+    const training = val === 'left-long' ? '訓練Left CB' : '訓練Right CB';
+    affectedItems.push({ code: s.id, type: '站立測試', name: s.label, armResponse: ARM_LABELS[val] || val, brain, training });
+    brain.forEach(b => affectedBrainSet.add(b));
+  });
+  BCF_CONVERGENCE.forEach(c => {
+    if (convergenceItems[c.id]) {
+      affectedItems.push({ code: 'CONV', type: 'Convergence', name: c.label, brain: [c.brain] });
+      affectedBrainSet.add(c.brain);
+    }
+  });
+  const activeMCodes = CONV_M_MAP.filter(m => document.querySelector(`input[name="${m.sub}"]`)?.checked);
+
+  // Compute eye machine Rx (also adds Temporal Lobe regions to affectedBrainSet)
+  const { rec: eyeMachineRx } = computeEyeMachineRx(affectedBrainSet, affectedItems, activeMCodes);
+
+  const brainRegions = [...affectedBrainSet];
   const dec = computeBCFDecision(brainRegions);
+
+  // Compute EEG prescriptions from filtered regions
+  const filteredRegions = dec.trainSide
+    ? brainRegions.filter(r => dec.keptSet?.has(r) || BILATERAL_REGIONS.has(r) || !REGION_SIDE_TYPE[r])
+    : brainRegions;
+  const eegPrescriptions = [];
+  const seenEeg = new Set();
+  filteredRegions.forEach(region => {
+    const rxEntry = BRAIN_REGION_RX[region];
+    if (!rxEntry) return;
+    const key = rxEntry.electrode + '|' + rxEntry.freq;
+    if (!seenEeg.has(key)) { seenEeg.add(key); eegPrescriptions.push({ region, ...rxEntry }); }
+  });
+
+  // Compute functional trainings
+  const functionalTrainings = [];
+  const seenTr = new Set();
+  affectedItems.forEach(item => {
+    if (!item.training) return;
+    const addTr = t => { if (!seenTr.has(t)) { seenTr.add(t); functionalTrainings.push(t); } };
+    if (!dec.trainSide) { addTr(item.training); return; }
+    const brain = item.brain || [];
+    const hasClassified = brain.some(b => REGION_SIDE_TYPE[b]);
+    if (!hasClassified) { addTr(item.training); return; }
+    if (!brain.every(b => dec.excludedSet?.has(b))) addTr(item.training);
+  });
+
+  // Compute flying chair data
+  const flyingChairData = _computeFlyingChairData(affectedItems, getPatient(patientId));
 
   // Count diff (recount from collected data)
   let diffCount = 0;
@@ -3652,12 +3902,12 @@ async function saveBCFAssessment() {
   diffCount += Object.keys(convergenceItems).length;
 
   const totalItems = 31;
-  const prev = DB.assessments.filter(a => a.patientId === patientId && a.type === 'BCF眼動機評估')
+  const prev = DB.assessments.filter(a => a.patientId === patientId && (a.type === '肌肉張力測試' || a.type === 'BCF眼動機評估'))
     .sort((a, b) => new Date(b.date) - new Date(a.date))[0]?.score ?? totalItems;
 
   const bcfRec = {
     id: genId('BCF'), patientId, date,
-    type: 'BCF眼動機評估',
+    type: '肌肉張力測試',
     score: totalItems - diffCount,
     maxScore: totalItems,
     prev,
@@ -3666,6 +3916,10 @@ async function saveBCFAssessment() {
     eyeItems, cervicalItems, visualStimItems, stanceItems, convergenceItems,
     brainRegions,
     decision: { trainSide: dec.trainSide, reason: dec.reason, balanced: !!dec.balanced, noData: !!dec.noData, counts: dec.counts },
+    eyeMachineRx,
+    eegPrescriptions,
+    functionalTrainings,
+    flyingChairData,
   };
   console.log('saveBCFAssessment:', JSON.stringify(bcfRec));
   DB.assessments.unshift(bcfRec);
