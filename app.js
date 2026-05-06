@@ -1950,7 +1950,7 @@ function computeFlyingChairRx(affectedItems, patient) {
 
 // ===== RIGHT EYE REPORT ANALYSIS =====
 function computeRightEyeRx(data) {
-  const { spH, spV, spC, eso, svH, svV, syncH, syncV, intrusion,
+  const { spH, spV, spC, eso, svH, svV, syncH, syncV, intrusion, intrusionAmp,
           pldRight, pldLeft, orthRight, orthLeft,
           svRight, svLeft, svUp, svDown,
           hTotal, hOverR, hUnderR, hMissedR, hOverL, hUnderL, hMissedL,
@@ -1977,7 +1977,7 @@ function computeRightEyeRx(data) {
   const svVSt  = svSt(svV);
   const syncHSt = syncSt(syncH);
   const syncVSt = syncSt(syncV);
-  const intSt  = intrusion === 'none' ? 'normal' : 'severe';  // up/down/left/right all = severe
+  const intSt  = intrusion === 'none' ? 'normal' : intrusionAmp === 'small' ? 'mild' : 'severe';
 
   const svRSt   = svSt(svRight);
   const svLSt   = svSt(svLeft);
@@ -2101,19 +2101,32 @@ function computeRightEyeRx(data) {
     },
     {
       label: 'Intrusion', status: intSt,
-      value: intrusion === 'none'  ? '無'
-           : intrusion === 'up'   ? 'Up（向上）'
-           : intrusion === 'down' ? 'Down（向下）'
-           : intrusion === 'left' ? 'Left（向左）'
-           : intrusion === 'right'? 'Right（向右）' : '無',
-      brain: intrusion === 'up'   ? ['Medulla', 'Inferior Vermis']
-           : intrusion === 'down' ? ['Midbrain', 'Superior Vermis', 'Superior Colliculus']
-           : intrusion === 'left' ? ['Right Cortex', 'Right Cerebellum']
-           : intrusion === 'right'? ['Left Cortex', 'Left Cerebellum'] : [],
-      note: intrusion === 'up'   ? '↑ Medulla / Lower Brainstem — 強化下轉眼動（Downward OKN + VOR）'
-          : intrusion === 'down' ? '↑ Midbrain / Superior Vermis — 強化上轉眼動（Upward OKN + Anti-Saccade）'
-          : intrusion === 'left' ? '↑ Right Cx / Right Cb — 右側肢體複雜運動 + 向右 OKN'
-          : intrusion === 'right'? '↑ Left Cx / Left Cb — 左側肢體複雜運動 + 向左 OKN' : '',
+      value: (() => {
+        if (intrusion === 'none') return '無';
+        const dir = intrusion === 'up' ? 'Up（向上）' : intrusion === 'down' ? 'Down（向下）'
+                  : intrusion === 'left' ? 'Left（向左）' : 'Right（向右）';
+        return intrusionAmp === 'small' ? dir + '｜小振幅' : intrusionAmp === 'large' ? dir + '｜大振幅' : dir;
+      })(),
+      brain: (() => {
+        if (intrusion === 'none') return [];
+        const base = intrusion === 'up'   ? ['Medulla', 'Inferior Vermis']
+                   : intrusion === 'down' ? ['Midbrain', 'Superior Vermis', 'Superior Colliculus']
+                   : intrusion === 'left' ? ['Right Cortex', 'Right Cerebellum']
+                   : ['Left Cortex', 'Left Cerebellum'];
+        if (intrusionAmp === 'small') return ['Cerebellum (Flocculus)', 'Superior Colliculus'];
+        if (intrusionAmp === 'large') return [...base, 'Cross-Cord Pathway'];
+        return base;
+      })(),
+      note: (() => {
+        if (intrusion === 'none') return '';
+        const base = intrusion === 'up'   ? '↑ Medulla / Lower Brainstem — 強化下轉眼動（Downward OKN + VOR）'
+                   : intrusion === 'down' ? '↑ Midbrain / Superior Vermis — 強化上轉眼動（Upward OKN + Anti-Saccade）'
+                   : intrusion === 'left' ? '↑ Right Cx / Right Cb — 右側肢體複雜運動 + 向右 OKN'
+                   : '↑ Left Cx / Left Cb — 左側肢體複雜運動 + 向左 OKN';
+        if (intrusionAmp === 'small') return base + '｜小振幅 → 固視穩定性障礙（Flocculus/SC）';
+        if (intrusionAmp === 'large') return base + '｜大振幅 → 交叉脊髓束異常（Cross-Cord Pathway）';
+        return base;
+      })(),
     },
     // ── Saccade Over/Under/Missed ──
     ...(hTotal ? [
@@ -2305,6 +2318,15 @@ function computeRightEyeRx(data) {
   if (intrusion === 'right') {
     // Right Intrusion → Left Cx/Cb → Left Pursuit + Right Saccade L45
     addRx({ mode: 'M1', name: 'Pursuit左向', angle: 'L45（左斜向）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: Right Intrusion → ↑Left Cx/Cb — Left Pursuit + Right Saccade L45'], priority: 2 });
+  }
+  // Intrusion 振幅過濾
+  if (intAbn && intrusionAmp === 'small') {
+    // 小振幅 → 固視穩定性障礙（Flocculus/SC）
+    addRx({ mode: 'M1', name: 'Fixation固視穩定', angle: '0°（固視穩定專訓）', speed: 'S1', dist: 'D2', reps: '20', target: '有（點狀小目標）', bg: '空白背板', notes: ['Intrusion小振幅 → Cerebellum Flocculus/SC 固視穩定訓練'], priority: 2 });
+  }
+  if (intAbn && intrusionAmp === 'large') {
+    // 大振幅 → 交叉脊髓束（Cross-Cord Pathway）
+    addRx({ mode: 'M7', name: '複合Saccade交叉整合', angle: 'R45/L45（Cross-Cord訓練）', speed: 'S4', dist: 'D4', reps: '10', target: '有', bg: '空白背板', notes: ['Intrusion大振幅 → Cross-Cord Pathway — 交叉整合訓練（M7）'], priority: 2 });
   }
   // Intrusion + Sync低 → M7 BrainStem
   if (intAbn && syncAbn) {
@@ -2692,6 +2714,7 @@ function generateBCFResults() {
     syncH:     parseNum(document.getElementById('re-syncH')?.value),
     syncV:     parseNum(document.getElementById('re-syncV')?.value),
     intrusion: document.getElementById('re-intrusion')?.value || 'none',
+    intrusionAmp: document.getElementById('re-intrusion-amp')?.value || 'none',
     hTotal:    parseNum(document.getElementById('re-h-total')?.value),
     hOverR:    parseNum(document.getElementById('re-h-over-r')?.value),
     hUnderR:   parseNum(document.getElementById('re-h-under-r')?.value),
@@ -3024,6 +3047,7 @@ function generateIntegratedPrescription() {
     syncH:     parseNum(document.getElementById('re-syncH')?.value),
     syncV:     parseNum(document.getElementById('re-syncV')?.value),
     intrusion: document.getElementById('re-intrusion')?.value || 'none',
+    intrusionAmp: document.getElementById('re-intrusion-amp')?.value || 'none',
     hTotal:    parseNum(document.getElementById('re-h-total')?.value),
     hOverR:    parseNum(document.getElementById('re-h-over-r')?.value),
     hUnderR:   parseNum(document.getElementById('re-h-under-r')?.value),
@@ -3448,13 +3472,20 @@ function renderRightEyeInterface() {
               <div class="form-group" style="margin-bottom:6px"><label>垂直追隨偏移</label><input type="number" id="re-vp-lateral-drift" class="input" step="0.1" placeholder="左偏 -mm / 右偏 +mm"></div>
               <div class="form-group" style="margin-bottom:14px"><label>垂直跳視偏移</label><input type="number" id="re-vs-lateral-drift" class="input" step="0.1" placeholder="左偏 -mm / 右偏 +mm"></div>
               <div class="re-num-group">Intrusion（眼球侵入）</div>
-              <div class="form-group" style="margin-bottom:14px"><label>類型</label>
+              <div class="form-group" style="margin-bottom:8px"><label>方向</label>
                 <select id="re-intrusion" class="select">
                   <option value="none">無</option>
                   <option value="up">Up（向上）</option>
                   <option value="down">Down（向下）</option>
                   <option value="left">Left（向左）</option>
                   <option value="right">Right（向右）</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:14px"><label>振幅</label>
+                <select id="re-intrusion-amp" class="select">
+                  <option value="none">未指定</option>
+                  <option value="small">小振幅（固視穩定性障礙）</option>
+                  <option value="large">大振幅（Cross-Cord）</option>
                 </select>
               </div>
               <div class="re-num-group">Saccade 垂直（次數）</div>
@@ -3578,6 +3609,8 @@ function clearRightEyeForm() {
   });
   const reInt = document.getElementById('re-intrusion');
   if (reInt) reInt.value = 'none';
+  const reIntAmp = document.getElementById('re-intrusion-amp');
+  if (reIntAmp) reIntAmp.value = 'none';
   const reOrthR = document.getElementById('re-orth-right');
   if (reOrthR) reOrthR.value = 'none';
   const reOrthL = document.getElementById('re-orth-left');
@@ -3716,6 +3749,10 @@ async function readRightEyeWithAI() {
       const intEl = document.getElementById('re-intrusion');
       if (intEl) intEl.value = vals.intrusion;
     }
+    if (vals.intrusionAmp) {
+      const intAmpEl = document.getElementById('re-intrusion-amp');
+      if (intAmpEl) intAmpEl.value = vals.intrusionAmp;
+    }
     const fillSel = (id, v) => { if (v && v !== 'none') { const el = document.getElementById(id); if (el) el.value = v; } };
     fillSel('re-orth-right', vals.orthRight);
     fillSel('re-orth-left',  vals.orthLeft);
@@ -3757,6 +3794,7 @@ function analyzeRightEyeStandalone() {
     syncH:     parseNum(document.getElementById('re-syncH')?.value),
     syncV:     parseNum(document.getElementById('re-syncV')?.value),
     intrusion: document.getElementById('re-intrusion')?.value || 'none',
+    intrusionAmp: document.getElementById('re-intrusion-amp')?.value || 'none',
     hTotal:    parseNum(document.getElementById('re-h-total')?.value),
     hOverR:    parseNum(document.getElementById('re-h-over-r')?.value),
     hUnderR:   parseNum(document.getElementById('re-h-under-r')?.value),
