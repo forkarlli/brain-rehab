@@ -706,7 +706,7 @@ function renderDetailTab(tab) {
   } else if (tab === 'assessments') {
     body.innerHTML = `<table class="data-table">
       <thead><tr><th>日期</th><th>評估項目</th><th>分數</th><th>進步幅度</th><th>備註</th></tr></thead>
-      <tbody>${ptAssess.map(a=>{const diff=a.score-a.prev;return`<tr>
+      <tbody>${ptAssess.map(a=>{const diff=a.score-a.prev;const aid=a.id||a._id;return`<tr style="cursor:pointer" onclick="showAssessmentDetail('${aid}')" title="點擊查看詳情">
         <td>${formatDate(a.date)}</td><td>${a.type}</td>
         <td><strong>${a.score}</strong><span style="color:var(--gray-400);font-size:11px">/${a.maxScore}</span></td>
         <td>${diff>0?`<span style="color:var(--success)">↑ +${diff}</span>`:diff<0?`<span style="color:var(--danger)">↓ ${diff}</span>`:'—'}</td>
@@ -736,6 +736,88 @@ function renderDetailTab(tab) {
         </div>
       </div>`).join('') : '<p style="text-align:center;color:var(--gray-400);padding:40px;font-size:13px">尚無訓練處方</p>';
   }
+}
+
+function showAssessmentDetail(aid) {
+  const a = DB.assessments.find(x => (x.id || x._id) === aid);
+  if (!a) return;
+
+  const diff = (a.score ?? 0) - (a.prev ?? 0);
+  const diffHtml = diff > 0
+    ? `<span style="color:var(--success);font-size:18px;font-weight:700">↑ +${diff}</span>`
+    : diff < 0
+    ? `<span style="color:var(--danger);font-size:18px;font-weight:700">↓ ${diff}</span>`
+    : `<span style="color:var(--gray-400);font-size:18px">持平</span>`;
+
+  const isRE  = a.type?.includes('RightEye');
+  const isBCF = a.type?.includes('BCF');
+
+  let extraHtml = '';
+  if (isRE) {
+    const row = (label, val, unit='') => val !== null && val !== undefined
+      ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--gray-100)">
+           <span style="color:var(--gray-600);font-size:13px">${label}</span>
+           <span style="font-weight:600;font-size:13px">${val}${unit}</span>
+         </div>` : '';
+    extraHtml = `
+      <div style="margin-top:16px">
+        <div style="font-size:12px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">RightEye 指標</div>
+        ${row('Saccadic Velocity 垂直（svV）', a.svV, ' d/s')}
+        ${row('Synchronization 垂直（syncV）', a.syncV)}
+        ${row('Lateral Pulsion — 垂直追隨偏移', a.vpLateralDrift, ' mm')}
+        ${row('Lateral Pulsion — 垂直跳視偏移', a.vsLateralDrift, ' mm')}
+      </div>`;
+  }
+
+  const scoreColor = a.maxScore > 0 ? (a.score / a.maxScore >= 0.8 ? 'var(--success)' : a.score / a.maxScore >= 0.5 ? 'var(--warning)' : 'var(--danger)') : 'var(--primary)';
+
+  const html = `
+    <div style="padding:8px 0">
+      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px">
+        <div>
+          <div style="font-size:18px;font-weight:700;color:var(--gray-800)">${a.type}</div>
+          <div style="font-size:13px;color:var(--gray-500);margin-top:4px">${formatDate(a.date)} ｜ ${a.therapist||'—'}</div>
+        </div>
+        <div style="text-align:right">
+          <div style="font-size:32px;font-weight:800;color:${scoreColor};line-height:1">${a.score ?? '—'}</div>
+          <div style="font-size:12px;color:var(--gray-400)">/ ${a.maxScore ?? '—'}</div>
+        </div>
+      </div>
+      <div style="display:flex;gap:24px;padding:12px;background:var(--gray-50);border-radius:8px;margin-bottom:16px">
+        <div style="text-align:center">
+          <div style="font-size:11px;color:var(--gray-400);margin-bottom:4px">進步幅度</div>
+          ${diffHtml}
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:11px;color:var(--gray-400);margin-bottom:4px">上次分數</div>
+          <span style="font-size:18px;font-weight:700;color:var(--gray-600)">${a.prev ?? '—'}</span>
+        </div>
+        <div style="text-align:center">
+          <div style="font-size:11px;color:var(--gray-400);margin-bottom:4px">達成率</div>
+          <span style="font-size:18px;font-weight:700;color:${scoreColor}">${a.maxScore ? Math.round((a.score/a.maxScore)*100) : '—'}%</span>
+        </div>
+      </div>
+      ${extraHtml}
+      ${a.notes ? `<div style="margin-top:12px;padding:10px;background:#f0f9ff;border-left:3px solid var(--primary);border-radius:0 6px 6px 0"><div style="font-size:11px;color:var(--primary);font-weight:600;margin-bottom:4px">備註</div><div style="font-size:13px;color:var(--gray-700)">${a.notes}</div></div>` : ''}
+      <div style="margin-top:16px;font-size:11px;color:var(--gray-400);text-align:center">ID：${aid}</div>
+    </div>`;
+
+  // Reuse or create overlay
+  let overlay = document.getElementById('assessDetailOverlay');
+  if (!overlay) {
+    overlay = document.createElement('div');
+    overlay.id = 'assessDetailOverlay';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)';
+    overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
+    document.body.appendChild(overlay);
+  }
+  overlay.innerHTML = `
+    <div style="background:#fff;border-radius:12px;padding:24px;width:min(480px,90vw);max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);position:relative">
+      <button onclick="document.getElementById('assessDetailOverlay').remove()"
+        style="position:absolute;top:12px;right:12px;border:none;background:var(--gray-100);border-radius:50%;width:28px;height:28px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--gray-600)">×</button>
+      ${html}
+    </div>`;
+  overlay.style.display = 'flex';
 }
 
 function deletePatient(id) {
