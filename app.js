@@ -742,130 +742,160 @@ function showAssessmentDetail(aid) {
   const a = DB.assessments.find(x => (x.id || x._id) === aid);
   if (!a) return;
 
-  const diff = (a.score ?? 0) - (a.prev ?? 0);
-  const diffHtml = diff > 0
-    ? `<span style="color:var(--success);font-size:18px;font-weight:700">↑ +${diff}</span>`
-    : diff < 0
-    ? `<span style="color:var(--danger);font-size:18px;font-weight:700">↓ ${diff}</span>`
-    : `<span style="color:var(--gray-400);font-size:18px">持平</span>`;
-
   const isRE  = a.type?.includes('RightEye');
   const isBCF = a.type?.includes('BCF');
+  const pt    = getPatient(a.patientId);
+  const diff  = (a.score ?? 0) - (a.prev ?? 0);
+  const scoreColor = a.maxScore > 0
+    ? (a.score / a.maxScore >= 0.8 ? '#16a34a' : a.score / a.maxScore >= 0.5 ? '#d97706' : '#dc2626')
+    : '#2563eb';
 
-  let extraHtml = '';
-  if (isRE) {
-    const pct = (n, total) => (n !== null && total) ? Math.round(n / total * 100) + '%' : '—';
-    const num = (v, unit='') => v !== null && v !== undefined ? v + unit : '—';
-    const spSt  = v => v === null || v === undefined ? '' : v > 90 ? '🟢' : v >= 80 ? '🟡' : '🔴';
-    const svSt  = v => v === null || v === undefined ? '' : v > 150 ? '🟢' : v >= 100 ? '🟡' : '🔴';
-    const synSt = v => v === null || v === undefined ? '' : v > 0.85 ? '🟢' : v >= 0.75 ? '🟡' : '🔴';
-    const esoSt = v => v === null || v === undefined ? '' : v < 1.0 ? '🟢' : v <= 2.0 ? '🟡' : '🔴';
-    const section = (title, rows) => rows.some(r => r) ? `
-      <div style="margin-top:14px">
-        <div style="font-size:11px;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;padding-bottom:4px;border-bottom:2px solid var(--primary)">${title}</div>
-        ${rows.filter(Boolean).join('')}
-      </div>` : '';
-    const row = (label, val, st='') => val !== '—' && val !== null && val !== undefined
-      ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--gray-100)">
-           <span style="color:var(--gray-600);font-size:12px">${label}</span>
-           <span style="font-weight:600;font-size:13px">${st} ${val}</span>
-         </div>` : '';
+  // ── helpers ──
+  const n = (v, unit='') => (v !== null && v !== undefined) ? String(v) + unit : null;
+  const pct = (cnt, tot) => (cnt !== null && cnt !== undefined && tot) ? Math.round(cnt / tot * 100) + '%（' + cnt + '）' : null;
 
-    const intrusionLabel = { none:'無', up:'Up（向上）', down:'Down（向下）', left:'Left（向左）', right:'Right（向右）' }[a.intrusion] || a.intrusion;
-    const intrusionAmpLabel = { none:'未指定', small:'小振幅', large:'大振幅' }[a.intrusionAmp] || '';
+  // status chip: returns bg/text color pair
+  const spChip  = v => v === null || v === undefined ? ['#f3f4f6','#9ca3af'] : v > 90  ? ['#dcfce7','#15803d'] : v >= 80  ? ['#fefce8','#92400e'] : ['#fef2f2','#b91c1c'];
+  const svChip  = v => v === null || v === undefined ? ['#f3f4f6','#9ca3af'] : v > 150 ? ['#dcfce7','#15803d'] : v >= 100 ? ['#fefce8','#92400e'] : ['#fef2f2','#b91c1c'];
+  const synChip = v => v === null || v === undefined ? ['#f3f4f6','#9ca3af'] : v > 0.85? ['#dcfce7','#15803d'] : v >= 0.75? ['#fefce8','#92400e'] : ['#fef2f2','#b91c1c'];
+  const esoChip = v => v === null || v === undefined ? ['#f3f4f6','#9ca3af'] : v < 1.0 ? ['#dcfce7','#15803d'] : v <= 2.0 ? ['#fefce8','#92400e'] : ['#fef2f2','#b91c1c'];
+  const pctChip = (cnt, tot, threshLow, threshHigh) => {
+    if (cnt === null || cnt === undefined || !tot) return ['#f3f4f6','#9ca3af'];
+    const p = cnt / tot * 100;
+    return p < threshLow ? ['#dcfce7','#15803d'] : p < threshHigh ? ['#fefce8','#92400e'] : ['#fef2f2','#b91c1c'];
+  };
 
-    const hT = a.hTotal, vT = a.vTotal;
+  const field = (label, val, chip) => {
+    if (val === null || val === undefined) return `
+      <div style="padding:8px 10px;background:#f9fafb;border-radius:6px">
+        <div style="font-size:11px;color:#9ca3af;margin-bottom:2px">${label}</div>
+        <div style="font-size:13px;color:#d1d5db">—</div>
+      </div>`;
+    const [bg, fg] = chip || ['#f0f9ff','#1d4ed8'];
+    return `
+      <div style="padding:8px 10px;background:${bg};border-radius:6px">
+        <div style="font-size:11px;color:${fg};opacity:.8;margin-bottom:2px">${label}</div>
+        <div style="font-size:14px;font-weight:700;color:${fg}">${val}</div>
+      </div>`;
+  };
 
-    extraHtml = `
-      ${section('Smooth Pursuit %', [
-        row('水平 Smooth Pursuit', num(a.spH, '%'), spSt(a.spH)),
-        row('垂直 Smooth Pursuit', num(a.spV, '%'), spSt(a.spV)),
-        row('圓形 Smooth Pursuit', num(a.spC, '%'), spSt(a.spC)),
-      ])}
-      ${section('ESO Average', [
-        row('ESO Average', num(a.eso), esoSt(a.eso)),
-      ])}
-      ${section('Saccadic Velocity', [
-        row('水平 Velocity (svH)', num(a.svH, ' d/s'), svSt(a.svH)),
-        row('垂直 Velocity (svV)', num(a.svV, ' d/s'), svSt(a.svV)),
-      ])}
-      ${section('Synchronization SP', [
-        row('水平 Sync (syncH)', num(a.syncH), synSt(a.syncH)),
-        row('垂直 Sync (syncV)', num(a.syncV), synSt(a.syncV)),
-      ])}
-      ${a.intrusion && a.intrusion !== 'none' ? section('Intrusion 眼球侵入', [
-        row('方向', intrusionLabel),
-        row('振幅', intrusionAmpLabel),
-      ]) : ''}
-      ${section('Lateral Pulsion (mm)', [
-        row('垂直追隨偏移 (vpLateralDrift)', num(a.vpLateralDrift, ' mm')),
-        row('垂直跳視偏移 (vsLateralDrift)', num(a.vsLateralDrift, ' mm')),
-      ])}
-      ${hT ? section('水平 Saccade 次數（總計 ' + hT + '）', [
-        row('右向 Overshoot',  pct(a.hOverR,  hT) + (a.hOverR  !== null ? '（' + a.hOverR  + '）' : '')),
-        row('右向 Undershoot', pct(a.hUnderR, hT) + (a.hUnderR !== null ? '（' + a.hUnderR + '）' : '')),
-        row('右向 Missed',     pct(a.hMissedR, hT) + (a.hMissedR !== null ? '（' + a.hMissedR + '）' : '')),
-        row('左向 Overshoot',  pct(a.hOverL,  hT) + (a.hOverL  !== null ? '（' + a.hOverL  + '）' : '')),
-        row('左向 Undershoot', pct(a.hUnderL, hT) + (a.hUnderL !== null ? '（' + a.hUnderL + '）' : '')),
-        row('左向 Missed',     pct(a.hMissedL, hT) + (a.hMissedL !== null ? '（' + a.hMissedL + '）' : '')),
-      ]) : ''}
-      ${vT ? section('垂直 Saccade 次數（總計 ' + vT + '）', [
-        row('上向 Overshoot',  pct(a.vOverR,  vT) + (a.vOverR  !== null ? '（' + a.vOverR  + '）' : '')),
-        row('上向 Undershoot', pct(a.vUnderR, vT) + (a.vUnderR !== null ? '（' + a.vUnderR + '）' : '')),
-        row('上向 Missed',     pct(a.vMissedR, vT) + (a.vMissedR !== null ? '（' + a.vMissedR + '）' : '')),
-        row('下向 Overshoot',  pct(a.vOverL,  vT) + (a.vOverL  !== null ? '（' + a.vOverL  + '）' : '')),
-        row('下向 Undershoot', pct(a.vUnderL, vT) + (a.vUnderL !== null ? '（' + a.vUnderL + '）' : '')),
-        row('下向 Missed',     pct(a.vMissedL, vT) + (a.vMissedL !== null ? '（' + a.vMissedL + '）' : '')),
-      ]) : ''}`;
-  }
+  const secTitle = t => `<div style="font-size:11px;font-weight:700;letter-spacing:.6px;text-transform:uppercase;color:#6b7280;margin:16px 0 8px;padding-bottom:4px;border-bottom:1px solid #e5e7eb">${t}</div>`;
+  const grid2 = cells => `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">${cells.join('')}</div>`;
+  const grid3 = cells => `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">${cells.join('')}</div>`;
 
-  const scoreColor = a.maxScore > 0 ? (a.score / a.maxScore >= 0.8 ? 'var(--success)' : a.score / a.maxScore >= 0.5 ? 'var(--warning)' : 'var(--danger)') : 'var(--primary)';
-
-  const html = `
-    <div style="padding:8px 0">
-      <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:16px">
-        <div>
-          <div style="font-size:18px;font-weight:700;color:var(--gray-800)">${a.type}</div>
-          <div style="font-size:13px;color:var(--gray-500);margin-top:4px">${formatDate(a.date)} ｜ ${a.therapist||'—'}</div>
-        </div>
-        <div style="text-align:right">
-          <div style="font-size:32px;font-weight:800;color:${scoreColor};line-height:1">${a.score ?? '—'}</div>
-          <div style="font-size:12px;color:var(--gray-400)">/ ${a.maxScore ?? '—'}</div>
-        </div>
+  // ── header ──
+  let body = `
+    <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:14px">
+      <div>
+        <div style="font-size:16px;font-weight:700;color:#1f2937">${a.type}</div>
+        <div style="font-size:12px;color:#6b7280;margin-top:3px">${formatDate(a.date)} ｜ ${a.therapist||'—'} ｜ ${pt?.name||a.patientId}</div>
       </div>
-      <div style="display:flex;gap:24px;padding:12px;background:var(--gray-50);border-radius:8px;margin-bottom:16px">
-        <div style="text-align:center">
-          <div style="font-size:11px;color:var(--gray-400);margin-bottom:4px">進步幅度</div>
-          ${diffHtml}
-        </div>
-        <div style="text-align:center">
-          <div style="font-size:11px;color:var(--gray-400);margin-bottom:4px">上次分數</div>
-          <span style="font-size:18px;font-weight:700;color:var(--gray-600)">${a.prev ?? '—'}</span>
-        </div>
-        <div style="text-align:center">
-          <div style="font-size:11px;color:var(--gray-400);margin-bottom:4px">達成率</div>
-          <span style="font-size:18px;font-weight:700;color:${scoreColor}">${a.maxScore ? Math.round((a.score/a.maxScore)*100) : '—'}%</span>
-        </div>
+      <div style="text-align:right;flex-shrink:0;margin-left:12px">
+        <div style="font-size:30px;font-weight:800;color:${scoreColor};line-height:1">${a.score ?? '—'}</div>
+        <div style="font-size:11px;color:#9ca3af">/ ${a.maxScore ?? '—'}</div>
       </div>
-      ${extraHtml}
-      ${a.notes ? `<div style="margin-top:12px;padding:10px;background:#f0f9ff;border-left:3px solid var(--primary);border-radius:0 6px 6px 0"><div style="font-size:11px;color:var(--primary);font-weight:600;margin-bottom:4px">備註</div><div style="font-size:13px;color:var(--gray-700)">${a.notes}</div></div>` : ''}
-      <div style="margin-top:16px;font-size:11px;color:var(--gray-400);text-align:center">ID：${aid}</div>
     </div>`;
 
-  // Reuse or create overlay
+  // progress strip
+  body += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">
+    ${field('進步幅度', diff > 0 ? '↑ +' + diff : diff < 0 ? '↓ ' + diff : '持平', diff > 0 ? ['#dcfce7','#15803d'] : diff < 0 ? ['#fef2f2','#b91c1c'] : ['#f3f4f6','#6b7280'])}
+    ${field('上次分數', a.prev ?? '—', ['#f3f4f6','#374151'])}
+    ${field('達成率', a.maxScore ? Math.round(a.score / a.maxScore * 100) + '%' : '—', [scoreColor + '1a', scoreColor])}
+  </div>`;
+
+  if (isRE) {
+    const hT = a.hTotal, vT = a.vTotal;
+
+    body += secTitle('Smooth Pursuit %');
+    body += grid3([
+      field('水平 SP', n(a.spH, '%'), spChip(a.spH)),
+      field('垂直 SP', n(a.spV, '%'), spChip(a.spV)),
+      field('圓形 SP', n(a.spC, '%'), spChip(a.spC)),
+    ]);
+
+    body += secTitle('ESO Average ｜ Synchronization SP');
+    body += grid3([
+      field('ESO Average', n(a.eso), esoChip(a.eso)),
+      field('Sync 水平', n(a.syncH), synChip(a.syncH)),
+      field('Sync 垂直', n(a.syncV), synChip(a.syncV)),
+    ]);
+
+    body += secTitle('Saccadic Velocity');
+    body += grid2([
+      field('水平 Velocity (svH)', n(a.svH, ' d/s'), svChip(a.svH)),
+      field('垂直 Velocity (svV)', n(a.svV, ' d/s'), svChip(a.svV)),
+    ]);
+
+    const intDir = { none:'無', up:'Up（向上）', down:'Down（向下）', left:'Left（向左）', right:'Right（向右）' };
+    const intAmp = { none:'未指定', small:'小振幅（Fixation Stability）', large:'大振幅（Cross-Cord）' };
+    body += secTitle('Lateral Pulsion ｜ Intrusion');
+    body += grid2([
+      field('垂直追隨偏移 (mm)', n(a.vpLateralDrift, ' mm'), ['#f0f9ff','#1d4ed8']),
+      field('垂直跳視偏移 (mm)', n(a.vsLateralDrift, ' mm'), ['#f0f9ff','#1d4ed8']),
+    ]);
+    if (a.intrusion && a.intrusion !== 'none') {
+      body += `<div style="margin-top:6px">` + grid2([
+        field('Intrusion 方向', intDir[a.intrusion] || a.intrusion, ['#fef3c7','#92400e']),
+        field('Intrusion 振幅', intAmp[a.intrusionAmp] || '未指定', ['#fef3c7','#92400e']),
+      ]) + `</div>`;
+    }
+
+    if (hT) {
+      body += secTitle('水平 Saccade（總計 ' + hT + ' 次）');
+      body += `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr 1fr;gap:6px">
+        ${field('右向<br>Overshoot',  pct(a.hOverR,  hT), pctChip(a.hOverR,  hT, 10, 30))}
+        ${field('右向<br>Undershoot', pct(a.hUnderR, hT), pctChip(a.hUnderR, hT, 20, 40))}
+        ${field('右向<br>Missed',     pct(a.hMissedR,hT), pctChip(a.hMissedR,hT,  5, 15))}
+        ${field('左向<br>Overshoot',  pct(a.hOverL,  hT), pctChip(a.hOverL,  hT, 10, 30))}
+        ${field('左向<br>Undershoot', pct(a.hUnderL, hT), pctChip(a.hUnderL, hT, 20, 40))}
+        ${field('左向<br>Missed',     pct(a.hMissedL,hT), pctChip(a.hMissedL,hT,  5, 15))}
+      </div>`;
+    }
+
+    if (vT) {
+      body += secTitle('垂直 Saccade（總計 ' + vT + ' 次）');
+      body += `<div style="display:grid;grid-template-columns:1fr 1fr 1fr 1fr 1fr 1fr;gap:6px">
+        ${field('上向<br>Overshoot',  pct(a.vOverR,  vT), pctChip(a.vOverR,  vT, 10, 30))}
+        ${field('上向<br>Undershoot', pct(a.vUnderR, vT), pctChip(a.vUnderR, vT, 20, 40))}
+        ${field('上向<br>Missed',     pct(a.vMissedR,vT), pctChip(a.vMissedR,vT,  5, 15))}
+        ${field('下向<br>Overshoot',  pct(a.vOverL,  vT), pctChip(a.vOverL,  vT, 10, 30))}
+        ${field('下向<br>Undershoot', pct(a.vUnderL, vT), pctChip(a.vUnderL, vT, 20, 40))}
+        ${field('下向<br>Missed',     pct(a.vMissedL,vT), pctChip(a.vMissedL,vT,  5, 15))}
+      </div>`;
+    }
+  }
+
+  if (isBCF) {
+    body += secTitle('BCF 眼動機評估');
+    body += grid2([
+      field('異常項目數', a.maxScore - a.score + ' 項', ['#fef2f2','#b91c1c']),
+      field('正常項目數', a.score + ' 項', ['#dcfce7','#15803d']),
+    ]);
+  }
+
+  if (a.notes) {
+    body += `<div style="margin-top:14px;padding:10px 12px;background:#f0f9ff;border-left:3px solid #3b82f6;border-radius:0 6px 6px 0">
+      <div style="font-size:11px;color:#1d4ed8;font-weight:600;margin-bottom:4px">備註</div>
+      <div style="font-size:13px;color:#374151">${a.notes}</div>
+    </div>`;
+  }
+
+  body += `<div style="margin-top:14px;font-size:10px;color:#d1d5db;text-align:right">ID：${aid}</div>`;
+
+  // build / reuse overlay
   let overlay = document.getElementById('assessDetailOverlay');
   if (!overlay) {
     overlay = document.createElement('div');
     overlay.id = 'assessDetailOverlay';
-    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.45)';
+    overlay.style.cssText = 'position:fixed;inset:0;z-index:9999;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.5)';
     overlay.addEventListener('click', e => { if (e.target === overlay) overlay.remove(); });
     document.body.appendChild(overlay);
   }
   overlay.innerHTML = `
-    <div style="background:#fff;border-radius:12px;padding:24px;width:min(480px,90vw);max-height:80vh;overflow-y:auto;box-shadow:0 20px 60px rgba(0,0,0,.25);position:relative">
+    <div style="background:#fff;border-radius:14px;padding:24px 22px;width:min(640px,94vw);max-height:88vh;overflow-y:auto;box-shadow:0 24px 64px rgba(0,0,0,.28);position:relative">
       <button onclick="document.getElementById('assessDetailOverlay').remove()"
-        style="position:absolute;top:12px;right:12px;border:none;background:var(--gray-100);border-radius:50%;width:28px;height:28px;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--gray-600)">×</button>
-      ${html}
+        style="position:absolute;top:14px;right:14px;border:none;background:#f3f4f6;border-radius:50%;width:30px;height:30px;font-size:18px;cursor:pointer;line-height:1;color:#6b7280">×</button>
+      ${body}
     </div>`;
   overlay.style.display = 'flex';
 }
