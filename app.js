@@ -741,6 +741,7 @@ function renderDetailTab(tab) {
 function showAssessmentDetail(aid) {
   const a = DB.assessments.find(x => (x.id || x._id) === aid);
   if (!a) return;
+  console.log('assessmentDetail:', JSON.stringify(a));
 
   const isRE  = a.type?.includes('RightEye');
   const isBCF = a.type?.includes('BCF');
@@ -863,14 +864,121 @@ function showAssessmentDetail(aid) {
         ${field('下向<br>Missed',     pct(a.vMissedL,vT), pctChip(a.vMissedL,vT,  5, 15))}
       </div>`;
     }
+
+    // Indicators — show abnormal ones with brain regions
+    if (a.indicators?.length) {
+      const abnInd = a.indicators.filter(i => i.status === 'mild' || i.status === 'severe');
+      if (abnInd.length) {
+        body += secTitle('異常指標 / 神經解剖定位');
+        body += abnInd.map(i => {
+          const stColor = i.status === 'severe' ? ['#fef2f2','#b91c1c'] : ['#fefce8','#92400e'];
+          return `<div style="padding:8px 10px;background:${stColor[0]};border-radius:6px;margin-bottom:5px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+              <span style="font-size:12px;font-weight:700;color:${stColor[1]}">${i.label}</span>
+              <span style="font-size:13px;font-weight:700;color:${stColor[1]}">${i.value}</span>
+            </div>
+            ${i.brain?.length ? `<div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:3px">${i.brain.map(b=>`<span style="background:#dbeafe;color:#1d4ed8;padding:1px 7px;border-radius:8px;font-size:11px">${b}</span>`).join('')}</div>` : ''}
+            ${i.note ? `<div style="font-size:11px;color:${stColor[1]};opacity:.8">${i.note}</div>` : ''}
+          </div>`;
+        }).join('');
+      }
+    }
+
+    // Prescriptions
+    if (a.prescriptions?.length) {
+      body += secTitle('BCF 眼動機處方建議');
+      body += `<div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead><tr style="background:#f3f4f6">${['模式','訓練類型','角度','速度','距離','次數'].map(h=>`<th style="padding:5px 8px;text-align:left;font-weight:600;color:#374151;border-bottom:1px solid #e5e7eb">${h}</th>`).join('')}</tr></thead>
+        <tbody>${a.prescriptions.map((rx,idx) => `<tr style="background:${idx%2?'#f9fafb':'#fff'}">
+          <td style="padding:5px 8px;font-weight:700;color:#1d4ed8">${rx.mode}</td>
+          <td style="padding:5px 8px">${rx.name}</td>
+          <td style="padding:5px 8px;font-size:11px">${rx.angle}</td>
+          <td style="padding:5px 8px">${rx.speed}</td>
+          <td style="padding:5px 8px">${rx.dist}</td>
+          <td style="padding:5px 8px;font-weight:600">${rx.reps}</td>
+        </tr>`).join('')}</tbody>
+      </table></div>`;
+    }
+
+    // Brain regions
+    if (a.brainRegions?.length) {
+      body += secTitle('受影響腦區');
+      body += `<div style="display:flex;flex-wrap:wrap;gap:5px">${a.brainRegions.map(r=>`<span style="background:#dbeafe;color:#1d4ed8;padding:2px 9px;border-radius:10px;font-size:12px;font-weight:600">${r}</span>`).join('')}</div>`;
+    }
   }
 
   if (isBCF) {
-    body += secTitle('BCF 眼動機評估');
-    body += grid2([
-      field('異常項目數', a.maxScore - a.score + ' 項', ['#fef2f2','#b91c1c']),
-      field('正常項目數', a.score + ' 項', ['#dcfce7','#15803d']),
-    ]);
+    const armLabel = { 'left-long':'左長右短', 'right-long':'左短右長' };
+    const armColor = { 'left-long':['#fef3c7','#92400e'], 'right-long':['#ede9fe','#5b21b6'] };
+
+    // E1-E8 Eye Movements
+    if (a.eyeItems) {
+      body += secTitle('眼球作動 E1–E8');
+      const eyeRows = BCF_EYE_MOVEMENTS.map(e => {
+        const val = a.eyeItems[e.id];
+        if (!val || val === 'none') return `<div style="padding:5px 8px;background:#f9fafb;border-radius:5px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;color:#9ca3af">${e.id} ${e.icon} ${e.dir}</span><span style="font-size:11px;color:#d1d5db">正常</span></div>`;
+        const [bg,fg] = armColor[val] || ['#fef2f2','#b91c1c'];
+        return `<div style="padding:5px 8px;background:${bg};border-radius:5px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;font-weight:600;color:${fg}">${e.id} ${e.icon} ${e.dir}</span><span style="font-size:12px;font-weight:700;color:${fg}">${armLabel[val]||val}</span></div>`;
+      });
+      body += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">${eyeRows.join('')}</div>`;
+    }
+
+    // V1-V10 Cervical
+    if (a.cervicalItems) {
+      body += secTitle('頸部反射 V1–V10');
+      const cervRows = BCF_CERVICAL.map(v => {
+        const val = a.cervicalItems[v.id];
+        if (!val || val === 'none') return `<div style="padding:5px 8px;background:#f9fafb;border-radius:5px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;color:#9ca3af">${v.id} ${v.icon} ${v.dir}</span><span style="font-size:11px;color:#d1d5db">正常</span></div>`;
+        const [bg,fg] = armColor[val] || ['#fef2f2','#b91c1c'];
+        return `<div style="padding:5px 8px;background:${bg};border-radius:5px;display:flex;justify-content:space-between;align-items:center"><span style="font-size:12px;font-weight:600;color:${fg}">${v.id} ${v.icon} ${v.dir}</span><span style="font-size:12px;font-weight:700;color:${fg}">${armLabel[val]||val}</span></div>`;
+      });
+      body += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:5px">${cervRows.join('')}</div>`;
+    }
+
+    // Visual Stim / Stance / Convergence
+    const extras = [];
+    if (a.visualStimItems?.length) extras.push('C 系列（視覺/聽覺刺激）：' + a.visualStimItems.join('、'));
+    if (a.stanceItems) {
+      BCF_STANCE.forEach(s => { const v = a.stanceItems[s.id]; if (v && v !== 'none') extras.push(s.label + '：' + (armLabel[v]||v)); });
+    }
+    if (a.convergenceItems && Object.keys(a.convergenceItems).length) {
+      extras.push('Convergence 異常：' + Object.keys(a.convergenceItems).join('、'));
+    }
+    if (extras.length) {
+      body += secTitle('其他項目');
+      body += extras.map(t => `<div style="padding:5px 10px;background:#fef3c7;border-radius:5px;font-size:12px;color:#92400e;margin-bottom:4px">⚠ ${t}</div>`).join('');
+    }
+
+    // Brain regions
+    if (a.brainRegions?.length) {
+      body += secTitle('受影響腦區');
+      body += `<div style="display:flex;flex-wrap:wrap;gap:5px">${a.brainRegions.map(r => `<span style="background:#dbeafe;color:#1d4ed8;padding:2px 9px;border-radius:10px;font-size:12px;font-weight:600">${r}</span>`).join('')}</div>`;
+    }
+
+    // Decision
+    if (a.decision && !a.decision.noData) {
+      body += secTitle('評估結論 / 訓練建議');
+      if (a.decision.balanced) {
+        body += `<div style="padding:10px 12px;background:#f0fdf4;border-left:3px solid #16a34a;border-radius:0 6px 6px 0;font-size:13px;color:#15803d">指標平衡，兩側功能對稱，需臨床綜合判斷</div>`;
+      } else {
+        const side = a.decision.trainSide === 'left' ? '左側' : '右側';
+        body += `<div style="padding:10px 12px;background:#eff6ff;border-left:3px solid #3b82f6;border-radius:0 6px 6px 0;margin-bottom:8px">
+          <div style="font-size:13px;font-weight:700;color:#1d4ed8;margin-bottom:4px">建議訓練：${side}大腦組合</div>
+          <div style="font-size:12px;color:#374151">${a.decision.reason||''}</div>
+        </div>`;
+        if (a.decision.counts) {
+          const c = a.decision.counts;
+          body += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:5px">
+            ${field('左大腦 Cortex', c.lCortex, c.lCortex > c.rCortex ? ['#fee2e2','#b91c1c'] : ['#f3f4f6','#374151'])}
+            ${field('右大腦 Cortex', c.rCortex, c.rCortex > c.lCortex ? ['#fee2e2','#b91c1c'] : ['#f3f4f6','#374151'])}
+            ${field('—', '', ['#f9fafb','#9ca3af'])}
+            ${field('左小腦 CB', c.lCereb, ['#f3f4f6','#374151'])}
+            ${field('右小腦 CB', c.rCereb, ['#f3f4f6','#374151'])}
+            ${field('—', '', ['#f9fafb','#9ca3af'])}
+          </div>`;
+        }
+      }
+    }
   }
 
   if (a.notes) {
@@ -3497,23 +3605,53 @@ async function saveBCFAssessment() {
   const date = document.getElementById('assess-date').value;
   if (!patientId || !date) { showToast('請選擇病人和日期', 'error'); return; }
 
-  let diffCount = 0;
-  [...BCF_EYE_MOVEMENTS, ...BCF_CERVICAL].forEach(item => {
+  // Collect all item results
+  const eyeItems = {};
+  BCF_EYE_MOVEMENTS.forEach(item => {
     const val = document.querySelector(`input[name="${item.id}"]:checked`)?.value || 'none';
-    if (val !== 'none') diffCount++;
+    eyeItems[item.id] = val;
   });
-  BCF_VISUAL_STIM.forEach(item => {
-    if (document.querySelector(`input[name="${item.id}"]`)?.checked) diffCount++;
+  const cervicalItems = {};
+  BCF_CERVICAL.forEach(item => {
+    const val = document.querySelector(`input[name="${item.id}"]:checked`)?.value || 'none';
+    cervicalItems[item.id] = val;
   });
+  const visualStimItems = BCF_VISUAL_STIM
+    .filter(item => document.querySelector(`input[name="${item.id}"]`)?.checked)
+    .map(item => item.id);
+  const stanceItems = {};
   BCF_STANCE.forEach(item => {
     const val = document.querySelector(`input[name="${item.id}"]:checked`)?.value || 'none';
-    if (val !== 'none') diffCount++;
+    stanceItems[item.id] = val;
   });
+  const convergenceItems = {};
   BCF_CONVERGENCE.forEach(c => {
-    if (document.querySelector(`input[name="${c.id}"]:checked`)?.value === 'abnormal') diffCount++;
+    const val = document.querySelector(`input[name="${c.id}"]:checked`)?.value || 'normal';
+    if (val === 'abnormal') convergenceItems[c.id] = true;
   });
 
-  const totalItems = 31; // 8+10+8+2+3
+  // Compute brain regions + decision
+  const affectedRegions = new Set();
+  BCF_EYE_MOVEMENTS.forEach(e => {
+    const val = eyeItems[e.id]; if (!val || val === 'none') return;
+    (EYE_BRAIN_MAP[e.id]?.(val)?.brain || []).forEach(b => affectedRegions.add(b));
+  });
+  BCF_CERVICAL.forEach(v => {
+    const val = cervicalItems[v.id]; if (!val || val === 'none') return;
+    (CERVICAL_BRAIN_MAP[v.id]?.(val)?.brain || []).forEach(b => affectedRegions.add(b));
+  });
+  const brainRegions = [...affectedRegions];
+  const dec = computeBCFDecision(brainRegions);
+
+  // Count diff (recount from collected data)
+  let diffCount = 0;
+  Object.values(eyeItems).forEach(v => { if (v !== 'none') diffCount++; });
+  Object.values(cervicalItems).forEach(v => { if (v !== 'none') diffCount++; });
+  diffCount += visualStimItems.length;
+  Object.values(stanceItems).forEach(v => { if (v !== 'none') diffCount++; });
+  diffCount += Object.keys(convergenceItems).length;
+
+  const totalItems = 31;
   const prev = DB.assessments.filter(a => a.patientId === patientId && a.type === 'BCF眼動機評估')
     .sort((a, b) => new Date(b.date) - new Date(a.date))[0]?.score ?? totalItems;
 
@@ -3525,7 +3663,11 @@ async function saveBCFAssessment() {
     prev,
     therapist: document.getElementById('assess-therapist')?.value || '王小明',
     notes: document.getElementById('bcf-notes')?.value || '',
+    eyeItems, cervicalItems, visualStimItems, stanceItems, convergenceItems,
+    brainRegions,
+    decision: { trainSide: dec.trainSide, reason: dec.reason, balanced: !!dec.balanced, noData: !!dec.noData, counts: dec.counts },
   };
+  console.log('saveBCFAssessment:', JSON.stringify(bcfRec));
   DB.assessments.unshift(bcfRec);
   await saveAssessmentToServer(bcfRec);
 
@@ -4093,6 +4235,30 @@ async function saveRightEyeAssessment() {
     vUnderL:  parseNum(document.getElementById('re-v-under-l')?.value),
     vMissedL: parseNum(document.getElementById('re-v-missed-l')?.value),
   };
+
+  // Compute and store analysis results
+  try {
+    const reDataForAnalysis = { ...reRec,
+      svRight: parseNum(document.getElementById('re-sv-right')?.value),
+      svLeft:  parseNum(document.getElementById('re-sv-left')?.value),
+      svUp:    parseNum(document.getElementById('re-sv-up')?.value),
+      svDown:  parseNum(document.getElementById('re-sv-down')?.value),
+      pldRight: parseNum(document.getElementById('re-pld-right')?.value),
+      pldLeft:  parseNum(document.getElementById('re-pld-left')?.value),
+      orthRight: document.getElementById('re-orth-right')?.value || null,
+      orthLeft:  document.getElementById('re-orth-left')?.value || null,
+      hOverRGrade: reAIGrades.rightward_overshoot,
+      hUnderRGrade: reAIGrades.rightward_undershoot,
+      hOverLGrade:  reAIGrades.leftward_overshoot,
+      hUnderLGrade: reAIGrades.leftward_undershoot,
+    };
+    const rxResult = computeRightEyeRx(reDataForAnalysis);
+    reRec.indicators   = rxResult.indicators.map(i => ({ label: i.label, value: i.value, status: i.status, brain: i.brain, note: i.note }));
+    reRec.prescriptions = rxResult.rx;
+    reRec.brainRegions  = [...rxResult.brainRegions];
+  } catch(e) { console.warn('RightEye analysis storage failed', e); }
+
+  console.log('saveRightEyeAssessment:', JSON.stringify(reRec));
   DB.assessments.unshift(reRec);
   await saveAssessmentToServer(reRec);
 
