@@ -754,19 +754,69 @@ function showAssessmentDetail(aid) {
 
   let extraHtml = '';
   if (isRE) {
-    const row = (label, val, unit='') => val !== null && val !== undefined
-      ? `<div style="display:flex;justify-content:space-between;padding:8px 0;border-bottom:1px solid var(--gray-100)">
-           <span style="color:var(--gray-600);font-size:13px">${label}</span>
-           <span style="font-weight:600;font-size:13px">${val}${unit}</span>
+    const pct = (n, total) => (n !== null && total) ? Math.round(n / total * 100) + '%' : '—';
+    const num = (v, unit='') => v !== null && v !== undefined ? v + unit : '—';
+    const spSt  = v => v === null || v === undefined ? '' : v > 90 ? '🟢' : v >= 80 ? '🟡' : '🔴';
+    const svSt  = v => v === null || v === undefined ? '' : v > 150 ? '🟢' : v >= 100 ? '🟡' : '🔴';
+    const synSt = v => v === null || v === undefined ? '' : v > 0.85 ? '🟢' : v >= 0.75 ? '🟡' : '🔴';
+    const esoSt = v => v === null || v === undefined ? '' : v < 1.0 ? '🟢' : v <= 2.0 ? '🟡' : '🔴';
+    const section = (title, rows) => rows.some(r => r) ? `
+      <div style="margin-top:14px">
+        <div style="font-size:11px;font-weight:700;color:var(--primary);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;padding-bottom:4px;border-bottom:2px solid var(--primary)">${title}</div>
+        ${rows.filter(Boolean).join('')}
+      </div>` : '';
+    const row = (label, val, st='') => val !== '—' && val !== null && val !== undefined
+      ? `<div style="display:flex;justify-content:space-between;align-items:center;padding:5px 0;border-bottom:1px solid var(--gray-100)">
+           <span style="color:var(--gray-600);font-size:12px">${label}</span>
+           <span style="font-weight:600;font-size:13px">${st} ${val}</span>
          </div>` : '';
+
+    const intrusionLabel = { none:'無', up:'Up（向上）', down:'Down（向下）', left:'Left（向左）', right:'Right（向右）' }[a.intrusion] || a.intrusion;
+    const intrusionAmpLabel = { none:'未指定', small:'小振幅', large:'大振幅' }[a.intrusionAmp] || '';
+
+    const hT = a.hTotal, vT = a.vTotal;
+
     extraHtml = `
-      <div style="margin-top:16px">
-        <div style="font-size:12px;font-weight:600;color:var(--gray-500);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">RightEye 指標</div>
-        ${row('Saccadic Velocity 垂直（svV）', a.svV, ' d/s')}
-        ${row('Synchronization 垂直（syncV）', a.syncV)}
-        ${row('Lateral Pulsion — 垂直追隨偏移', a.vpLateralDrift, ' mm')}
-        ${row('Lateral Pulsion — 垂直跳視偏移', a.vsLateralDrift, ' mm')}
-      </div>`;
+      ${section('Smooth Pursuit %', [
+        row('水平 Smooth Pursuit', num(a.spH, '%'), spSt(a.spH)),
+        row('垂直 Smooth Pursuit', num(a.spV, '%'), spSt(a.spV)),
+        row('圓形 Smooth Pursuit', num(a.spC, '%'), spSt(a.spC)),
+      ])}
+      ${section('ESO Average', [
+        row('ESO Average', num(a.eso), esoSt(a.eso)),
+      ])}
+      ${section('Saccadic Velocity', [
+        row('水平 Velocity (svH)', num(a.svH, ' d/s'), svSt(a.svH)),
+        row('垂直 Velocity (svV)', num(a.svV, ' d/s'), svSt(a.svV)),
+      ])}
+      ${section('Synchronization SP', [
+        row('水平 Sync (syncH)', num(a.syncH), synSt(a.syncH)),
+        row('垂直 Sync (syncV)', num(a.syncV), synSt(a.syncV)),
+      ])}
+      ${a.intrusion && a.intrusion !== 'none' ? section('Intrusion 眼球侵入', [
+        row('方向', intrusionLabel),
+        row('振幅', intrusionAmpLabel),
+      ]) : ''}
+      ${section('Lateral Pulsion (mm)', [
+        row('垂直追隨偏移 (vpLateralDrift)', num(a.vpLateralDrift, ' mm')),
+        row('垂直跳視偏移 (vsLateralDrift)', num(a.vsLateralDrift, ' mm')),
+      ])}
+      ${hT ? section('水平 Saccade 次數（總計 ' + hT + '）', [
+        row('右向 Overshoot',  pct(a.hOverR,  hT) + (a.hOverR  !== null ? '（' + a.hOverR  + '）' : '')),
+        row('右向 Undershoot', pct(a.hUnderR, hT) + (a.hUnderR !== null ? '（' + a.hUnderR + '）' : '')),
+        row('右向 Missed',     pct(a.hMissedR, hT) + (a.hMissedR !== null ? '（' + a.hMissedR + '）' : '')),
+        row('左向 Overshoot',  pct(a.hOverL,  hT) + (a.hOverL  !== null ? '（' + a.hOverL  + '）' : '')),
+        row('左向 Undershoot', pct(a.hUnderL, hT) + (a.hUnderL !== null ? '（' + a.hUnderL + '）' : '')),
+        row('左向 Missed',     pct(a.hMissedL, hT) + (a.hMissedL !== null ? '（' + a.hMissedL + '）' : '')),
+      ]) : ''}
+      ${vT ? section('垂直 Saccade 次數（總計 ' + vT + '）', [
+        row('上向 Overshoot',  pct(a.vOverR,  vT) + (a.vOverR  !== null ? '（' + a.vOverR  + '）' : '')),
+        row('上向 Undershoot', pct(a.vUnderR, vT) + (a.vUnderR !== null ? '（' + a.vUnderR + '）' : '')),
+        row('上向 Missed',     pct(a.vMissedR, vT) + (a.vMissedR !== null ? '（' + a.vMissedR + '）' : '')),
+        row('下向 Overshoot',  pct(a.vOverL,  vT) + (a.vOverL  !== null ? '（' + a.vOverL  + '）' : '')),
+        row('下向 Undershoot', pct(a.vUnderL, vT) + (a.vUnderL !== null ? '（' + a.vUnderL + '）' : '')),
+        row('下向 Missed',     pct(a.vMissedL, vT) + (a.vMissedL !== null ? '（' + a.vMissedL + '）' : '')),
+      ]) : ''}`;
   }
 
   const scoreColor = a.maxScore > 0 ? (a.score / a.maxScore >= 0.8 ? 'var(--success)' : a.score / a.maxScore >= 0.5 ? 'var(--warning)' : 'var(--danger)') : 'var(--primary)';
@@ -3978,10 +4028,40 @@ async function saveRightEyeAssessment() {
     prev,
     therapist: document.getElementById('assess-therapist')?.value || '王小明',
     notes: document.getElementById('re-notes')?.value || '',
+    // Smooth Pursuit
+    spH:  parseNum(document.getElementById('re-spH')?.value),
+    spV:  parseNum(document.getElementById('re-spV')?.value),
+    spC:  parseNum(document.getElementById('re-spC')?.value),
+    // ESO
+    eso:  parseNum(document.getElementById('re-eso')?.value),
+    // Saccadic Velocity
+    svH:  parseNum(document.getElementById('re-svH')?.value),
+    svV:  parseNum(document.getElementById('re-svV')?.value),
+    // Synchronization
+    syncH: parseNum(document.getElementById('re-syncH')?.value),
+    syncV: parseNum(document.getElementById('re-syncV')?.value),
+    // Intrusion
+    intrusion:    document.getElementById('re-intrusion')?.value || 'none',
+    intrusionAmp: document.getElementById('re-intrusion-amp')?.value || 'none',
+    // Lateral Pulsion
     vpLateralDrift: parseNum(document.getElementById('re-vp-lateral-drift')?.value),
     vsLateralDrift: parseNum(document.getElementById('re-vs-lateral-drift')?.value),
-    syncV: parseNum(document.getElementById('re-syncV')?.value),
-    svV:   parseNum(document.getElementById('re-svV')?.value),
+    // Horizontal Saccades
+    hTotal:   parseNum(document.getElementById('re-h-total')?.value),
+    hOverR:   parseNum(document.getElementById('re-h-over-r')?.value),
+    hUnderR:  parseNum(document.getElementById('re-h-under-r')?.value),
+    hMissedR: parseNum(document.getElementById('re-h-missed-r')?.value),
+    hOverL:   parseNum(document.getElementById('re-h-over-l')?.value),
+    hUnderL:  parseNum(document.getElementById('re-h-under-l')?.value),
+    hMissedL: parseNum(document.getElementById('re-h-missed-l')?.value),
+    // Vertical Saccades
+    vTotal:   parseNum(document.getElementById('re-v-total')?.value),
+    vOverR:   parseNum(document.getElementById('re-v-over-r')?.value),
+    vUnderR:  parseNum(document.getElementById('re-v-under-r')?.value),
+    vMissedR: parseNum(document.getElementById('re-v-missed-r')?.value),
+    vOverL:   parseNum(document.getElementById('re-v-over-l')?.value),
+    vUnderL:  parseNum(document.getElementById('re-v-under-l')?.value),
+    vMissedL: parseNum(document.getElementById('re-v-missed-l')?.value),
   };
   DB.assessments.unshift(reRec);
   await saveAssessmentToServer(reRec);
