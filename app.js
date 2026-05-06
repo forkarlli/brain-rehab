@@ -184,11 +184,11 @@ async function loadAssessmentsFromServer() {
     }
 
     if (serverList.length > 0) {
+      console.log('loadAssessmentsFromServer: 載入', serverList.length, '筆記錄，更新 DB.assessments');
       DB.assessments = serverList;
       saveToStorage();
       renderDashboard();
-      const activePage = document.querySelector('.page.active');
-      if (activePage?.id === 'assessments') renderAssessments();
+      renderAssessments(); // always re-render regardless of current page
       return;
     }
 
