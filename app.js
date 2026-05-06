@@ -120,7 +120,10 @@ async function loadPatientsFromServer() {
   if (activePage?.id === 'patients') renderPatients();
 }
 
+let pendingSaves = 0;
+
 async function saveAssessmentToServer(assessment) {
+  pendingSaves++;
   try {
     const resp = await fetch('https://brain-rehab-production.up.railway.app/api/assessments', {
       method: 'POST',
@@ -143,6 +146,8 @@ async function saveAssessmentToServer(assessment) {
     console.warn('評估記錄同步失敗', e);
     showToast('評估已儲存本機，無法連線雲端', 'error');
     return false;
+  } finally {
+    pendingSaves--;
   }
 }
 
@@ -3298,7 +3303,7 @@ function generateIntegratedPrescription() {
   openModal('integratedRxModal');
 }
 
-function saveBCFAssessment() {
+async function saveBCFAssessment() {
   const patientId = document.getElementById('assess-patient-select').value;
   const date = document.getElementById('assess-date').value;
   if (!patientId || !date) { showToast('請選擇病人和日期', 'error'); return; }
@@ -3333,7 +3338,7 @@ function saveBCFAssessment() {
     notes: document.getElementById('bcf-notes')?.value || '',
   };
   DB.assessments.unshift(bcfRec);
-  saveAssessmentToServer(bcfRec);
+  await saveAssessmentToServer(bcfRec);
 
   showToast('BCF評估已儲存', 'success');
   const saveBtn = document.getElementById('bcf-save-btn');
@@ -3819,7 +3824,7 @@ function analyzeRightEyeStandalone() {
   resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
-function saveRightEyeAssessment() {
+async function saveRightEyeAssessment() {
   const patientId = document.getElementById('assess-patient-select')?.value;
   const date = document.getElementById('assess-date')?.value;
   if (!patientId || !date) { showToast('請選擇病人和日期', 'error'); return; }
@@ -3856,7 +3861,7 @@ function saveRightEyeAssessment() {
     svV:   parseNum(document.getElementById('re-svV')?.value),
   };
   DB.assessments.unshift(reRec);
-  saveAssessmentToServer(reRec);
+  await saveAssessmentToServer(reRec);
 
   showToast('RightEye評估已儲存', 'success');
   document.getElementById('re-save-btn').style.display = 'none';
@@ -3969,7 +3974,7 @@ function calcTotalScore() {
   if (el) el.textContent = total;
 }
 
-function saveAssessment() {
+async function saveAssessment() {
   const patientId = document.getElementById('a-patient').value;
   const date = document.getElementById('a-date').value;
   const type = document.getElementById('a-type').value;
@@ -3992,7 +3997,7 @@ function saveAssessment() {
   };
   DB.assessments.unshift(rec);
   saveToStorage();
-  saveAssessmentToServer(rec);
+  await saveAssessmentToServer(rec);
   closeModal('addAssessModal');
   renderAssessments();
   showToast('評估記錄已儲存', 'success');
@@ -4380,6 +4385,19 @@ function getAccounts() {
     { username: 'therapist', password: localStorage.getItem('bcf_pw_therapist') || 'BCF2026',     role: 'therapist' },
     { username: 'reception', password: localStorage.getItem('bcf_pw_reception') || 'bcf2026',    role: 'reception' },
   ];
+}
+
+async function logout() {
+  if (pendingSaves > 0) {
+    showToast('同步中，請稍後...', 'error');
+    const deadline = Date.now() + 8000;
+    while (pendingSaves > 0 && Date.now() < deadline) {
+      await new Promise(r => setTimeout(r, 150));
+    }
+    if (pendingSaves > 0) showToast('部分記錄尚未同步，仍繼續登出', 'error');
+  }
+  sessionStorage.removeItem('bcf_auth');
+  document.getElementById('loginScreen').classList.remove('hidden');
 }
 
 function submitLogin() {
