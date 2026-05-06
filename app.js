@@ -744,7 +744,8 @@ function showAssessmentDetail(aid) {
   console.log('assessmentDetail:', JSON.stringify(a));
 
   const isRE  = a.type?.includes('RightEye');
-  const isBCF = a.type?.includes('BCF') || a.type === '肌肉張力測試';
+  const isMTT = a.type === '肌肉張力測試';
+  const isBCF = a.type === 'BCF眼動機評估';
   const pt    = getPatient(a.patientId);
   const diff  = (a.score ?? 0) - (a.prev ?? 0);
   const scoreColor = a.maxScore > 0
@@ -907,7 +908,7 @@ function showAssessmentDetail(aid) {
     }
   }
 
-  if (isBCF) {
+  if (isMTT || isBCF) {
     const armLabel = { 'left-long':'左長右短', 'right-long':'左短右長' };
     const armColor = { 'left-long':['#fef3c7','#92400e'], 'right-long':['#ede9fe','#5b21b6'] };
 
@@ -3901,31 +3902,50 @@ async function saveBCFAssessment() {
   Object.values(stanceItems).forEach(v => { if (v !== 'none') diffCount++; });
   diffCount += Object.keys(convergenceItems).length;
 
-  const totalItems = 31;
-  const prev = DB.assessments.filter(a => a.patientId === patientId && (a.type === '肌肉張力測試' || a.type === 'BCF眼動機評估'))
-    .sort((a, b) => new Date(b.date) - new Date(a.date))[0]?.score ?? totalItems;
+  const therapist = document.getElementById('assess-therapist')?.value || '王小明';
+  const notes     = document.getElementById('bcf-notes')?.value || '';
+  const decObj    = { trainSide: dec.trainSide, reason: dec.reason, balanced: !!dec.balanced, noData: !!dec.noData, counts: dec.counts };
 
-  const bcfRec = {
-    id: genId('BCF'), patientId, date,
+  // ── Record 1: 肌肉張力測試（測試原始數據） ──
+  const totalItems = 31;
+  const prevMTT = DB.assessments
+    .filter(a => a.patientId === patientId && a.type === '肌肉張力測試')
+    .sort((a, b) => new Date(b.date) - new Date(a.date))[0]?.score ?? totalItems;
+  const mttRec = {
+    id: genId('MTT'), patientId, date,
     type: '肌肉張力測試',
-    score: totalItems - diffCount,
-    maxScore: totalItems,
-    prev,
-    therapist: document.getElementById('assess-therapist')?.value || '王小明',
-    notes: document.getElementById('bcf-notes')?.value || '',
+    score: totalItems - diffCount, maxScore: totalItems, prev: prevMTT,
+    therapist, notes,
     eyeItems, cervicalItems, visualStimItems, stanceItems, convergenceItems,
     brainRegions,
-    decision: { trainSide: dec.trainSide, reason: dec.reason, balanced: !!dec.balanced, noData: !!dec.noData, counts: dec.counts },
-    eyeMachineRx,
-    eegPrescriptions,
-    functionalTrainings,
-    flyingChairData,
+    decision: decObj,
   };
-  console.log('saveBCFAssessment:', JSON.stringify(bcfRec));
-  DB.assessments.unshift(bcfRec);
-  await saveAssessmentToServer(bcfRec);
+  console.log('saveMTT:', JSON.stringify(mttRec));
+  DB.assessments.unshift(mttRec);
+  await saveAssessmentToServer(mttRec);
 
-  showToast('BCF評估已儲存', 'success');
+  // ── Record 2: BCF眼動機評估（處方數據），只在有處方時儲存 ──
+  const hasPrescriptions = eyeMachineRx.length > 0 || !!flyingChairData || eegPrescriptions.length > 0;
+  if (hasPrescriptions) {
+    const rxCount = eyeMachineRx.length + eegPrescriptions.length + (flyingChairData ? 1 : 0);
+    const prevBCF = DB.assessments
+      .filter(a => a.patientId === patientId && a.type === 'BCF眼動機評估')
+      .sort((a, b) => new Date(b.date) - new Date(a.date))[0]?.score ?? 0;
+    const bcfRec = {
+      id: genId('BCF'), patientId, date,
+      type: 'BCF眼動機評估',
+      score: rxCount, maxScore: rxCount, prev: prevBCF,
+      therapist, notes: '',
+      brainRegions,
+      decision: decObj,
+      eyeMachineRx, eegPrescriptions, functionalTrainings, flyingChairData,
+    };
+    console.log('saveBCF:', JSON.stringify(bcfRec));
+    DB.assessments.unshift(bcfRec);
+    await saveAssessmentToServer(bcfRec);
+  }
+
+  showToast(`評估已儲存：肌肉張力測試${hasPrescriptions ? ' ＋ BCF眼動機評估' : ''}`, 'success');
   const saveBtn = document.getElementById('bcf-save-btn');
   if (saveBtn) saveBtn.style.display = 'none';
 }
