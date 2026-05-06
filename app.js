@@ -123,6 +123,7 @@ async function loadPatientsFromServer() {
 let pendingSaves = 0;
 
 async function saveAssessmentToServer(assessment) {
+  console.log('saveAssessmentToServer called, id:', assessment?.id);
   pendingSaves++;
   try {
     const resp = await fetch('https://brain-rehab-production.up.railway.app/api/assessments', {
@@ -130,12 +131,14 @@ async function saveAssessmentToServer(assessment) {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(assessment),
     });
+    console.log('response status:', resp.status, 'ok:', resp.ok);
     if (!resp.ok) {
       console.warn('評估記錄同步失敗 HTTP', resp.status);
       showToast('評估已儲存本機，雲端同步失敗（HTTP ' + resp.status + '）', 'error');
       return false;
     }
     const result = await resp.json();
+    console.log('result:', JSON.stringify(result));
     if (result.stored === false) {
       console.warn('評估記錄未寫入 MongoDB（DB 未就緒）');
       showToast('評估已儲存本機，資料庫未就緒，將於下次連線時補傳', 'error');
@@ -143,7 +146,7 @@ async function saveAssessmentToServer(assessment) {
     }
     return true;
   } catch(e) {
-    console.warn('評估記錄同步失敗', e);
+    console.warn('saveAssessmentToServer error:', e);
     showToast('評估已儲存本機，無法連線雲端', 'error');
     return false;
   } finally {
