@@ -3897,6 +3897,8 @@ function renderAssessments() {
   const tabTypeMap = { cognitive: ['MMSE','MoCA'], motor: ['Fugl-Meyer'], balance: ['Berg'], language: ['Barthel','語言'] };
 
   let data = DB.assessments;
+  const selectedPatient = document.getElementById('assess-patient-select')?.value;
+  if (selectedPatient) data = data.filter(a => a.patientId === selectedPatient);
   if (activeTab && tabTypeMap[activeTab]) data = data.filter(a => tabTypeMap[activeTab].some(t => a.type.includes(t)));
 
   if (data.length === 0) {
@@ -4460,6 +4462,23 @@ function initApp() {
   });
 
   // Assessment patient filter
+  document.getElementById('assess-patient-select')?.addEventListener('change', () => {
+    renderAssessments();
+    const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab;
+    if (activeTab === 'bcf') {
+      const resultsEl = document.getElementById('bcf-results');
+      if (resultsEl) resultsEl.style.display = 'none';
+      const saveBtn = document.getElementById('bcf-save-btn');
+      if (saveBtn) saveBtn.style.display = 'none';
+    }
+    if (activeTab === 'righteye') {
+      clearRightEyeForm();
+      const resultsEl = document.getElementById('re-results');
+      if (resultsEl) resultsEl.style.display = 'none';
+      const saveBtn = document.getElementById('re-save-btn');
+      if (saveBtn) saveBtn.style.display = 'none';
+    }
+  });
 
   // Rx patient filter
   document.getElementById('rxPatientFilter')?.addEventListener('change', renderPrescriptions);
