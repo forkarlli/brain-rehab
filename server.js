@@ -336,6 +336,52 @@ app.post('/api/analyze-righteye', async (req, res) => {
   }
 });
 
+app.post('/api/parse-btracks-image', async (req, res) => {
+  const { images } = req.body;
+  if (!images || !Array.isArray(images) || images.length === 0) {
+    return res.status(400).json({ error: '請提供 BTrackS 圖片' });
+  }
+  const imageBlocks = images.map(img => ({
+    type: 'image',
+    source: { type: 'base64', media_type: img.mediaType || 'image/png', data: img.data },
+  }));
+  const prompt = `從以上 BTrackS mCTSIB 平衡測試截圖中提取數值，回傳以下 JSON（找不到的填 null）：
+{
+  "path_std": <STD 條件的 Path Length 數字>,
+  "path_pro": <PRO 條件的 Path Length 數字>,
+  "path_vis": <VIS 條件的 Path Length 數字>,
+  "path_ves": <VES 或 VEST 條件的 Path Length 數字>,
+  "cop_ml_std": <STD 的 ML 值>,
+  "cop_ap_std": <STD 的 AP 值>,
+  "cop_ang_std": <STD 的 ANG/角度值>,
+  "cop_ml_pro": <PRO 的 ML 值>,
+  "cop_ap_pro": <PRO 的 AP 值>,
+  "cop_ang_pro": <PRO 的 ANG 值>,
+  "cop_ml_vis": <VIS 的 ML 值>,
+  "cop_ap_vis": <VIS 的 AP 值>,
+  "cop_ang_vis": <VIS 的 ANG 值>,
+  "cop_ml_ves": <VES/VEST 的 ML 值>,
+  "cop_ap_ves": <VES/VEST 的 AP 值>,
+  "cop_ang_ves": <VES/VEST 的 ANG 值>
+}
+注意：COP Details 表格欄位格式為 "ML, AP, ANG"，如 "1.9, 8.5, 7" 表示 ML=1.9、AP=8.5、ANG=7。
+只回傳 JSON，不附加任何說明。`;
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-haiku-4-5-20251001',
+      max_tokens: 512,
+      messages: [{ role: 'user', content: [...imageBlocks, { type: 'text', text: prompt }] }],
+    });
+    const raw = response.content[0].text.trim();
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('AI 回覆格式錯誤，請重試');
+    res.json(JSON.parse(jsonMatch[0]));
+  } catch (err) {
+    console.error('parse-btracks-image error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: '未收到音檔' });
   const audioBase64 = req.file.buffer.toString('base64');

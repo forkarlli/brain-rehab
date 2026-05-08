@@ -4793,17 +4793,22 @@ function renderRombergInterface() {
           <label class="form-label">數據來源</label>
           <select class="select" id="romberg-source">
             <option value="manual">手動輸入</option>
-            <option value="btracks_html">BTrackS HTML 報告</option>
+            <option value="btracks_html">BTrackS 截圖上傳（AI 辨識）</option>
           </select>
         </div>
 
         <div id="btracks-upload-zone" style="display:none;margin-bottom:14px;">
-          <label class="form-label">BTrackS HTML 報告</label>
+          <label class="form-label">BTrackS 數據表格圖片</label>
+          <div style="font-size:11px;color:#6b7280;margin-bottom:8px;background:#fefce8;border:1px solid #fde68a;border-radius:6px;padding:8px 10px;">
+            💡 BTrackS 的數字儲存在 PNG 圖片中，請上傳數據表格截圖：<br>
+            Windows Temp 資料夾（<code>%TEMP%</code>）中最新的 <strong>CT*.png</strong> 檔案，<br>
+            可同時選取「Main Results」與「COP Details」兩張圖片
+          </div>
           <div id="btracks-dropzone" style="border:2px dashed #e5e7eb;border-radius:8px;padding:20px;text-align:center;cursor:pointer;background:#f9fafb;transition:border-color .15s;">
-            <div style="font-size:2em;margin-bottom:6px;">📄</div>
-            <div style="font-size:13px;color:#374151;font-weight:500;">拖曳或點擊上傳 BTrackS HTML 報告</div>
-            <div style="font-size:11px;color:#9ca3af;margin-top:3px;">支援 .html / .htm 格式</div>
-            <input type="file" id="btracks-file-input" accept=".html,.htm" style="display:none;">
+            <div style="font-size:2em;margin-bottom:6px;">🖼️</div>
+            <div style="font-size:13px;color:#374151;font-weight:500;">拖曳或點擊上傳 BTrackS 數據表格圖片</div>
+            <div style="font-size:11px;color:#9ca3af;margin-top:3px;">支援 .png / .jpg / .jpeg，可同時上傳兩張</div>
+            <input type="file" id="btracks-file-input" accept=".png,.jpg,.jpeg" multiple style="display:none;">
           </div>
           <div id="btracks-parsed-summary" style="display:none;margin-top:10px;padding:12px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe;font-size:13px;"></div>
         </div>
@@ -4876,9 +4881,13 @@ function renderRombergInterface() {
   _btDropzone.addEventListener('drop', e => {
     e.preventDefault();
     _btDropzone.style.borderColor = '#e5e7eb';
-    if (e.dataTransfer.files[0]) _handleBTrackSFile(e.dataTransfer.files[0]);
+    const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/') || f.name.match(/\.(png|jpe?g)$/i));
+    if (files.length) _handleBTrackSFiles(files);
   });
-  _btFileInput.addEventListener('change', e => { if (e.target.files[0]) _handleBTrackSFile(e.target.files[0]); });
+  _btFileInput.addEventListener('change', e => {
+    const files = Array.from(e.target.files);
+    if (files.length) _handleBTrackSFiles(files);
+  });
 }
 
 function _onRombergSourceChange() {
@@ -4888,46 +4897,51 @@ function _onRombergSourceChange() {
   if (src !== 'btracks_html') _btracksData = null;
 }
 
-function _handleBTrackSFile(file) {
-  if (!file.name.match(/\.html?$/i)) {
-    showToast('請上傳 .html 格式的 BTrackS 報告', 'error');
-    return;
-  }
-  const reader = new FileReader();
-  reader.onload = e => {
-    const parsed = parseBTrackSReport(e.target.result);
-    _btracksData = parsed;
+function _handleBTrackSFiles(files) {
+  const summary = document.getElementById('btracks-parsed-summary');
+  if (summary) { summary.style.display = 'block'; summary.innerHTML = '<div style="color:#6b7280;">⏳ AI 正在辨識圖片數值…</div>'; }
 
-    const eoEl = document.getElementById('romberg-path-eo');
-    const ecEl = document.getElementById('romberg-path-ec');
-    if (parsed.path_std !== null && eoEl) eoEl.value = parsed.path_std;
-    if (parsed.path_ves !== null && ecEl) ecEl.value = parsed.path_ves;
+  const toBase64 = file => new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = e => resolve({ data: e.target.result.split(',')[1], mediaType: file.type || 'image/png' });
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+
+  Promise.all(files.map(toBase64)).then(images => {
+    return fetch('https://brain-rehab-production.up.railway.app/api/parse-btracks-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ images }),
+    });
+  }).then(resp => {
+    if (!resp.ok) return resp.json().then(e => Promise.reject(new Error(e.error || resp.statusText)));
+    return resp.json();
+  }).then(parsed => {
+    _btracksData = { ...parsed, errors: [] };
+
+    const eoEl  = document.getElementById('romberg-path-eo');
+    const ecEl  = document.getElementById('romberg-path-ec');
+    const dirEl = document.getElementById('romberg-direction');
+    if (parsed.path_std != null && eoEl) eoEl.value = parsed.path_std;
+    if (parsed.path_ves != null && ecEl) ecEl.value = parsed.path_ves;
     _rombergUpdateRq();
 
     const dir = _btracksAngleDirection(parsed.cop_ap_ves, parsed.cop_ang_ves);
-    if (dir) {
-      const dirEl = document.getElementById('romberg-direction');
-      if (dirEl) dirEl.value = dir;
-    }
+    if (dir && dirEl) dirEl.value = dir;
 
-    const summary = document.getElementById('btracks-parsed-summary');
+    const rq = parsed.path_std && parsed.path_ves ? (parsed.path_ves / parsed.path_std).toFixed(2) : '—';
+    const v = k => parsed[k] != null ? parsed[k] : '—';
     if (summary) {
-      const rq = parsed.path_std && parsed.path_ves
-        ? (parsed.path_ves / parsed.path_std).toFixed(2) : '—';
-      const v = k => parsed[k] !== null && parsed[k] !== undefined ? parsed[k] : '—';
-      const errMsg = parsed.errors.length
-        ? `<div style="color:#dc2626;margin-top:8px;font-size:11px;">⚠️ 未找到欄位：${parsed.errors.join('、')}，請手動補全</div>`
-        : '';
-      summary.style.display = 'block';
       summary.innerHTML = `
         <div style="font-weight:600;color:#1d4ed8;margin-bottom:8px;">📊 BTrackS 解析結果</div>
         <table style="width:100%;font-size:12px;border-collapse:collapse;">
           <tr style="background:#dbeafe;font-weight:600;">
             <td style="padding:4px 6px;">條件</td>
             <td style="padding:4px 6px;text-align:right;">Path (cm)</td>
-            <td style="padding:4px 6px;text-align:right;">ML (cm)</td>
-            <td style="padding:4px 6px;text-align:right;">AP (cm)</td>
-            <td style="padding:4px 6px;text-align:right;">Ang (°)</td>
+            <td style="padding:4px 6px;text-align:right;">ML</td>
+            <td style="padding:4px 6px;text-align:right;">AP</td>
+            <td style="padding:4px 6px;text-align:right;">Ang°</td>
           </tr>
           ${['std','pro','vis','ves'].map(c => `
           <tr style="${c==='ves' ? 'font-weight:600;background:#eff6ff;' : ''}">
@@ -4941,21 +4955,14 @@ function _handleBTrackSFile(file) {
         <div style="margin-top:8px;display:flex;gap:16px;flex-wrap:wrap;font-size:13px;">
           <span>RQ = <strong>${rq}</strong></span>
           ${dir ? `<span>偏移方向：<strong style="color:#1d4ed8;">${dir}</strong>（請確認）</span>` : ''}
-        </div>
-        ${errMsg}
-      `;
+        </div>`;
     }
-
-    if (parsed.errors.length === 0) {
-      showToast('BTrackS 報告解析成功，已自動填入數值', 'success');
-      if (dir && parsed.path_std && parsed.path_ves) {
-        setTimeout(() => _rombergCompute(), 150);
-      }
-    } else {
-      showToast('BTrackS 報告部分解析，缺少：' + parsed.errors.join('、') + '，請手動補全', 'error');
-    }
-  };
-  reader.readAsText(file);
+    showToast('BTrackS 圖片解析成功，已自動填入數值', 'success');
+    if (dir && parsed.path_std && parsed.path_ves) setTimeout(() => _rombergCompute(), 150);
+  }).catch(err => {
+    if (summary) summary.innerHTML = `<div style="color:#dc2626;">❌ 解析失敗：${err.message}</div>`;
+    showToast('圖片解析失敗：' + err.message, 'error');
+  });
 }
 
 // parseBTrackSReport — parses BTrackS HTML reports with STD/PRO/VIS/VES conditions
@@ -5197,40 +5204,51 @@ function _mRombergUpdateRq() {
   }
 }
 
-function _mBTrackSFile(file) {
-  if (!file.name.match(/\.html?$/i)) { showToast('請上傳 .html 格式的 BTrackS 報告', 'error'); return; }
-  const reader = new FileReader();
-  reader.onload = e => {
-    const parsed = parseBTrackSReport(e.target.result);
+function _mBTrackSFiles(files) {
+  const summary = document.getElementById('modal-btracks-summary');
+  if (summary) { summary.style.display = 'block'; summary.innerHTML = '<div style="color:#6b7280;">⏳ AI 正在辨識圖片數值…</div>'; }
+
+  const toBase64 = file => new Promise((resolve, reject) => {
+    const r = new FileReader();
+    r.onload = e => resolve({ data: e.target.result.split(',')[1], mediaType: file.type || 'image/png' });
+    r.onerror = reject;
+    r.readAsDataURL(file);
+  });
+
+  Promise.all(files.map(toBase64)).then(images => {
+    return fetch('https://brain-rehab-production.up.railway.app/api/parse-btracks-image', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ images }),
+    });
+  }).then(resp => {
+    if (!resp.ok) return resp.json().then(e => Promise.reject(new Error(e.error || resp.statusText)));
+    return resp.json();
+  }).then(parsed => {
     _mBtracksData = parsed;
 
     const eoEl  = document.getElementById('modal-romberg-path-eo');
     const ecEl  = document.getElementById('modal-romberg-path-ec');
     const dirEl = document.getElementById('modal-romberg-direction');
-    if (parsed.path_std !== null && eoEl) eoEl.value = parsed.path_std;
-    if (parsed.path_ves !== null && ecEl) ecEl.value = parsed.path_ves;
+    if (parsed.path_std != null && eoEl) eoEl.value = parsed.path_std;
+    if (parsed.path_ves != null && ecEl) ecEl.value = parsed.path_ves;
     _mRombergUpdateRq();
 
     const dir = _btracksAngleDirection(parsed.cop_ap_ves, parsed.cop_ang_ves);
     if (dir && dirEl) dirEl.value = dir;
 
-    const summary = document.getElementById('modal-btracks-summary');
+    const rq = parsed.path_std && parsed.path_ves ? (parsed.path_ves / parsed.path_std).toFixed(2) : '—';
+    const v = k => parsed[k] != null ? parsed[k] : '—';
     if (summary) {
-      const rq = parsed.path_std && parsed.path_ves ? (parsed.path_ves / parsed.path_std).toFixed(2) : '—';
-      const v = k => parsed[k] !== null && parsed[k] !== undefined ? parsed[k] : '—';
-      const errMsg = parsed.errors.length
-        ? `<div style="color:#dc2626;margin-top:8px;font-size:11px;">⚠️ 未找到欄位：${parsed.errors.join('、')}，請手動補全</div>`
-        : '';
-      summary.style.display = 'block';
       summary.innerHTML = `
         <div style="font-weight:600;color:#1d4ed8;margin-bottom:8px;">📊 BTrackS 解析結果</div>
         <table style="width:100%;font-size:12px;border-collapse:collapse;">
           <tr style="background:#dbeafe;font-weight:600;">
             <td style="padding:4px 6px;">條件</td>
             <td style="padding:4px 6px;text-align:right;">Path (cm)</td>
-            <td style="padding:4px 6px;text-align:right;">ML (cm)</td>
-            <td style="padding:4px 6px;text-align:right;">AP (cm)</td>
-            <td style="padding:4px 6px;text-align:right;">Ang (°)</td>
+            <td style="padding:4px 6px;text-align:right;">ML</td>
+            <td style="padding:4px 6px;text-align:right;">AP</td>
+            <td style="padding:4px 6px;text-align:right;">Ang°</td>
           </tr>
           ${['std','pro','vis','ves'].map(c => `
           <tr style="${c==='ves' ? 'font-weight:600;background:#eff6ff;' : ''}">
@@ -5244,19 +5262,14 @@ function _mBTrackSFile(file) {
         <div style="margin-top:8px;display:flex;gap:16px;flex-wrap:wrap;font-size:13px;">
           <span>RQ = <strong>${rq}</strong></span>
           ${dir ? `<span>偏移方向：<strong style="color:#1d4ed8;">${dir}</strong>（請確認）</span>` : ''}
-        </div>
-        ${errMsg}
-      `;
+        </div>`;
     }
-
-    if (parsed.errors.length === 0) {
-      showToast('BTrackS 報告解析成功，已自動填入數值', 'success');
-      if (dir && parsed.path_std && parsed.path_ves) setTimeout(() => _mRombergCompute(), 150);
-    } else {
-      showToast('BTrackS 報告部分解析，缺少：' + parsed.errors.join('、') + '，請手動補全', 'error');
-    }
-  };
-  reader.readAsText(file);
+    showToast('BTrackS 圖片解析成功，已自動填入數值', 'success');
+    if (dir && parsed.path_std && parsed.path_ves) setTimeout(() => _mRombergCompute(), 150);
+  }).catch(err => {
+    if (summary) summary.innerHTML = `<div style="color:#dc2626;">❌ 解析失敗：${err.message}</div>`;
+    showToast('圖片解析失敗：' + err.message, 'error');
+  });
 }
 
 function _mRombergCompute() {
@@ -5436,12 +5449,15 @@ function renderAssessmentForm() {
       </div>
 
       <div id="modal-btracks-dropzone-wrap" style="display:none;margin-bottom:14px;">
-        <label class="form-label">BTrackS HTML 報告</label>
+        <label class="form-label">BTrackS 數據表格圖片</label>
+        <div style="font-size:11px;color:#6b7280;margin-bottom:8px;background:#fefce8;border:1px solid #fde68a;border-radius:6px;padding:8px 10px;">
+          💡 請上傳 Temp 資料夾（<code>%TEMP%</code>）中最新的 <strong>CT*.png</strong> 數據表格圖片，可同時選取兩張
+        </div>
         <div id="modal-btracks-dropzone" style="border:2px dashed #e5e7eb;border-radius:8px;padding:20px;text-align:center;cursor:pointer;background:#f9fafb;transition:border-color .15s;">
-          <div style="font-size:2em;margin-bottom:6px;">📄</div>
-          <div style="font-size:13px;color:#374151;font-weight:500;">拖曳或點擊上傳 BTrackS HTML 報告</div>
-          <div style="font-size:11px;color:#9ca3af;margin-top:3px;">支援 .html / .htm 格式</div>
-          <input type="file" id="modal-btracks-file" accept=".html,.htm" style="display:none;">
+          <div style="font-size:2em;margin-bottom:6px;">🖼️</div>
+          <div style="font-size:13px;color:#374151;font-weight:500;">拖曳或點擊上傳 BTrackS 數據表格圖片</div>
+          <div style="font-size:11px;color:#9ca3af;margin-top:3px;">支援 .png / .jpg / .jpeg，可同時上傳兩張</div>
+          <input type="file" id="modal-btracks-file" accept=".png,.jpg,.jpeg" multiple style="display:none;">
         </div>
         <div id="modal-btracks-summary" style="display:none;margin-top:10px;padding:12px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe;font-size:13px;"></div>
       </div>
@@ -5506,9 +5522,10 @@ function renderAssessmentForm() {
     dropzone.addEventListener('drop', e => {
       e.preventDefault();
       dropzone.style.borderColor = '#e5e7eb';
-      if (e.dataTransfer.files[0]) _mBTrackSFile(e.dataTransfer.files[0]);
+      const files = Array.from(e.dataTransfer.files).filter(f => f.type.startsWith('image/') || f.name.match(/\.(png|jpe?g)$/i));
+      if (files.length) _mBTrackSFiles(files);
     });
-    fileInput.addEventListener('change', e => { if (e.target.files[0]) _mBTrackSFile(e.target.files[0]); });
+    fileInput.addEventListener('change', e => { if (e.target.files.length) _mBTrackSFiles(Array.from(e.target.files)); });
     return;
   }
 
