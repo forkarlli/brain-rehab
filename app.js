@@ -1896,6 +1896,127 @@ function toggleConvSublayer(convId, show) {
   if (sublayer) sublayer.style.display = show ? 'block' : 'none';
 }
 
+// ============================================================
+// ROMBERG MODULE CONFIG
+// ============================================================
+const ROMBERG_CONFIG = {
+  rq_threshold: 2.0,
+  jerk_threshold: 3.0,
+  confidence: {
+    base: 0.95,
+    no_righteye: -0.05,
+    clinical_mismatch: -0.20,
+    jerk_exceeded: -0.10,
+  }
+};
+
+// ============================================================
+// ROMBERG DIAGNOSTIC MATRICES
+// Matrix A: 重心偏移 8方向（含純左/純右/正前/正後）
+// Matrix B: 壓力板偏移 6方向（手動輸入用）
+// ============================================================
+const ROMBERG_MATRIX_A = {
+  RF:  { failure: { canal: "Right Ant. Canal ↓",                  label: "Ipsilateral Vestibulo-Cerebellar Dysfunction" },
+         compensatory: { spindle: "Left Post. Chain Spindle ↓",   label: "Contralateral Proprioceptive Delay" } },
+  RB:  { failure: { canal: "Right Post. Canal ↓",                 label: "Ipsilateral Vestibulo-Cerebellar Dysfunction" },
+         compensatory: { spindle: "Left Ant. Chain Spindle ↓",    label: "Contralateral Proprioceptive Delay" } },
+  PR:  { failure: { canal: "Right Ant. + Post. Canal ↓",          label: "Ipsilateral Lateral Canal Dysfunction" },
+         compensatory: { spindle: "Left Lateral Chain Spindle ↓", label: "Contralateral Proprioceptive Delay" } },
+  PL:  { failure: { canal: "Left Ant. + Post. Canal ↓",           label: "Ipsilateral Lateral Canal Dysfunction" },
+         compensatory: { spindle: "Right Lateral Chain Spindle ↓", label: "Contralateral Proprioceptive Delay" } },
+  LF:  { failure: { canal: "Left Ant. Canal ↓",                   label: "Ipsilateral Vestibulo-Cerebellar Dysfunction" },
+         compensatory: { spindle: "Right Post. Chain Spindle ↓",  label: "Contralateral Proprioceptive Delay" } },
+  LB:  { failure: { canal: "Left Post. Canal ↓",                  label: "Ipsilateral Vestibulo-Cerebellar Dysfunction" },
+         compensatory: { spindle: "Right Ant. Chain Spindle ↓",   label: "Contralateral Proprioceptive Delay" } },
+  PF:  { failure: { canal: "Bilateral Ant. Canal ↓",              label: "Bilateral Anterior Canal Dysfunction" },
+         compensatory: { spindle: "Bilateral Post. Chain Spindle ↓", label: "Bilateral Posterior Proprioceptive Delay" } },
+  PBk: { failure: { canal: "Bilateral Post. Canal ↓",             label: "Bilateral Posterior Canal Dysfunction" },
+         compensatory: { spindle: "Bilateral Ant. Chain Spindle ↓", label: "Bilateral Anterior Proprioceptive Delay" } },
+};
+
+const ROMBERG_MATRIX_B = {
+  RF: ROMBERG_MATRIX_A.RF,
+  RB: ROMBERG_MATRIX_A.RB,
+  PR: ROMBERG_MATRIX_A.PR,
+  PF: ROMBERG_MATRIX_A.PF,
+  LF: ROMBERG_MATRIX_A.LF,
+  LB: ROMBERG_MATRIX_A.LB,
+};
+
+// ============================================================
+// computeRombergRx(input)
+// ============================================================
+function computeRombergRx(input) {
+  const rq = (input.rq_override != null)
+    ? input.rq_override
+    : (input.path_eyes_closed / input.path_eyes_open);
+
+  const mode = rq >= ROMBERG_CONFIG.rq_threshold ? 'FAILURE' : 'COMPENSATORY';
+
+  const matrix = (input.source_type === 'btracks_html' || input.source_type === 'btracks_csv')
+    ? ROMBERG_MATRIX_A
+    : ROMBERG_MATRIX_B;
+
+  const entry = matrix[input.sway_direction];
+  if (!entry) {
+    return { error: `Unknown sway_direction: ${input.sway_direction}` };
+  }
+
+  const diagEntry = mode === 'FAILURE' ? entry.failure : entry.compensatory;
+
+  let confidence = ROMBERG_CONFIG.confidence.base;
+  const alerts = [];
+
+  if (!input.righteye_pursuit_vertical) {
+    confidence += ROMBERG_CONFIG.confidence.no_righteye;
+  }
+
+  const diagCanal = diagEntry.canal || '';
+  if (diagCanal.includes('Right AC') || diagCanal.includes('Right Ant.')) {
+    if (input.righteye_pursuit_vertical === 'Normal') {
+      alerts.push('Clinical Mismatch: Suggest checking Cervical Spine');
+      confidence += ROMBERG_CONFIG.confidence.clinical_mismatch;
+    }
+  }
+
+  if (input.jerk_index != null && input.jerk_index > ROMBERG_CONFIG.jerk_threshold) {
+    alerts.push('Midline Stability Training Required (Jerk Exceeded)');
+    confidence += ROMBERG_CONFIG.confidence.jerk_exceeded;
+  }
+
+  const prescriptionKey = `${input.sway_direction}_${mode}`;
+  const trainingPlan = (typeof PRESCRIPTIONS !== 'undefined' && PRESCRIPTIONS)
+    ? (PRESCRIPTIONS[prescriptionKey] || null)
+    : null;
+
+  const btracksData = {
+    cop_x_mean: Array.isArray(input.btracks_cop_x)
+      ? (input.btracks_cop_x.reduce((a, b) => a + b, 0) / input.btracks_cop_x.length)
+      : (input.btracks_cop_x ?? null),
+    cop_y_mean: Array.isArray(input.btracks_cop_y)
+      ? (input.btracks_cop_y.reduce((a, b) => a + b, 0) / input.btracks_cop_y.length)
+      : (input.btracks_cop_y ?? null),
+    sway_velocity: input.btracks_sway_velocity || null,
+  };
+
+  return {
+    rq:             parseFloat(rq.toFixed(3)),
+    mode,
+    sway_direction: input.sway_direction,
+    source_type:    input.source_type,
+    diagnosis: {
+      canal:      diagEntry.canal      || diagEntry.spindle || '',
+      cerebellum: diagEntry.canal ? diagEntry.canal.replace('Canal', 'Cb') : '',
+      label:      diagEntry.label,
+      confidence: parseFloat(Math.max(0, confidence).toFixed(2)),
+      alerts,
+    },
+    training_plan:   trainingPlan,
+    btracks_data:    btracksData,
+    prescription_key: prescriptionKey,
+  };
+}
+
 function computeEyeMachineRx(affectedBrainRegions, affectedItems, convMCodes) {
   const rec = [];
   const has = r => affectedBrainRegions.has(r);
@@ -4540,39 +4661,714 @@ async function saveRightEyeAssessment() {
   document.getElementById('re-save-btn').style.display = 'none';
 }
 
-// ===== ASSESSMENTS =====
-function renderAssessments() {
-  const tbody = document.getElementById('assessmentsTableBody');
-  if (!tbody) return;
+// ===== BALANCE TAB (contains Berg sub-tab + Romberg sub-tab) =====
+function renderBalanceInterface() {
+  const container = document.getElementById('balance-interface');
+  if (!container) return;
 
-  const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab || '';
-  const tableCard = document.getElementById('assessmentsTableCard');
-  const bcfEl = document.getElementById('bcf-interface');
-  const reEl  = document.getElementById('righteye-interface');
+  // If structure already rendered, just refresh Berg content and return
+  if (container.querySelector('.balance-inner-tabs')) {
+    _renderBergContent();
+    return;
+  }
+
+  container.innerHTML = `
+    <div class="card">
+      <div class="card-header">
+        <h3>⚖️ 平衡測試</h3>
+      </div>
+      <div class="balance-inner-tabs" style="display:flex;gap:4px;padding:0 20px 0;border-bottom:1px solid var(--border,#e5e7eb);margin-bottom:0;">
+        <button class="balance-tab-btn active" data-btab="berg"
+          style="padding:10px 18px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;border-bottom:2px solid var(--primary,#2563eb);color:var(--primary,#2563eb);">
+          Berg 平衡量表
+        </button>
+        <button class="balance-tab-btn" data-btab="romberg"
+          style="padding:10px 18px;border:none;background:none;cursor:pointer;font-size:13px;font-weight:600;border-bottom:2px solid transparent;color:var(--gray-500,#6b7280);">
+          ⚖️ Romberg 測試
+        </button>
+      </div>
+      <div id="balance-berg-content" style="padding:16px;"></div>
+      <div id="romberg-interface" style="display:none;padding:0;"></div>
+    </div>
+  `;
+
+  _renderBergContent();
+
+  container.querySelectorAll('.balance-tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      container.querySelectorAll('.balance-tab-btn').forEach(b => {
+        b.style.borderBottom = '2px solid transparent';
+        b.style.color = 'var(--gray-500,#6b7280)';
+        b.classList.remove('active');
+      });
+      btn.style.borderBottom = '2px solid var(--primary,#2563eb)';
+      btn.style.color = 'var(--primary,#2563eb)';
+      btn.classList.add('active');
+      _switchBalanceSubTab(btn.dataset.btab);
+    });
+  });
+}
+
+function _switchBalanceSubTab(btab) {
+  const bergContent  = document.getElementById('balance-berg-content');
+  const rombergEl    = document.getElementById('romberg-interface');
+  if (btab === 'berg') {
+    if (bergContent) bergContent.style.display = '';
+    if (rombergEl)   rombergEl.style.display = 'none';
+    _renderBergContent();
+  } else if (btab === 'romberg') {
+    if (bergContent) bergContent.style.display = 'none';
+    if (rombergEl)   { rombergEl.style.display = 'block'; renderRombergInterface(); }
+  }
+}
+
+function _renderBergContent() {
+  const bergContent = document.getElementById('balance-berg-content');
+  if (!bergContent) return;
+  const selectedPatient = document.getElementById('assess-patient-select')?.value || '';
+  let data = DB.assessments.filter(a => a.type.includes('Berg'));
+  if (selectedPatient) data = data.filter(a => a.patientId === selectedPatient);
+
+  if (data.length === 0) {
+    bergContent.innerHTML = '<div style="text-align:center;padding:40px;color:var(--gray-400)">無 Berg 平衡量表記錄</div>';
+    return;
+  }
+
+  bergContent.innerHTML = `
+    <table class="data-table" style="width:100%;">
+      <thead><tr>
+        <th>日期</th><th>病人</th><th>評估項目</th>
+        <th>分數</th><th>進步幅度</th><th>評估者</th>
+      </tr></thead>
+      <tbody>
+        ${data.map(a => {
+          const pt   = getPatient(a.patientId);
+          const diff = a.score - a.prev;
+          const diffLabel = diff > 0
+            ? `<span style="color:var(--success)">↑ +${diff}</span>`
+            : diff < 0
+              ? `<span style="color:var(--danger)">↓ ${diff}</span>`
+              : '<span style="color:var(--gray-400)">—</span>';
+          return `<tr>
+            <td>${formatDate(a.date)}</td>
+            <td>${pt ? pt.name : a.patientId}</td>
+            <td>${a.type}</td>
+            <td><strong>${a.score}</strong><span style="color:var(--gray-400);font-size:11px"> /${a.maxScore}</span></td>
+            <td>${diffLabel}</td>
+            <td>${a.therapist}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+// ===== ROMBERG TAB =====
+let _btracksData = null; // parsed BTrackS HTML report data
+
+function renderRombergInterface() {
+  const container = document.getElementById('romberg-interface');
+  if (!container) return;
+  if (container.querySelector('#romberg-compute-btn')) return;
+
+  container.innerHTML = `
+    <div class="card">
+      <div class="card-header">
+        <h3>⚖️ Romberg 測試</h3>
+        <span class="bcf-section-hint">輸入平衡測試數值 → 自動定位前庭／本體感覺病灶並生成處方</span>
+      </div>
+      <div style="padding:20px;max-width:560px;">
+
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label">數據來源</label>
+          <select class="select" id="romberg-source">
+            <option value="manual">手動輸入</option>
+            <option value="btracks_html">BTrackS HTML 報告</option>
+          </select>
+        </div>
+
+        <div id="btracks-upload-zone" style="display:none;margin-bottom:14px;">
+          <label class="form-label">BTrackS HTML 報告</label>
+          <div id="btracks-dropzone" style="border:2px dashed #e5e7eb;border-radius:8px;padding:20px;text-align:center;cursor:pointer;background:#f9fafb;transition:border-color .15s;">
+            <div style="font-size:2em;margin-bottom:6px;">📄</div>
+            <div style="font-size:13px;color:#374151;font-weight:500;">拖曳或點擊上傳 BTrackS HTML 報告</div>
+            <div style="font-size:11px;color:#9ca3af;margin-top:3px;">支援 .html / .htm 格式</div>
+            <input type="file" id="btracks-file-input" accept=".html,.htm" style="display:none;">
+          </div>
+          <div id="btracks-parsed-summary" style="display:none;margin-top:10px;padding:12px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe;font-size:13px;"></div>
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label">偏移方向 Sway Direction</label>
+          <select class="select" id="romberg-direction">
+            <option value="">— 選擇 —</option>
+            <optgroup label="重心偏移">
+              <option value="RF">RF 右前</option>
+              <option value="RB">RB 右後</option>
+              <option value="PR">PR 純右</option>
+              <option value="PL">PL 純左</option>
+              <option value="LF">LF 左前</option>
+              <option value="LB">LB 左後</option>
+              <option value="PF">PF 正前</option>
+              <option value="PBk">PBk 正後</option>
+            </optgroup>
+          </select>
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label">張眼路徑長度 Path Length (EO) cm</label>
+          <input type="number" class="input" id="romberg-path-eo" min="0" step="0.1" placeholder="例：25.3">
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label">閉眼路徑長度 Path Length (EC) cm</label>
+          <input type="number" class="input" id="romberg-path-ec" min="0" step="0.1" placeholder="例：54.8">
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label">RQ（自動計算）</label>
+          <span id="romberg-rq-display" style="font-size:1.4em;font-weight:bold;vertical-align:middle;">—</span>
+          <span id="romberg-mode-badge" style="margin-left:12px;padding:3px 10px;border-radius:4px;font-size:13px;font-weight:600;vertical-align:middle;"></span>
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label">Jerk Index（選填）</label>
+          <input type="number" class="input" id="romberg-jerk" min="0" step="0.1" placeholder="選填">
+        </div>
+
+        <div class="form-group" style="margin-bottom:20px;">
+          <label class="form-label">RightEye Vertical Pursuit（選填）</label>
+          <select class="select" id="romberg-righteye-vertical">
+            <option value="">— 未輸入 —</option>
+            <option value="Normal">Normal</option>
+            <option value="Abnormal">Abnormal</option>
+          </select>
+        </div>
+
+        <button id="romberg-compute-btn" class="btn btn-primary" style="width:100%;">生成診斷與處方</button>
+
+        <div id="romberg-result" style="display:none;margin-top:24px;"></div>
+      </div>
+    </div>
+  `;
+
+  ['romberg-path-eo', 'romberg-path-ec'].forEach(id => {
+    document.getElementById(id).addEventListener('input', _rombergUpdateRq);
+  });
+
+  document.getElementById('romberg-compute-btn').addEventListener('click', _rombergCompute);
+  document.getElementById('romberg-source').addEventListener('change', _onRombergSourceChange);
+  const _btDropzone  = document.getElementById('btracks-dropzone');
+  const _btFileInput = document.getElementById('btracks-file-input');
+  _btDropzone.addEventListener('click', () => _btFileInput.click());
+  _btDropzone.addEventListener('dragover',  e => { e.preventDefault(); _btDropzone.style.borderColor = '#2563eb'; });
+  _btDropzone.addEventListener('dragleave', () => { _btDropzone.style.borderColor = '#e5e7eb'; });
+  _btDropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    _btDropzone.style.borderColor = '#e5e7eb';
+    if (e.dataTransfer.files[0]) _handleBTrackSFile(e.dataTransfer.files[0]);
+  });
+  _btFileInput.addEventListener('change', e => { if (e.target.files[0]) _handleBTrackSFile(e.target.files[0]); });
+}
+
+function _onRombergSourceChange() {
+  const src  = document.getElementById('romberg-source').value;
+  const zone = document.getElementById('btracks-upload-zone');
+  if (zone) zone.style.display = src === 'btracks_html' ? 'block' : 'none';
+  if (src !== 'btracks_html') _btracksData = null;
+}
+
+function _handleBTrackSFile(file) {
+  if (!file.name.match(/\.html?$/i)) {
+    showToast('請上傳 .html 格式的 BTrackS 報告', 'error');
+    return;
+  }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const parsed = parseBTrackSReport(e.target.result);
+    _btracksData = parsed;
+
+    const eoEl = document.getElementById('romberg-path-eo');
+    const ecEl = document.getElementById('romberg-path-ec');
+    if (parsed.path_std !== null && eoEl) eoEl.value = parsed.path_std;
+    if (parsed.path_ves !== null && ecEl) ecEl.value = parsed.path_ves;
+    _rombergUpdateRq();
+
+    const dir = _btracksAngleDirection(parsed.cop_ap_ves, parsed.cop_ang_ves);
+    if (dir) {
+      const dirEl = document.getElementById('romberg-direction');
+      if (dirEl) dirEl.value = dir;
+    }
+
+    const summary = document.getElementById('btracks-parsed-summary');
+    if (summary) {
+      const rq = parsed.path_std && parsed.path_ves
+        ? (parsed.path_ves / parsed.path_std).toFixed(2) : '—';
+      const v = k => parsed[k] !== null && parsed[k] !== undefined ? parsed[k] : '—';
+      const errMsg = parsed.errors.length
+        ? `<div style="color:#dc2626;margin-top:8px;font-size:11px;">⚠️ 未找到欄位：${parsed.errors.join('、')}，請手動補全</div>`
+        : '';
+      summary.style.display = 'block';
+      summary.innerHTML = `
+        <div style="font-weight:600;color:#1d4ed8;margin-bottom:8px;">📊 BTrackS 解析結果</div>
+        <table style="width:100%;font-size:12px;border-collapse:collapse;">
+          <tr style="background:#dbeafe;font-weight:600;">
+            <td style="padding:4px 6px;">條件</td>
+            <td style="padding:4px 6px;text-align:right;">Path (cm)</td>
+            <td style="padding:4px 6px;text-align:right;">ML (cm)</td>
+            <td style="padding:4px 6px;text-align:right;">AP (cm)</td>
+            <td style="padding:4px 6px;text-align:right;">Ang (°)</td>
+          </tr>
+          ${['std','pro','vis','ves'].map(c => `
+          <tr style="${c==='ves' ? 'font-weight:600;background:#eff6ff;' : ''}">
+            <td style="padding:3px 6px;">${c.toUpperCase()}</td>
+            <td style="padding:3px 6px;text-align:right;">${v('path_'+c)}</td>
+            <td style="padding:3px 6px;text-align:right;">${v('cop_ml_'+c)}</td>
+            <td style="padding:3px 6px;text-align:right;">${v('cop_ap_'+c)}</td>
+            <td style="padding:3px 6px;text-align:right;">${v('cop_ang_'+c)}</td>
+          </tr>`).join('')}
+        </table>
+        <div style="margin-top:8px;display:flex;gap:16px;flex-wrap:wrap;font-size:13px;">
+          <span>RQ = <strong>${rq}</strong></span>
+          ${dir ? `<span>偏移方向：<strong style="color:#1d4ed8;">${dir}</strong>（請確認）</span>` : ''}
+        </div>
+        ${errMsg}
+      `;
+    }
+
+    if (parsed.errors.length === 0) {
+      showToast('BTrackS 報告解析成功，已自動填入數值', 'success');
+      if (dir && parsed.path_std && parsed.path_ves) {
+        setTimeout(() => _rombergCompute(), 150);
+      }
+    } else {
+      showToast('BTrackS 報告部分解析，缺少：' + parsed.errors.join('、') + '，請手動補全', 'error');
+    }
+  };
+  reader.readAsText(file);
+}
+
+// parseBTrackSReport — parses BTrackS HTML reports with STD/PRO/VIS/VES conditions
+function parseBTrackSReport(htmlText) {
+  const doc = new DOMParser().parseFromString(htmlText, 'text/html');
+  const result = {
+    path_std: null, path_pro: null, path_vis: null, path_ves: null,
+    cop_ml_std: null, cop_ap_std: null, cop_ang_std: null,
+    cop_ml_pro: null, cop_ap_pro: null, cop_ang_pro: null,
+    cop_ml_vis: null, cop_ap_vis: null, cop_ang_vis: null,
+    cop_ml_ves: null, cop_ap_ves: null, cop_ang_ves: null,
+    errors: []
+  };
+
+  const extractNum = cell => {
+    if (!cell) return null;
+    const m = (cell.textContent || '').match(/-?\d+\.?\d*/);
+    return m ? parseFloat(m[0]) : null;
+  };
+  const norm = t => (t || '').toLowerCase().replace(/\s+/g, ' ').trim();
+
+  const getRowCond = rowText => {
+    const t = norm(rowText);
+    // Abbreviations checked in specificity order to avoid VES matching VIS
+    if (/\bves\b/.test(t)) return 'ves';
+    if (/\bvis\b/.test(t)) return 'vis';
+    if (/\bpro\b/.test(t)) return 'pro';
+    if (/\bstd\b/.test(t)) return 'std';
+    if (/vestibular/.test(t)) return 'ves';
+    if (/visual/.test(t)) return 'vis';
+    if (/proprioception|proprioceptive/.test(t)) return 'pro';
+    if (/standard/.test(t)) return 'std';
+    return null;
+  };
+
+  for (const table of doc.querySelectorAll('table')) {
+    const rows = Array.from(table.querySelectorAll('tr'));
+    if (rows.length < 2) continue;
+
+    const headerRow = rows.find(r => r.querySelector('th')) || rows[0];
+    const headerCells = Array.from(headerRow.querySelectorAll('th, td'));
+    const headerTexts = headerCells.map(c => norm(c.textContent));
+
+    const colPath = headerTexts.findIndex(t => t.includes('path'));
+    const colML   = headerTexts.findIndex(t => /\bml\b/.test(t) || t.includes('medial'));
+    const colAP   = headerTexts.findIndex(t => /\bap\b/.test(t) || t.includes('anterior'));
+    const colAng  = headerTexts.findIndex(t => /\bang\b/.test(t) || t.includes('angle') || t.includes('deg'));
+
+    const isPathTable = colPath >= 0;
+    const isCopTable  = colML >= 0 || colAP >= 0 || colAng >= 0;
+    if (!isPathTable && !isCopTable) continue;
+
+    for (const row of rows) {
+      if (row === headerRow) continue;
+      const cond = getRowCond(row.textContent);
+      if (!cond) continue;
+
+      const cells = Array.from(row.querySelectorAll('td'));
+      if (!cells.length) continue;
+
+      if (isPathTable && colPath >= 0 && cells.length > colPath) {
+        const v = extractNum(cells[colPath]);
+        if (v !== null) result[`path_${cond}`] = v;
+      }
+      if (isCopTable) {
+        if (colML  >= 0 && cells.length > colML)  { const v = extractNum(cells[colML]);  if (v !== null) result[`cop_ml_${cond}`]  = v; }
+        if (colAP  >= 0 && cells.length > colAP)  { const v = extractNum(cells[colAP]);  if (v !== null) result[`cop_ap_${cond}`]  = v; }
+        if (colAng >= 0 && cells.length > colAng) { const v = extractNum(cells[colAng]); if (v !== null) result[`cop_ang_${cond}`] = v; }
+      }
+    }
+  }
+
+  // Fallback: line-by-line text scan for path lengths when tables yield nothing
+  if (result.path_std === null && result.path_ves === null) {
+    const text = doc.body?.textContent || htmlText;
+    const condPats = {
+      std: /\bstd\b|\bstandard\b/i, pro: /\bpro\b|\bproprioception\b/i,
+      vis: /\bvis\b|\bvisual\b/i,   ves: /\bves\b|\bvestibular\b/i
+    };
+    for (const line of text.split('\n')) {
+      for (const [c, pat] of Object.entries(condPats)) {
+        if (pat.test(line) && result[`path_${c}`] === null) {
+          const nums = [...line.matchAll(/-?\d+\.?\d*/g)].map(m => parseFloat(m[0])).filter(n => n > 0);
+          if (nums.length >= 1) result[`path_${c}`] = nums[0];
+        }
+      }
+    }
+  }
+
+  // Required fields for auto-fill — missing ones surfaced as errors
+  ['path_std', 'path_ves', 'cop_ap_ves', 'cop_ang_ves'].forEach(key => {
+    if (result[key] === null) result.errors.push(key);
+  });
+
+  return result;
+}
+
+// Direction from VES COP: |AP| < 2 means near-neutral AP → pure lateral if angled
+function _btracksAngleDirection(ap, ang) {
+  if (ap === null || ang === null) return '';
+  if (Math.abs(ap) < 2) {
+    if (ang > 15)  return 'PR';
+    if (ang < -15) return 'PL';
+    return '';
+  }
+  if (ap > 0 && ang > 15)   return 'RF';
+  if (ap > 0 && ang < -15)  return 'LF';
+  if (ap > 0)               return 'PF';
+  if (ap < 0 && ang > 15)   return 'RB';
+  if (ap < 0 && ang < -15)  return 'LB';
+  return 'PBk';
+}
+
+function _renderRombergResultHTML(result) {
+  const modeColor = result.mode === 'FAILURE' ? '#C05621' : '#065F46';
+  const modeBg    = result.mode === 'FAILURE' ? '#FCE4D6' : '#D1FAE5';
+  const modeLabel = result.mode === 'FAILURE' ? '失效模式 FAILURE' : '代償模式 COMPENSATORY';
+  const diagLabel = result.diagnosis.canal || '';
+
+  const alertsHTML = result.diagnosis.alerts.length
+    ? `<div style="margin-top:10px;">${result.diagnosis.alerts.map(a =>
+        `<div style="background:#FEF3C7;border-left:3px solid #D97706;padding:6px 10px;margin-bottom:6px;border-radius:3px;font-size:13px;">⚠️ ${a}</div>`
+      ).join('')}</div>` : '';
+
+  const plan = result.training_plan;
+  const trainingHTML = plan ? `
+    <div style="margin-top:16px;border:1px solid #bfdbfe;border-radius:8px;overflow:hidden;">
+      <div style="background:#1d4ed8;color:#fff;padding:8px 14px;font-weight:600;font-size:13px;">📋 ${plan.label || '處方計劃'}</div>
+      <div style="padding:12px 14px;background:#eff6ff;">
+        <ol style="margin:0 0 10px 18px;padding:0;font-size:13px;color:#1e3a5f;line-height:1.7;">
+          ${(plan.exercises || []).map(ex => `<li>${ex}</li>`).join('')}
+        </ol>
+        ${plan.frequency || plan.duration_weeks ? `
+        <div style="display:flex;gap:20px;font-size:12px;color:#2563eb;border-top:1px solid #bfdbfe;padding-top:8px;margin-top:4px;">
+          ${plan.frequency ? `<span>頻率：<strong>${plan.frequency}</strong></span>` : ''}
+          ${plan.duration_weeks ? `<span>療程：<strong>${plan.duration_weeks} 週</strong></span>` : ''}
+        </div>` : ''}
+      </div>
+    </div>` : '';
+
+  return `
+    <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:18px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <span style="font-size:1.6em;font-weight:700;">RQ ${result.rq}</span>
+        <span style="padding:4px 12px;border-radius:4px;background:${modeBg};color:${modeColor};font-weight:600;font-size:13px;">${modeLabel}</span>
+      </div>
+      <div style="margin-bottom:6px;"><strong>偏移方向：</strong>${result.sway_direction}</div>
+      <div style="margin-bottom:6px;"><strong>前庭定位：</strong>${diagLabel}</div>
+      <div style="margin-bottom:6px;"><strong>臨床標籤：</strong>${result.diagnosis.label}</div>
+      <div style="margin-bottom:6px;"><strong>信心分數：</strong>${(result.diagnosis.confidence * 100).toFixed(0)}%</div>
+      ${result.btracks_data?.sway_velocity ? `<div style="margin-bottom:6px;"><strong>EC Sway Velocity：</strong>${result.btracks_data.sway_velocity.toFixed(2)} cm/s</div>` : ''}
+      ${alertsHTML}
+      ${trainingHTML}
+      <div style="margin-top:12px;font-size:11px;color:#9ca3af;">Prescription Key: ${result.prescription_key}</div>
+    </div>`;
+}
+
+function _rombergUpdateRq() {
+  const eo = parseFloat(document.getElementById('romberg-path-eo').value);
+  const ec = parseFloat(document.getElementById('romberg-path-ec').value);
+  const display = document.getElementById('romberg-rq-display');
+  const badge   = document.getElementById('romberg-mode-badge');
+  if (eo > 0 && ec > 0) {
+    const rq = ec / eo;
+    display.textContent = rq.toFixed(2);
+    if (rq >= ROMBERG_CONFIG.rq_threshold) {
+      badge.textContent = '失效模式';
+      badge.style.background = '#FCE4D6';
+      badge.style.color = '#C05621';
+    } else {
+      badge.textContent = '代償模式';
+      badge.style.background = '#D1FAE5';
+      badge.style.color = '#065F46';
+    }
+  } else {
+    display.textContent = '—';
+    badge.textContent = '';
+    badge.style.background = '';
+  }
+}
+
+function _rombergCompute() {
+  const direction = document.getElementById('romberg-direction').value;
+  const eo = parseFloat(document.getElementById('romberg-path-eo').value);
+  const ec = parseFloat(document.getElementById('romberg-path-ec').value);
+  const jerk = document.getElementById('romberg-jerk').value;
+  const reVertical = document.getElementById('romberg-righteye-vertical').value;
+  const source = document.getElementById('romberg-source').value;
+
+  if (!direction) { showToast('請選擇偏移方向', 'error'); return; }
+  if (!(eo > 0) || !(ec > 0)) { showToast('請輸入有效的張眼與閉眼路徑長度', 'error'); return; }
+
+  const result = computeRombergRx({
+    source_type: source,
+    sway_direction: direction,
+    path_eyes_open: eo,
+    path_eyes_closed: ec,
+    rq_override: null,
+    jerk_index: jerk !== '' ? parseFloat(jerk) : null,
+    righteye_pursuit_vertical: reVertical || null,
+    btracks_cop_x: _btracksData?.cop_ml_ves ?? null,
+    btracks_cop_y: _btracksData?.cop_ap_ves ?? null,
+    btracks_sway_velocity: null,
+  });
+
+  if (result.error) { showToast(result.error, 'error'); return; }
+
+  const resultEl = document.getElementById('romberg-result');
+  resultEl.style.display = 'block';
+  resultEl.innerHTML = _renderRombergResultHTML(result);
+}
+
+// ===== MODAL ROMBERG HELPERS =====
+let _mBtracksData = null;
+
+function _mOnRombergSourceChange() {
+  const src  = document.getElementById('modal-romberg-source').value;
+  const zone = document.getElementById('modal-btracks-dropzone-wrap');
+  if (zone) zone.style.display = src === 'btracks_html' ? 'block' : 'none';
+  if (src !== 'btracks_html') _mBtracksData = null;
+}
+
+function _mRombergUpdateRq() {
+  const eo = parseFloat(document.getElementById('modal-romberg-path-eo')?.value);
+  const ec = parseFloat(document.getElementById('modal-romberg-path-ec')?.value);
+  const display = document.getElementById('modal-romberg-rq-display');
+  const badge   = document.getElementById('modal-romberg-mode-badge');
+  if (!display) return;
+  if (eo > 0 && ec > 0) {
+    const rq = ec / eo;
+    display.textContent = rq.toFixed(2);
+    if (rq >= ROMBERG_CONFIG.rq_threshold) {
+      badge.textContent = '失效模式'; badge.style.background = '#FCE4D6'; badge.style.color = '#C05621';
+    } else {
+      badge.textContent = '代償模式'; badge.style.background = '#D1FAE5'; badge.style.color = '#065F46';
+    }
+  } else {
+    display.textContent = '—'; badge.textContent = ''; badge.style.background = '';
+  }
+}
+
+function _mBTrackSFile(file) {
+  if (!file.name.match(/\.html?$/i)) { showToast('請上傳 .html 格式的 BTrackS 報告', 'error'); return; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const parsed = parseBTrackSReport(e.target.result);
+    _mBtracksData = parsed;
+
+    const eoEl  = document.getElementById('modal-romberg-path-eo');
+    const ecEl  = document.getElementById('modal-romberg-path-ec');
+    const dirEl = document.getElementById('modal-romberg-direction');
+    if (parsed.path_std !== null && eoEl) eoEl.value = parsed.path_std;
+    if (parsed.path_ves !== null && ecEl) ecEl.value = parsed.path_ves;
+    _mRombergUpdateRq();
+
+    const dir = _btracksAngleDirection(parsed.cop_ap_ves, parsed.cop_ang_ves);
+    if (dir && dirEl) dirEl.value = dir;
+
+    const summary = document.getElementById('modal-btracks-summary');
+    if (summary) {
+      const rq = parsed.path_std && parsed.path_ves ? (parsed.path_ves / parsed.path_std).toFixed(2) : '—';
+      const v = k => parsed[k] !== null && parsed[k] !== undefined ? parsed[k] : '—';
+      const errMsg = parsed.errors.length
+        ? `<div style="color:#dc2626;margin-top:8px;font-size:11px;">⚠️ 未找到欄位：${parsed.errors.join('、')}，請手動補全</div>`
+        : '';
+      summary.style.display = 'block';
+      summary.innerHTML = `
+        <div style="font-weight:600;color:#1d4ed8;margin-bottom:8px;">📊 BTrackS 解析結果</div>
+        <table style="width:100%;font-size:12px;border-collapse:collapse;">
+          <tr style="background:#dbeafe;font-weight:600;">
+            <td style="padding:4px 6px;">條件</td>
+            <td style="padding:4px 6px;text-align:right;">Path (cm)</td>
+            <td style="padding:4px 6px;text-align:right;">ML (cm)</td>
+            <td style="padding:4px 6px;text-align:right;">AP (cm)</td>
+            <td style="padding:4px 6px;text-align:right;">Ang (°)</td>
+          </tr>
+          ${['std','pro','vis','ves'].map(c => `
+          <tr style="${c==='ves' ? 'font-weight:600;background:#eff6ff;' : ''}">
+            <td style="padding:3px 6px;">${c.toUpperCase()}</td>
+            <td style="padding:3px 6px;text-align:right;">${v('path_'+c)}</td>
+            <td style="padding:3px 6px;text-align:right;">${v('cop_ml_'+c)}</td>
+            <td style="padding:3px 6px;text-align:right;">${v('cop_ap_'+c)}</td>
+            <td style="padding:3px 6px;text-align:right;">${v('cop_ang_'+c)}</td>
+          </tr>`).join('')}
+        </table>
+        <div style="margin-top:8px;display:flex;gap:16px;flex-wrap:wrap;font-size:13px;">
+          <span>RQ = <strong>${rq}</strong></span>
+          ${dir ? `<span>偏移方向：<strong style="color:#1d4ed8;">${dir}</strong>（請確認）</span>` : ''}
+        </div>
+        ${errMsg}
+      `;
+    }
+
+    if (parsed.errors.length === 0) {
+      showToast('BTrackS 報告解析成功，已自動填入數值', 'success');
+      if (dir && parsed.path_std && parsed.path_ves) setTimeout(() => _mRombergCompute(), 150);
+    } else {
+      showToast('BTrackS 報告部分解析，缺少：' + parsed.errors.join('、') + '，請手動補全', 'error');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function _mRombergCompute() {
+  const direction = document.getElementById('modal-romberg-direction')?.value;
+  const eo = parseFloat(document.getElementById('modal-romberg-path-eo')?.value);
+  const ec = parseFloat(document.getElementById('modal-romberg-path-ec')?.value);
+  const jerk = document.getElementById('modal-romberg-jerk')?.value;
+  const reVertical = document.getElementById('modal-romberg-righteye-vertical')?.value;
+  const source = document.getElementById('modal-romberg-source')?.value;
+
+  if (!direction) { showToast('請選擇偏移方向', 'error'); return; }
+  if (!(eo > 0) || !(ec > 0)) { showToast('請輸入有效的張眼與閉眼路徑長度', 'error'); return; }
+
+  const result = computeRombergRx({
+    source_type: source,
+    sway_direction: direction,
+    path_eyes_open: eo,
+    path_eyes_closed: ec,
+    rq_override: null,
+    jerk_index: jerk !== '' ? parseFloat(jerk) : null,
+    righteye_pursuit_vertical: reVertical || null,
+    btracks_cop_x: _mBtracksData?.cop_ml_ves ?? null,
+    btracks_cop_y: _mBtracksData?.cop_ap_ves ?? null,
+    btracks_sway_velocity: null,
+  });
+
+  if (result.error) { showToast(result.error, 'error'); return; }
+
+  const resultEl = document.getElementById('modal-romberg-result');
+  if (!resultEl) return;
+  resultEl.style.display = 'block';
+  resultEl.innerHTML = _renderRombergResultHTML(result);
+}
+
+// ===== ASSESSMENTS =====
+function _switchAssessTab(tab) {
+  const tableCard  = document.getElementById('assessmentsTableCard');
+  const bcfEl      = document.getElementById('bcf-interface');
+  const reEl       = document.getElementById('righteye-interface');
+  const balanceEl  = document.getElementById('balance-interface');
   const pageActions = document.querySelector('#page-assessments .page-actions');
 
+  if (tab === 'balance') {
+    if (tableCard)  tableCard.style.display = 'none';
+    if (bcfEl)      bcfEl.style.display = 'none';
+    if (reEl)       reEl.style.display = 'none';
+    if (pageActions) pageActions.style.display = 'none';
+    if (balanceEl)  { balanceEl.style.setProperty('display', 'block', 'important'); renderBalanceInterface(); }
+    return;
+  }
+  if (tab === 'bcf') {
+    if (tableCard)  tableCard.style.display = 'none';
+    if (reEl)       reEl.style.display = 'none';
+    if (balanceEl)  balanceEl.style.display = 'none';
+    if (pageActions) pageActions.style.display = 'none';
+    if (bcfEl)      { bcfEl.style.display = 'block'; renderBCFInterface(); }
+    return;
+  }
+  if (tab === 'righteye') {
+    if (tableCard)  tableCard.style.display = 'none';
+    if (bcfEl)      bcfEl.style.display = 'none';
+    if (balanceEl)  balanceEl.style.display = 'none';
+    if (pageActions) pageActions.style.display = 'none';
+    if (reEl)       { reEl.style.display = 'block'; renderRightEyeInterface(); }
+    return;
+  }
+  // Table tabs (cognitive / motor / language / default)
+  if (tableCard)  tableCard.style.display = '';
+  if (bcfEl)      bcfEl.style.display = 'none';
+  if (reEl)       reEl.style.display = 'none';
+  if (balanceEl)  balanceEl.style.display = 'none';
+  if (pageActions) pageActions.style.display = '';
+  renderAssessments();
+}
+
+function renderAssessments() {
+  const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab || '';
+  const tableCard  = document.getElementById('assessmentsTableCard');
+  const bcfEl      = document.getElementById('bcf-interface');
+  const reEl       = document.getElementById('righteye-interface');
+  const balanceEl  = document.getElementById('balance-interface');
+  const pageActions = document.querySelector('#page-assessments .page-actions');
+
+  // Special-interface tabs — these must NOT be gated by tbody existence
   if (activeTab === 'bcf') {
-    if (tableCard) tableCard.style.display = 'none';
-    if (bcfEl) { bcfEl.style.display = 'block'; renderBCFInterface(); }
-    if (reEl) reEl.style.display = 'none';
+    if (tableCard)  tableCard.style.display = 'none';
+    if (bcfEl)      { bcfEl.style.display = 'block'; renderBCFInterface(); }
+    if (reEl)       reEl.style.display = 'none';
+    if (balanceEl)  balanceEl.style.display = 'none';
     if (pageActions) pageActions.style.display = 'none';
     return;
   }
 
   if (activeTab === 'righteye') {
-    if (tableCard) tableCard.style.display = 'none';
-    if (bcfEl) bcfEl.style.display = 'none';
-    if (reEl) { reEl.style.display = 'block'; renderRightEyeInterface(); }
+    if (tableCard)  tableCard.style.display = 'none';
+    if (bcfEl)      bcfEl.style.display = 'none';
+    if (reEl)       { reEl.style.display = 'block'; renderRightEyeInterface(); }
+    if (balanceEl)  balanceEl.style.display = 'none';
     if (pageActions) pageActions.style.display = 'none';
     return;
   }
 
-  if (tableCard) tableCard.style.display = '';
-  if (bcfEl) bcfEl.style.display = 'none';
-  if (reEl) reEl.style.display = 'none';
+  if (activeTab === 'balance') {
+    if (tableCard)  tableCard.style.display = 'none';
+    if (bcfEl)      bcfEl.style.display = 'none';
+    if (reEl)       reEl.style.display = 'none';
+    if (balanceEl)  { balanceEl.style.display = 'block'; renderBalanceInterface(); }
+    if (pageActions) pageActions.style.display = 'none';
+    return;
+  }
+
+  // Default: table view
+  if (tableCard)  tableCard.style.display = '';
+  if (bcfEl)      bcfEl.style.display = 'none';
+  if (reEl)       reEl.style.display = 'none';
+  if (balanceEl)  balanceEl.style.display = 'none';
   if (pageActions) pageActions.style.display = '';
 
-  const tabTypeMap = { cognitive: ['MMSE','MoCA'], motor: ['Fugl-Meyer'], balance: ['Berg'], language: ['Barthel','語言'] };
+  const tbody = document.getElementById('assessmentsTableBody');
+  if (!tbody) return;
+
+  const tabTypeMap = { cognitive: ['MMSE','MoCA'], motor: ['Fugl-Meyer'], language: ['Barthel','語言'] };
 
   let data = DB.assessments;
   const selectedPatient = document.getElementById('assess-patient-select')?.value;
@@ -4619,6 +5415,93 @@ function renderAssessmentForm() {
     barthel: { label: 'Barthel 日常生活指數', items: ['進食 (0-10)', '洗澡 (0-5)', '個人衛生 (0-5)', '穿衣 (0-10)', '大便控制 (0-10)', '小便控制 (0-10)', '如廁 (0-10)', '移位 (0-15)', '行走 (0-15)', '上下樓梯 (0-10)'], max: 100 },
   };
 
+  if (type === 'romberg') {
+    container.innerHTML = `
+      <div class="form-group" style="margin-bottom:14px;">
+        <label class="form-label">數據來源</label>
+        <select class="select" id="modal-romberg-source" onchange="_mOnRombergSourceChange()">
+          <option value="manual">手動輸入</option>
+          <option value="btracks_html">BTrackS HTML 報告</option>
+        </select>
+      </div>
+
+      <div id="modal-btracks-dropzone-wrap" style="display:none;margin-bottom:14px;">
+        <label class="form-label">BTrackS HTML 報告</label>
+        <div id="modal-btracks-dropzone" style="border:2px dashed #e5e7eb;border-radius:8px;padding:20px;text-align:center;cursor:pointer;background:#f9fafb;transition:border-color .15s;">
+          <div style="font-size:2em;margin-bottom:6px;">📄</div>
+          <div style="font-size:13px;color:#374151;font-weight:500;">拖曳或點擊上傳 BTrackS HTML 報告</div>
+          <div style="font-size:11px;color:#9ca3af;margin-top:3px;">支援 .html / .htm 格式</div>
+          <input type="file" id="modal-btracks-file" accept=".html,.htm" style="display:none;">
+        </div>
+        <div id="modal-btracks-summary" style="display:none;margin-top:10px;padding:12px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe;font-size:13px;"></div>
+      </div>
+
+      <div class="form-group" style="margin-bottom:14px;">
+        <label class="form-label">偏移方向 Sway Direction</label>
+        <select class="select" id="modal-romberg-direction">
+          <option value="">— 選擇 —</option>
+          <optgroup label="重心偏移">
+            <option value="RF">RF 右前</option>
+            <option value="RB">RB 右後</option>
+            <option value="PR">PR 純右</option>
+            <option value="PL">PL 純左</option>
+            <option value="LF">LF 左前</option>
+            <option value="LB">LB 左後</option>
+            <option value="PF">PF 正前</option>
+            <option value="PBk">PBk 正後</option>
+          </optgroup>
+        </select>
+      </div>
+
+      <div class="form-group" style="margin-bottom:14px;">
+        <label class="form-label">張眼路徑長度 Path Length (EO) cm</label>
+        <input type="number" class="input" id="modal-romberg-path-eo" min="0" step="0.1" placeholder="例：25.3" oninput="_mRombergUpdateRq()">
+      </div>
+
+      <div class="form-group" style="margin-bottom:14px;">
+        <label class="form-label">閉眼路徑長度 Path Length (EC) cm</label>
+        <input type="number" class="input" id="modal-romberg-path-ec" min="0" step="0.1" placeholder="例：54.8" oninput="_mRombergUpdateRq()">
+      </div>
+
+      <div class="form-group" style="margin-bottom:14px;">
+        <label class="form-label">RQ（自動計算）</label>
+        <span id="modal-romberg-rq-display" style="font-size:1.4em;font-weight:bold;vertical-align:middle;">—</span>
+        <span id="modal-romberg-mode-badge" style="margin-left:12px;padding:3px 10px;border-radius:4px;font-size:13px;font-weight:600;vertical-align:middle;"></span>
+      </div>
+
+      <div class="form-group" style="margin-bottom:14px;">
+        <label class="form-label">Jerk Index（選填）</label>
+        <input type="number" class="input" id="modal-romberg-jerk" min="0" step="0.1" placeholder="選填">
+      </div>
+
+      <div class="form-group" style="margin-bottom:20px;">
+        <label class="form-label">RightEye Vertical Pursuit（選填）</label>
+        <select class="select" id="modal-romberg-righteye-vertical">
+          <option value="">— 未輸入 —</option>
+          <option value="Normal">Normal</option>
+          <option value="Abnormal">Abnormal</option>
+        </select>
+      </div>
+
+      <button class="btn btn-primary" style="width:100%;" onclick="_mRombergCompute()">生成診斷與處方</button>
+
+      <div id="modal-romberg-result" style="display:none;margin-top:24px;"></div>
+    `;
+
+    const dropzone  = document.getElementById('modal-btracks-dropzone');
+    const fileInput = document.getElementById('modal-btracks-file');
+    dropzone.addEventListener('click', () => fileInput.click());
+    dropzone.addEventListener('dragover',  e => { e.preventDefault(); dropzone.style.borderColor = '#2563eb'; });
+    dropzone.addEventListener('dragleave', () => { dropzone.style.borderColor = '#e5e7eb'; });
+    dropzone.addEventListener('drop', e => {
+      e.preventDefault();
+      dropzone.style.borderColor = '#e5e7eb';
+      if (e.dataTransfer.files[0]) _mBTrackSFile(e.dataTransfer.files[0]);
+    });
+    fileInput.addEventListener('change', e => { if (e.target.files[0]) _mBTrackSFile(e.target.files[0]); });
+    return;
+  }
+
   const f = forms[type];
   if (!f) { container.innerHTML = ''; return; }
 
@@ -4652,12 +5535,33 @@ async function saveAssessment() {
   const date = document.getElementById('a-date').value;
   const type = document.getElementById('a-type').value;
   const totalEl = document.getElementById('totalScore');
-  const score = totalEl ? parseInt(totalEl.textContent) : 0;
 
   if (!patientId || !type) { showToast('請填寫必填欄位', 'error'); return; }
 
-  const maxMap = { mmse: 30, moca: 30, fugl: 226, berg: 56, barthel: 100 };
-  const typeNames = { mmse: 'MMSE 簡易心智狀態測驗', moca: 'MoCA 蒙特利爾認知評估', fugl: 'Fugl-Meyer 運動評估', berg: 'Berg 平衡量表', barthel: 'Barthel 日常生活指數' };
+  const maxMap = { mmse: 30, moca: 30, fugl: 226, berg: 56, barthel: 100, romberg: 10 };
+  const typeNames = { mmse: 'MMSE 簡易心智狀態測驗', moca: 'MoCA 蒙特利爾認知評估', fugl: 'Fugl-Meyer 運動評估', berg: 'Berg 平衡量表', barthel: 'Barthel 日常生活指數', romberg: 'Romberg 測試（BTrackS）' };
+
+  let score, extraData = {};
+  if (type === 'romberg') {
+    const eo = parseFloat(document.getElementById('modal-romberg-path-eo')?.value);
+    const ec = parseFloat(document.getElementById('modal-romberg-path-ec')?.value);
+    const rq = (eo > 0 && ec > 0) ? parseFloat((ec / eo).toFixed(2)) : 0;
+    const direction = document.getElementById('modal-romberg-direction')?.value || '';
+    score = rq;
+    extraData = {
+      rq,
+      sway_direction: direction,
+      path_eo: eo || null,
+      path_ec: ec || null,
+      btracks_data: _mBtracksData ? {
+        path_std: _mBtracksData.path_std, path_pro: _mBtracksData.path_pro,
+        path_vis: _mBtracksData.path_vis, path_ves: _mBtracksData.path_ves,
+        cop_ap_ves: _mBtracksData.cop_ap_ves, cop_ang_ves: _mBtracksData.cop_ang_ves,
+      } : null,
+    };
+  } else {
+    score = totalEl ? parseInt(totalEl.textContent) : 0;
+  }
 
   // Find previous score
   const prev = DB.assessments.filter(a => a.patientId === patientId && a.type === typeNames[type])
@@ -4667,6 +5571,7 @@ async function saveAssessment() {
     id: genId('A'), patientId, date, type: typeNames[type],
     score, maxScore: maxMap[type] || 100, prev,
     therapist: '王小明', notes: document.getElementById('a-notes').value,
+    ...extraData,
   };
   DB.assessments.unshift(rec);
   saveToStorage();
@@ -5104,6 +6009,16 @@ function saveNewPassword(role) {
   showToast(`${roleLabels[role] || role} 密碼已更新`);
 }
 
+// ── Romberg 處方庫 ──────────────────────────────────────────
+let PRESCRIPTIONS = {};
+fetch('./prescriptions.json')
+  .then(r => r.json())
+  .then(data => {
+    PRESCRIPTIONS = data;
+    console.log('[BCF] prescriptions.json loaded:', Object.keys(data).filter(k => !k.startsWith('_')).length, 'entries');
+  })
+  .catch(err => console.warn('[BCF] prescriptions.json load failed:', err));
+
 // ===== EVENT LISTENERS =====
 function initApp() {
   // 根據角色顯示/隱藏導覽項目
@@ -5148,7 +6063,7 @@ function initApp() {
     btn.addEventListener('click', () => {
       document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
       btn.classList.add('active');
-      renderAssessments();
+      _switchAssessTab(btn.dataset.tab);
     });
   });
 

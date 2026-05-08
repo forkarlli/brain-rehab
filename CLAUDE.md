@@ -109,4 +109,6 @@
 
 ### 待完成（優先順序）
 1. RightEye 截圖 AI 自動讀取 → 自動填入表單數值
-2. Intrusion 振幅過濾器（小 = Fixation Stability；大 = Cross-Cord）
+
+### 已完成（近期）
+- Intrusion 振幅過濾器：小振幅 → Flocculus/SC + M1固視穩定處方；大振幅 → Cross-Cord Pathway + M7複合處方

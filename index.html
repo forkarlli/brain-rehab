@@ -382,6 +382,9 @@
         <!-- RightEye Interface -->
         <div id="righteye-interface" style="display:none"></div>
 
+        <!-- Balance Interface (contains Berg history + Romberg sub-tabs) -->
+        <div id="balance-interface" style="display:none"></div>
+
         <!-- Add Assessment Modal -->
         <div class="modal" id="addAssessModal">
           <div class="modal-overlay" onclick="closeModal('addAssessModal')"></div>
@@ -408,6 +411,7 @@
                     <option value="moca">MoCA 蒙特利爾認知評估</option>
                     <option value="fugl">Fugl-Meyer 運動評估</option>
                     <option value="berg">Berg 平衡量表</option>
+                    <option value="romberg">Romberg 測試（BTrackS）</option>
                     <option value="barthel">Barthel 日常生活指數</option>
                   </select>
                 </div>
@@ -801,6 +805,6 @@
   <!-- Toast Notification -->
   <div class="toast" id="toast"></div>
 
-  <script src="app.js?v=20260505"></script>
+  <script src="app.js?v=20260509d"></script>
 </body>
 </html>

@@ -1,0 +1,171 @@
+{
+  "_midline_stability_addon": {
+    "exercises": [
+      "Midline Stability Ball Roll — 3 sets x 10 reps",
+      "Tandem Stance Eyes Closed — 3 x 30s",
+      "Single-leg Balance Perturbation — 3 x 20s"
+    ],
+    "note": "Add when Jerk Index > 3.0"
+  },
+
+  "RF_FAILURE": {
+    "label": "RF Failure — Right Ant. Canal",
+    "exercises": [
+      "Unilateral Vestibular Rehab (Right) — Gaze Stabilization x1 VOR",
+      "Right Side Head Impulse Training — 3 x 20 reps",
+      "Balance Board: Right Anterior Load — 3 x 45s"
+    ],
+    "frequency": "3x/week",
+    "duration_weeks": 4
+  },
+  "RF_COMPENSATORY": {
+    "label": "RF Compensatory — Left Post. Chain",
+    "exercises": [
+      "Left Posterior Chain Spindle Activation — 3 x 15 reps",
+      "Proprioceptive Mat Standing — 3 x 30s",
+      "Posterior Chain Stretch + Activation Sequence"
+    ],
+    "frequency": "3x/week",
+    "duration_weeks": 4
+  },
+
+  "RB_FAILURE": {
+    "label": "RB Failure — Right Post. Canal",
+    "exercises": [
+      "Canalith Repositioning (Right Post. Canal variant)",
+      "Gaze Stabilization — Vertical VOR x1",
+      "Balance Board: Right Posterior Load — 3 x 45s"
+    ],
+    "frequency": "3x/week",
+    "duration_weeks": 4
+  },
+  "RB_COMPENSATORY": {
+    "label": "RB Compensatory — Left Ant. Chain",
+    "exercises": [
+      "Left Anterior Chain Spindle Activation — 3 x 15 reps",
+      "Hip Flexor + Core Activation on Foam — 3 x 30s"
+    ],
+    "frequency": "3x/week",
+    "duration_weeks": 4
+  },
+
+  "PR_FAILURE": {
+    "label": "PR Failure — Right Lateral Canal",
+    "exercises": [
+      "Epley Maneuver (Right Lateral Canal)",
+      "Horizontal Head Turns VOR — 3 x 20 reps",
+      "Lateral Weight Shift on Balance Board — 3 x 30s"
+    ],
+    "frequency": "3x/week",
+    "duration_weeks": 4
+  },
+  "PR_COMPENSATORY": {
+    "label": "PR Compensatory — Left Lateral Chain",
+    "exercises": [
+      "Left Lateral Chain Spindle Activation",
+      "Side-step Balance Training — 3 x 30s"
+    ],
+    "frequency": "3x/week",
+    "duration_weeks": 4
+  },
+
+  "PL_FAILURE": {
+    "label": "PL Failure — Left Lateral Canal",
+    "exercises": [
+      "Epley Maneuver (Left Lateral Canal)",
+      "Horizontal Head Turns VOR (Left) — 3 x 20 reps",
+      "Lateral Weight Shift on Balance Board (Left) — 3 x 30s"
+    ],
+    "frequency": "3x/week",
+    "duration_weeks": 4
+  },
+  "PL_COMPENSATORY": {
+    "label": "PL Compensatory — Right Lateral Chain",
+    "exercises": [
+      "Right Lateral Chain Spindle Activation",
+      "Side-step Balance Training (Right) — 3 x 30s"
+    ],
+    "frequency": "3x/week",
+    "duration_weeks": 4
+  },
+
+  "LF_FAILURE": {
+    "label": "LF Failure — Left Ant. Canal",
+    "exercises": [
+      "Unilateral Vestibular Rehab (Left) — Gaze Stabilization x1 VOR",
+      "Left Side Head Impulse Training — 3 x 20 reps",
+      "Balance Board: Left Anterior Load — 3 x 45s"
+    ],
+    "frequency": "3x/week",
+    "duration_weeks": 4
+  },
+  "LF_COMPENSATORY": {
+    "label": "LF Compensatory — Right Post. Chain",
+    "exercises": [
+      "Right Posterior Chain Spindle Activation — 3 x 15 reps",
+      "Proprioceptive Mat Standing — 3 x 30s"
+    ],
+    "frequency": "3x/week",
+    "duration_weeks": 4
+  },
+
+  "LB_FAILURE": {
+    "label": "LB Failure — Left Post. Canal",
+    "exercises": [
+      "Canalith Repositioning (Left Post. Canal variant)",
+      "Gaze Stabilization — Vertical VOR x1 (Left)",
+      "Balance Board: Left Posterior Load — 3 x 45s"
+    ],
+    "frequency": "3x/week",
+    "duration_weeks": 4
+  },
+  "LB_COMPENSATORY": {
+    "label": "LB Compensatory — Right Ant. Chain",
+    "exercises": [
+      "Right Anterior Chain Spindle Activation — 3 x 15 reps",
+      "Hip Flexor + Core Activation on Foam (Right) — 3 x 30s"
+    ],
+    "frequency": "3x/week",
+    "duration_weeks": 4
+  },
+
+  "PF_FAILURE": {
+    "label": "PF Failure — Bilateral Ant. Canal",
+    "exercises": [
+      "Bilateral Anterior Canal Rehab — Dual VOR Head Nod",
+      "Chin-tuck + Forward Gaze Stabilization — 3 x 20 reps",
+      "Forward Balance Board Tilt — 3 x 30s"
+    ],
+    "frequency": "4x/week",
+    "duration_weeks": 6
+  },
+  "PF_COMPENSATORY": {
+    "label": "PF Compensatory — Bilateral Post. Chain",
+    "exercises": [
+      "Bilateral Posterior Chain Spindle Activation",
+      "Posterior Chain Foam Roll + Activation — 3 x 15 reps"
+    ],
+    "frequency": "3x/week",
+    "duration_weeks": 4
+  },
+
+  "PBk_FAILURE": {
+    "label": "PBk Failure — Bilateral Post. Canal",
+    "exercises": [
+      "Bilateral Posterior Canal Rehab — Vertical VOR Extension",
+      "Head-back Gaze Stabilization — 3 x 20 reps",
+      "Posterior Balance Board Tilt — 3 x 30s"
+    ],
+    "frequency": "4x/week",
+    "duration_weeks": 6
+  },
+  "PBk_COMPENSATORY": {
+    "label": "PBk Compensatory — Bilateral Ant. Chain",
+    "exercises": [
+      "Bilateral Anterior Chain Spindle Activation",
+      "Hip Flexor + Core Anterior Activation — 3 x 15 reps"
+    ],
+    "frequency": "3x/week",
+    "duration_weeks": 4
+  }
+}
