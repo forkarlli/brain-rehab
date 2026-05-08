@@ -4918,7 +4918,7 @@ function _handleBTrackSFiles(files) {
     if (!resp.ok) return resp.json().then(e => Promise.reject(new Error(e.error || resp.statusText)));
     return resp.json();
   }).then(parsed => {
-    _btracksData = { ...parsed, errors: [] };
+    _btracksData = parsed;
 
     const eoEl  = document.getElementById('romberg-path-eo');
     const ecEl  = document.getElementById('romberg-path-ec');
@@ -4934,27 +4934,29 @@ function _handleBTrackSFiles(files) {
     const v = k => parsed[k] != null ? parsed[k] : '—';
     if (summary) {
       summary.innerHTML = `
-        <div style="font-weight:600;color:#1d4ed8;margin-bottom:8px;">📊 BTrackS 解析結果</div>
+        <div style="font-weight:600;color:#1d4ed8;margin-bottom:8px;">📊 BTrackS AI 解析結果</div>
         <table style="width:100%;font-size:12px;border-collapse:collapse;">
           <tr style="background:#dbeafe;font-weight:600;">
-            <td style="padding:4px 6px;">條件</td>
-            <td style="padding:4px 6px;text-align:right;">Path (cm)</td>
-            <td style="padding:4px 6px;text-align:right;">ML</td>
-            <td style="padding:4px 6px;text-align:right;">AP</td>
-            <td style="padding:4px 6px;text-align:right;">Ang°</td>
+            <td style="padding:4px 8px;">條件</td>
+            <td style="padding:4px 8px;text-align:right;">Path (cm)</td>
+            <td style="padding:4px 8px;text-align:right;">VES ML</td>
+            <td style="padding:4px 8px;text-align:right;">VES AP</td>
+            <td style="padding:4px 8px;text-align:right;">VES Ang°</td>
           </tr>
-          ${['std','pro','vis','ves'].map(c => `
-          <tr style="${c==='ves' ? 'font-weight:600;background:#eff6ff;' : ''}">
-            <td style="padding:3px 6px;">${c.toUpperCase()}</td>
-            <td style="padding:3px 6px;text-align:right;">${v('path_'+c)}</td>
-            <td style="padding:3px 6px;text-align:right;">${v('cop_ml_'+c)}</td>
-            <td style="padding:3px 6px;text-align:right;">${v('cop_ap_'+c)}</td>
-            <td style="padding:3px 6px;text-align:right;">${v('cop_ang_'+c)}</td>
-          </tr>`).join('')}
+          <tr><td style="padding:3px 8px;">STD</td><td style="padding:3px 8px;text-align:right;">${v('path_std')}</td><td colspan="3"></td></tr>
+          <tr><td style="padding:3px 8px;">PRO</td><td style="padding:3px 8px;text-align:right;">${v('path_pro')}</td><td colspan="3"></td></tr>
+          <tr><td style="padding:3px 8px;">VIS</td><td style="padding:3px 8px;text-align:right;">${v('path_vis')}</td><td colspan="3"></td></tr>
+          <tr style="font-weight:600;background:#eff6ff;">
+            <td style="padding:3px 8px;">VES</td>
+            <td style="padding:3px 8px;text-align:right;">${v('path_ves')}</td>
+            <td style="padding:3px 8px;text-align:right;">${v('cop_ml_ves')}</td>
+            <td style="padding:3px 8px;text-align:right;">${v('cop_ap_ves')}</td>
+            <td style="padding:3px 8px;text-align:right;">${v('cop_ang_ves')}</td>
+          </tr>
         </table>
-        <div style="margin-top:8px;display:flex;gap:16px;flex-wrap:wrap;font-size:13px;">
-          <span>RQ = <strong>${rq}</strong></span>
-          ${dir ? `<span>偏移方向：<strong style="color:#1d4ed8;">${dir}</strong>（請確認）</span>` : ''}
+        <div style="margin-top:10px;display:flex;gap:20px;flex-wrap:wrap;font-size:13px;font-weight:600;">
+          <span>RQ = <strong style="color:#1d4ed8;">${rq}</strong></span>
+          ${dir ? `<span>偏移方向：<strong style="color:#1d4ed8;">${dir}</strong></span>` : '<span style="color:#9ca3af;">方向待計算（請確認 AP/Ang）</span>'}
         </div>`;
     }
     showToast('BTrackS 圖片解析成功，已自動填入數值', 'success');
@@ -5241,27 +5243,29 @@ function _mBTrackSFiles(files) {
     const v = k => parsed[k] != null ? parsed[k] : '—';
     if (summary) {
       summary.innerHTML = `
-        <div style="font-weight:600;color:#1d4ed8;margin-bottom:8px;">📊 BTrackS 解析結果</div>
+        <div style="font-weight:600;color:#1d4ed8;margin-bottom:8px;">📊 BTrackS AI 解析結果</div>
         <table style="width:100%;font-size:12px;border-collapse:collapse;">
           <tr style="background:#dbeafe;font-weight:600;">
-            <td style="padding:4px 6px;">條件</td>
-            <td style="padding:4px 6px;text-align:right;">Path (cm)</td>
-            <td style="padding:4px 6px;text-align:right;">ML</td>
-            <td style="padding:4px 6px;text-align:right;">AP</td>
-            <td style="padding:4px 6px;text-align:right;">Ang°</td>
+            <td style="padding:4px 8px;">條件</td>
+            <td style="padding:4px 8px;text-align:right;">Path (cm)</td>
+            <td style="padding:4px 8px;text-align:right;">VES ML</td>
+            <td style="padding:4px 8px;text-align:right;">VES AP</td>
+            <td style="padding:4px 8px;text-align:right;">VES Ang°</td>
           </tr>
-          ${['std','pro','vis','ves'].map(c => `
-          <tr style="${c==='ves' ? 'font-weight:600;background:#eff6ff;' : ''}">
-            <td style="padding:3px 6px;">${c.toUpperCase()}</td>
-            <td style="padding:3px 6px;text-align:right;">${v('path_'+c)}</td>
-            <td style="padding:3px 6px;text-align:right;">${v('cop_ml_'+c)}</td>
-            <td style="padding:3px 6px;text-align:right;">${v('cop_ap_'+c)}</td>
-            <td style="padding:3px 6px;text-align:right;">${v('cop_ang_'+c)}</td>
-          </tr>`).join('')}
+          <tr><td style="padding:3px 8px;">STD</td><td style="padding:3px 8px;text-align:right;">${v('path_std')}</td><td colspan="3"></td></tr>
+          <tr><td style="padding:3px 8px;">PRO</td><td style="padding:3px 8px;text-align:right;">${v('path_pro')}</td><td colspan="3"></td></tr>
+          <tr><td style="padding:3px 8px;">VIS</td><td style="padding:3px 8px;text-align:right;">${v('path_vis')}</td><td colspan="3"></td></tr>
+          <tr style="font-weight:600;background:#eff6ff;">
+            <td style="padding:3px 8px;">VES</td>
+            <td style="padding:3px 8px;text-align:right;">${v('path_ves')}</td>
+            <td style="padding:3px 8px;text-align:right;">${v('cop_ml_ves')}</td>
+            <td style="padding:3px 8px;text-align:right;">${v('cop_ap_ves')}</td>
+            <td style="padding:3px 8px;text-align:right;">${v('cop_ang_ves')}</td>
+          </tr>
         </table>
-        <div style="margin-top:8px;display:flex;gap:16px;flex-wrap:wrap;font-size:13px;">
-          <span>RQ = <strong>${rq}</strong></span>
-          ${dir ? `<span>偏移方向：<strong style="color:#1d4ed8;">${dir}</strong>（請確認）</span>` : ''}
+        <div style="margin-top:10px;display:flex;gap:20px;flex-wrap:wrap;font-size:13px;font-weight:600;">
+          <span>RQ = <strong style="color:#1d4ed8;">${rq}</strong></span>
+          ${dir ? `<span>偏移方向：<strong style="color:#1d4ed8;">${dir}</strong></span>` : '<span style="color:#9ca3af;">方向待計算（請確認 AP/Ang）</span>'}
         </div>`;
     }
     showToast('BTrackS 圖片解析成功，已自動填入數值', 'success');
