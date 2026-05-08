@@ -4661,6 +4661,16 @@ async function saveRightEyeAssessment() {
   document.getElementById('re-save-btn').style.display = 'none';
 }
 
+// ===== BTRACKS TAB — direct Romberg interface =====
+function renderBTracksInterface() {
+  const container = document.getElementById('btracks-interface');
+  if (!container) return;
+  if (!container.querySelector('#romberg-interface')) {
+    container.innerHTML = '<div id="romberg-interface"></div>';
+  }
+  renderRombergInterface();
+}
+
 // ===== BALANCE TAB (contains Berg sub-tab + Romberg sub-tab) =====
 function renderBalanceInterface() {
   const container = document.getElementById('balance-interface');
@@ -5286,21 +5296,21 @@ function _switchAssessTab(tab) {
   const tableCard  = document.getElementById('assessmentsTableCard');
   const bcfEl      = document.getElementById('bcf-interface');
   const reEl       = document.getElementById('righteye-interface');
-  const balanceEl  = document.getElementById('balance-interface');
+  const btracksEl  = document.getElementById('btracks-interface');
   const pageActions = document.querySelector('#page-assessments .page-actions');
 
-  if (tab === 'balance') {
+  if (tab === 'btracks') {
     if (tableCard)  tableCard.style.display = 'none';
     if (bcfEl)      bcfEl.style.display = 'none';
     if (reEl)       reEl.style.display = 'none';
     if (pageActions) pageActions.style.display = 'none';
-    if (balanceEl)  { balanceEl.style.setProperty('display', 'block', 'important'); renderBalanceInterface(); }
+    if (btracksEl)  { btracksEl.style.setProperty('display', 'block', 'important'); renderBTracksInterface(); }
     return;
   }
   if (tab === 'bcf') {
     if (tableCard)  tableCard.style.display = 'none';
     if (reEl)       reEl.style.display = 'none';
-    if (balanceEl)  balanceEl.style.display = 'none';
+    if (btracksEl)  btracksEl.style.display = 'none';
     if (pageActions) pageActions.style.display = 'none';
     if (bcfEl)      { bcfEl.style.display = 'block'; renderBCFInterface(); }
     return;
@@ -5308,7 +5318,7 @@ function _switchAssessTab(tab) {
   if (tab === 'righteye') {
     if (tableCard)  tableCard.style.display = 'none';
     if (bcfEl)      bcfEl.style.display = 'none';
-    if (balanceEl)  balanceEl.style.display = 'none';
+    if (btracksEl)  btracksEl.style.display = 'none';
     if (pageActions) pageActions.style.display = 'none';
     if (reEl)       { reEl.style.display = 'block'; renderRightEyeInterface(); }
     return;
@@ -5317,7 +5327,7 @@ function _switchAssessTab(tab) {
   if (tableCard)  tableCard.style.display = '';
   if (bcfEl)      bcfEl.style.display = 'none';
   if (reEl)       reEl.style.display = 'none';
-  if (balanceEl)  balanceEl.style.display = 'none';
+  if (btracksEl)  btracksEl.style.display = 'none';
   if (pageActions) pageActions.style.display = '';
   renderAssessments();
 }
@@ -5327,7 +5337,7 @@ function renderAssessments() {
   const tableCard  = document.getElementById('assessmentsTableCard');
   const bcfEl      = document.getElementById('bcf-interface');
   const reEl       = document.getElementById('righteye-interface');
-  const balanceEl  = document.getElementById('balance-interface');
+  const btracksEl  = document.getElementById('btracks-interface');
   const pageActions = document.querySelector('#page-assessments .page-actions');
 
   // Special-interface tabs — these must NOT be gated by tbody existence
@@ -5335,7 +5345,7 @@ function renderAssessments() {
     if (tableCard)  tableCard.style.display = 'none';
     if (bcfEl)      { bcfEl.style.display = 'block'; renderBCFInterface(); }
     if (reEl)       reEl.style.display = 'none';
-    if (balanceEl)  balanceEl.style.display = 'none';
+    if (btracksEl)  btracksEl.style.display = 'none';
     if (pageActions) pageActions.style.display = 'none';
     return;
   }
@@ -5344,16 +5354,16 @@ function renderAssessments() {
     if (tableCard)  tableCard.style.display = 'none';
     if (bcfEl)      bcfEl.style.display = 'none';
     if (reEl)       { reEl.style.display = 'block'; renderRightEyeInterface(); }
-    if (balanceEl)  balanceEl.style.display = 'none';
+    if (btracksEl)  btracksEl.style.display = 'none';
     if (pageActions) pageActions.style.display = 'none';
     return;
   }
 
-  if (activeTab === 'balance') {
+  if (activeTab === 'btracks') {
     if (tableCard)  tableCard.style.display = 'none';
     if (bcfEl)      bcfEl.style.display = 'none';
     if (reEl)       reEl.style.display = 'none';
-    if (balanceEl)  { balanceEl.style.display = 'block'; renderBalanceInterface(); }
+    if (btracksEl)  { btracksEl.style.display = 'block'; renderBTracksInterface(); }
     if (pageActions) pageActions.style.display = 'none';
     return;
   }
@@ -5362,7 +5372,7 @@ function renderAssessments() {
   if (tableCard)  tableCard.style.display = '';
   if (bcfEl)      bcfEl.style.display = 'none';
   if (reEl)       reEl.style.display = 'none';
-  if (balanceEl)  balanceEl.style.display = 'none';
+  if (btracksEl)  btracksEl.style.display = 'none';
   if (pageActions) pageActions.style.display = '';
 
   const tbody = document.getElementById('assessmentsTableBody');

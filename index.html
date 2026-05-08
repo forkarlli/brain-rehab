@@ -353,7 +353,7 @@
         <div class="assessment-tabs">
           <button class="tab-btn active" data-tab="cognitive">認知功能</button>
           <button class="tab-btn" data-tab="motor">運動功能</button>
-          <button class="tab-btn" data-tab="balance">平衡功能</button>
+          <button class="tab-btn" data-tab="btracks">平衡測試 (BTrackS)</button>
           <button class="tab-btn" data-tab="language">語言功能</button>
           <button class="tab-btn" data-tab="bcf">肌肉張力測試</button>
           <button class="tab-btn" data-tab="righteye">👁 RightEye報告</button>
@@ -382,8 +382,8 @@
         <!-- RightEye Interface -->
         <div id="righteye-interface" style="display:none"></div>
 
-        <!-- Balance Interface (contains Berg history + Romberg sub-tabs) -->
-        <div id="balance-interface" style="display:none"></div>
+        <!-- BTrackS Romberg Interface -->
+        <div id="btracks-interface" style="display:none"></div>
 
         <!-- Add Assessment Modal -->
         <div class="modal" id="addAssessModal">
@@ -410,8 +410,6 @@
                     <option value="mmse">MMSE 簡易心智狀態測驗</option>
                     <option value="moca">MoCA 蒙特利爾認知評估</option>
                     <option value="fugl">Fugl-Meyer 運動評估</option>
-                    <option value="berg">Berg 平衡量表</option>
-                    <option value="romberg">Romberg 測試（BTrackS）</option>
                     <option value="barthel">Barthel 日常生活指數</option>
                   </select>
                 </div>
@@ -805,6 +803,6 @@
   <!-- Toast Notification -->
   <div class="toast" id="toast"></div>
 
-  <script src="app.js?v=20260509d"></script>
+  <script src="app.js?v=20260509e"></script>
 </body>
 </html>
