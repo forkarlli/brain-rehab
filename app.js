@@ -1255,9 +1255,9 @@ const CERVICAL_BRAIN_MAP = {
            : v === 'right-long' ? { brain: ['Right CB'], training: '訓練Right CB' } : null,
 };
 const BCF_VISUAL_STIM = [
-  { id: 'C2', dir: '左上↖', type: '視覺' },
+  { id: 'C2', dir: '右上↗', type: '視覺' },
   { id: 'C4', dir: '左下↙', type: '視覺' },
-  { id: 'C6', dir: '右上↗', type: '視覺' },
+  { id: 'C6', dir: '左上↖', type: '視覺' },
   { id: 'C8', dir: '右下↘', type: '視覺' },
 ];
 const BCF_STANCE = [];
@@ -1495,10 +1495,10 @@ function renderBCFInterface() {
   }).join('');
 
   // Face compass (3-col × 3-row): diagonal visual only C2/C4/C6/C8
-  // row1: [C2↖, empty, C6↗]
-  // row2: [empty, FACE, empty]
-  // row3: [C4↙, empty, C8↘]
-  const faceCompassOrder = ['C2',null,'C6', null,'FACE',null, 'C4',null,'C8'];
+  // row1: [C6↖ 左上, empty, C2↗ 右上]
+  // row2: [empty,    FACE,  empty]
+  // row3: [C4↙ 左下, empty, C8↘ 右下]
+  const faceCompassOrder = ['C6',null,'C2', null,'FACE',null, 'C4',null,'C8'];
   const visualMap = Object.fromEntries(BCF_VISUAL_STIM.map(c => [c.id, c]));
   const visualCompassHTML = faceCompassOrder.map(id => {
     if (!id) return `<div class="bcf-eye-cell bcf-empty-cell"></div>`;
@@ -2028,32 +2028,28 @@ function computeEyeMachineRx(affectedBrainRegions, affectedItems, convMCodes) {
   const hasDiag   = codes.has('E1') || codes.has('E2') || codes.has('E3') || codes.has('E4');
   const hasAnyEye = hasHoriz || hasUpVert || hasDnVert || hasDiag;
 
-  // === C1-C8 視覺/聽覺刺激 ===
-  const hasC1 = codes.has('C1'), hasC2 = codes.has('C2');
-  const hasC3 = codes.has('C3'), hasC4 = codes.has('C4');
-  const hasC5 = codes.has('C5'), hasC6 = codes.has('C6');
-  const hasC7 = codes.has('C7'), hasC8 = codes.has('C8');
-  // 右側視野/右耳 → Left Visual/Auditory Cx 弱化 → 紅白背板 M1 R90
-  const hasRightSideC = hasC6 || hasC7 || hasC8 || hasC5;
-  // 左側視野/左耳 → Right Visual/Auditory Cx 弱化 → 黃藍背板 M1 L90
-  const hasLeftSideC  = hasC2 || hasC3 || hasC4 || hasC1;
+  // === C2/C4/C6/C8 對角視覺刺激 ===
+  const hasC2 = codes.has('C2');  // 右上↗ → Left Temporal Lobe
+  const hasC4 = codes.has('C4');  // 左下↙ → Left Parietal Lobe
+  const hasC6 = codes.has('C6');  // 左上↖ → Right Temporal Lobe
+  const hasC8 = codes.has('C8');  // 右下↘ → Right Parietal Lobe
 
-  // C6/C5 → Left Temporal Lobe 嚴重度
-  const hasC6orC5 = hasC6 || hasC5;
-  const leftTempSev = (hasC6 && hasC5) ? ((hasC7 || hasC8) ? 'severe' : 'moderate')
-                    : hasC6orC5 ? 'mild' : null;
-  // C2/C1 → Right Temporal Lobe 嚴重度
-  const hasC2orC1 = hasC2 || hasC1;
-  const rightTempSev = (hasC2 && hasC1) ? ((hasC3 || hasC4) ? 'severe' : 'moderate')
-                     : hasC2orC1 ? 'mild' : null;
+  const hasRightCortex = hasC6 || hasC8;  // 右側大腦皮質受影響
+  const hasLeftCortex  = hasC2 || hasC4;  // 左側大腦皮質受影響
 
-  // 加入 Temporal Lobe 到受影響腦區
-  if (hasC6orC5) affectedBrainRegions.add('Left Temporal Lobe');
-  if (hasC2orC1) affectedBrainRegions.add('Right Temporal Lobe');
+  // 嚴重度：兩個同側項目同時存在 = moderate，單一 = mild
+  const rightCxSev = (hasC6 && hasC8) ? 'moderate' : (hasC6 || hasC8) ? 'mild' : null;
+  const leftCxSev  = (hasC2 && hasC4) ? 'moderate' : (hasC2 || hasC4) ? 'mild' : null;
 
-  // === L1/L2 站立測試 ===
-  const hasL1 = codes.has('L1');  // 右前左後 → Right Vestibular → 加強 M4
-  const hasL2 = codes.has('L2');  // 左前右後 → Left Vestibular → 加強 M4
+  // 加入受影響腦區
+  if (hasC6) affectedBrainRegions.add('Right Temporal Lobe');
+  if (hasC8) affectedBrainRegions.add('Right Parietal Lobe');
+  if (hasC2) affectedBrainRegions.add('Left Temporal Lobe');
+  if (hasC4) affectedBrainRegions.add('Left Parietal Lobe');
+
+  // === L1/L2 站立測試（已移除介面項目）===
+  const hasL1 = codes.has('L1');
+  const hasL2 = codes.has('L2');
 
   // === Convergence 分析 ===
   const hasUpConv  = convMCodes.some(m => m.sub.startsWith('conv-up'));
@@ -2076,43 +2072,19 @@ function computeEyeMachineRx(affectedBrainRegions, affectedItems, convMCodes) {
   const hasFarConvPos = convMCodes.some(m => m.sub.includes('fwd'));
   const m5Speed = hasFarConvPos ? 'S3–4（距遠）' : hasConv ? 'S1–2（距近）' : 'S1–6（可調）';
 
-  // 訓練位置注意事項（C 系列個別視野對應）
+  // 訓練位置注意事項（C 對角視野對應）
   const posNotes = [];
-  // 右側視野組：C5/C6=右上，C7=右中，C8=右下
-  const hasRightUpper = hasC6 || hasC5;
-  const hasRightMid   = hasC7;
-  const hasRightLower = hasC8;
-  const rightCount = [hasRightUpper, hasRightMid, hasRightLower].filter(Boolean).length;
-  if (rightCount >= 2) {
-    const f = [];
-    if (hasRightUpper) f.push('右上');
-    if (hasRightMid)   f.push('右中');
-    if (hasRightLower) f.push('右下');
-    posNotes.push(`病人往左站，目標物涵蓋${f.join('及')}視野，桌面可調整高低交替訓練`);
-  } else if (hasRightUpper) {
-    posNotes.push('病人往左站，升降桌升高，目標物置於病人右上視野');
-  } else if (hasRightMid) {
-    posNotes.push('病人往左站，桌面維持眼睛高度，目標物置於病人右中視野');
-  } else if (hasRightLower) {
-    posNotes.push('病人往左站，升降桌降低，目標物置於病人右下視野');
+  if (hasC6 || hasC8) {
+    const fields = [];
+    if (hasC6) fields.push('右上視野（↖）');
+    if (hasC8) fields.push('右下視野（↘）');
+    posNotes.push(`目標物置於病人${fields.join('及')}，升降桌高度對應調整`);
   }
-  // 左側視野組：C1/C2=左上，C3=左中，C4=左下
-  const hasLeftUpper = hasC2 || hasC1;
-  const hasLeftMid   = hasC3;
-  const hasLeftLower = hasC4;
-  const leftCount = [hasLeftUpper, hasLeftMid, hasLeftLower].filter(Boolean).length;
-  if (leftCount >= 2) {
-    const f = [];
-    if (hasLeftUpper) f.push('左上');
-    if (hasLeftMid)   f.push('左中');
-    if (hasLeftLower) f.push('左下');
-    posNotes.push(`病人往右站，目標物涵蓋${f.join('及')}視野，桌面可調整高低交替訓練`);
-  } else if (hasLeftUpper) {
-    posNotes.push('病人往右站，升降桌升高，目標物置於病人左上視野');
-  } else if (hasLeftMid) {
-    posNotes.push('病人往右站，桌面維持眼睛高度，目標物置於病人左中視野');
-  } else if (hasLeftLower) {
-    posNotes.push('病人往右站，升降桌降低，目標物置於病人左下視野');
+  if (hasC2 || hasC4) {
+    const fields = [];
+    if (hasC2) fields.push('左上視野（↗）');
+    if (hasC4) fields.push('左下視野（↙）');
+    posNotes.push(`目標物置於病人${fields.join('及')}，升降桌高度對應調整`);
   }
   const positionNote = posNotes.join('；');
 
@@ -2127,21 +2099,21 @@ function computeEyeMachineRx(affectedBrainRegions, affectedItems, convMCodes) {
     (rightCx && !leftCx) ? '黃藍/彩色條紋' : (leftCx && !rightCx) ? '紅白條紋' : '空白背板';
 
   // === M1: Pursuit均速 ===
-  if (hasAnyEye || hasRightSideC || hasLeftSideC) {
+  if (hasAnyEye || hasRightCortex || hasLeftCortex) {
     let angle, bg, m1Speed;
     const m1Notes = [];
-    if (hasRightSideC && !hasLeftSideC) {
-      // 右側視野/右耳 → Left Cx 弱化 → R90 紅白
-      angle   = 'R90（Left Visual/Auditory Cx）';
-      bg      = '紅白條紋';
-      m1Speed = leftTempSev === 'severe' ? 'S4' : leftTempSev === 'moderate' ? 'S3' : 'S2';
-    } else if (hasLeftSideC && !hasRightSideC) {
-      // 左側視野/左耳 → Right Cx 弱化 → L90 黃藍
-      angle   = 'L90（Right Visual/Auditory Cx）';
-      bg      = '黃藍/彩色條紋';
-      m1Speed = rightTempSev === 'severe' ? 'S4' : rightTempSev === 'moderate' ? 'S3' : 'S2';
-    } else if (hasRightSideC && hasLeftSideC) {
-      angle   = 'R90/L90（雙側 Visual Cx）';
+    if (hasRightCortex && !hasLeftCortex) {
+      // Right Temporal/Parietal 弱化 → 向左追蹤訓練右視皮質 → L90 黃藍
+      angle   = 'L90（Right Temporal/Parietal Cx）';
+      bg      = bgPlate(true, false);
+      m1Speed = rightCxSev === 'moderate' ? 'S3' : 'S2';
+    } else if (hasLeftCortex && !hasRightCortex) {
+      // Left Temporal/Parietal 弱化 → 向右追蹤訓練左視皮質 → R90 紅白
+      angle   = 'R90（Left Temporal/Parietal Cx）';
+      bg      = bgPlate(false, true);
+      m1Speed = leftCxSev === 'moderate' ? 'S3' : 'S2';
+    } else if (hasRightCortex && hasLeftCortex) {
+      angle   = 'R90/L90（雙側 Temporal/Parietal Cx）';
       bg      = '空白背板';
       m1Speed = 'S3';
     } else {
@@ -2176,15 +2148,15 @@ function computeEyeMachineRx(affectedBrainRegions, affectedItems, convMCodes) {
     rec.push({ mode: 'M3', name: 'Saccade↓+Pursuit↑', angle, speed: 'S3', dist: 'D3', reps: '15', target: '有', bg, notes: headPos ? [headPos] : [] });
     m3Added = true;
   }
-  // C6+C5 或 C2+C1 中/重度 → 觸發 M3
+  // C6+C8（Right Cx）或 C2+C4（Left Cx）中度 → 觸發 M3 斜向訓練
   if (!m3Added) {
-    const needRightM3 = leftTempSev === 'moderate' || leftTempSev === 'severe';
-    const needLeftM3  = rightTempSev === 'moderate' || rightTempSev === 'severe';
+    const needRightM3 = rightCxSev === 'moderate';  // C6+C8 → Right Temporal/Parietal → L45
+    const needLeftM3  = leftCxSev  === 'moderate';  // C2+C4 → Left Temporal/Parietal  → R45
     if (needRightM3 || needLeftM3) {
-      const angle = (needRightM3 && !needLeftM3) ? 'R45（Left Temporal Lobe）'
-                  : (!needRightM3 && needLeftM3)  ? 'L45（Right Temporal Lobe）' : 'R45/L45（雙側）';
-      const bg    = (needRightM3 && !needLeftM3) ? '紅白條紋'
-                  : (!needRightM3 && needLeftM3)  ? '黃藍/彩色條紋' : '空白背板';
+      const angle = (needRightM3 && !needLeftM3) ? 'L45（Right Temporal/Parietal）'
+                  : (!needRightM3 && needLeftM3)  ? 'R45（Left Temporal/Parietal）' : 'R45/L45（雙側）';
+      const bg    = (needRightM3 && !needLeftM3) ? bgPlate(true, false)
+                  : (!needRightM3 && needLeftM3)  ? bgPlate(false, true) : '空白背板';
       const notes = [...(positionNote ? [positionNote] : []), ...(headPos ? [headPos] : [])];
       rec.push({ mode: 'M3', name: 'Saccade↓+Pursuit↑', angle, speed: 'S3', dist: 'D3', reps: '15', target: '有', bg, notes });
       m3Added = true;
