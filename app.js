@@ -2603,7 +2603,7 @@ function computeRightEyeRx(data) {
   const vUnderLPct  = pct(vUnderL,  vTotal);
   const vMissLPct   = pct(vMissedL, vTotal);
 
-  const VALID_GRADES = new Set(['none','mild','moderate','severe']);
+  const VALID_GRADES = new Set(['mild','moderate','severe']);
   const hOverRSt  = (hOverRGrade  && VALID_GRADES.has(hOverRGrade))  ? hOverRGrade  : overGrade(hOverRPct);
   const hUnderRSt = (hUnderRGrade && VALID_GRADES.has(hUnderRGrade)) ? hUnderRGrade : underGrade(hUnderRPct);
   const hMissRSt  = missGrade(hMissRPct);
