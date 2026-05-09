@@ -2828,7 +2828,7 @@ function computeRightEyeRx(data) {
   const brainRegions = new Set();
   indicators.forEach(ind => ind.brain.forEach(b => brainRegions.add(b)));
 
-  const isAbn = st => st === 'mild' || st === 'severe';
+  const isAbn = st => st === 'mild' || st === 'moderate' || st === 'severe';
   const isSev = st => st === 'severe';
 
   const spHAbn = isAbn(spHSt), spHSev = isSev(spHSt);
@@ -2842,9 +2842,32 @@ function computeRightEyeRx(data) {
 
   const rx = [];
   const seenRx = new Set();
+  const RE_BRAIN_REGIONS = [
+    'Left PPRF','Right PPRF','Bilateral PPRF',
+    'Left riMLF','Right riMLF','Bilateral riMLF',
+    'Left CB','Right CB','CB Vermis','CB Flocculus',
+    'Left FEF','Right FEF',
+    'Left BG','Right BG',
+    'Bilateral Midbrain','Superior Colliculus',
+    'riMLF','PPRF',
+  ];
   const addRx = entry => {
     const key = entry.mode + '|' + entry.angle;
-    if (!seenRx.has(key)) { seenRx.add(key); rx.push(entry); }
+    if (!seenRx.has(key)) {
+      seenRx.add(key);
+      if (!entry.severityLabel) {
+        entry.severityLabel = entry.priority <= 1 ? 'severe' : entry.priority === 2 ? 'moderate' :
+                              entry.priority === 3 ? 'mild' : 'normal';
+      }
+      const allText = entry.angle + ' ' + (entry.notes || []).join(' ');
+      if (!entry.brainTarget) {
+        entry.brainTarget = RE_BRAIN_REGIONS.find(r => allText.includes(r)) || '';
+      }
+      if (entry.isBrainstem == null) {
+        entry.isBrainstem = /PPRF|riMLF|Bilateral Midbrain/.test(allText);
+      }
+      rx.push(entry);
+    }
   };
 
   // 組合分類：達3組以上異常 → M8最強複合
@@ -3036,7 +3059,22 @@ function computeRightEyeRx(data) {
     addRx({ mode: 'M4', name: 'V-Pursuit穩定（LP）', angle: 'U0/D0（垂直追隨側偏矯正）', speed: 'S2', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['Lateral Pulsion：垂直追隨水平偏移訓練'], priority: lpSev ? 2 : 3 });
   }
 
-  rx.sort((a, b) => (a.priority || 9) - (b.priority || 9));
+  // Step 1: 若 Velocity 水平或垂直任一異常 → 腦幹項目強制排最前面
+  // Step 2: 其餘依嚴重度排序（嚴重>中度>輕度>正常）
+  const velocityAbn = svHAbn || svVAbn;
+  const SEV_ORDER = { severe: 0, moderate: 1, mild: 2, normal: 3 };
+  rx.sort((a, b) => {
+    const aBs = (velocityAbn && a.isBrainstem) ? 0 : 1;
+    const bBs = (velocityAbn && b.isBrainstem) ? 0 : 1;
+    if (aBs !== bBs) return aBs - bBs;
+    return (SEV_ORDER[a.severityLabel] ?? 4) - (SEV_ORDER[b.severityLabel] ?? 4);
+  });
+  rx.forEach(r => {
+    r.sortBasis = (velocityAbn && r.isBrainstem) ? 'Velocity 慢→腦幹優先' :
+      r.severityLabel === 'severe' ? '嚴重異常優先' :
+      r.severityLabel === 'moderate' ? '中度異常' :
+      r.severityLabel === 'mild' ? '輕度異常' : '正常範圍';
+  });
 
   const PRIORITY_NAMES = { 1: '優先', 2: '次要', 3: '輔助', 4: '補充' };
   const priorityBuckets = {};
@@ -3050,7 +3088,7 @@ function computeRightEyeRx(data) {
     .map(([p, modes]) => (PRIORITY_NAMES[p] || '其他') + '：' + [...modes].join('、'));
 
   const hasAbnormal = indicators.some(ind => isAbn(ind.status));
-  return { indicators, brainRegions, rx, priorityLines, hasAbnormal, ST_ICON, ST_LABEL };
+  return { indicators, brainRegions, rx, priorityLines, hasAbnormal, ST_ICON, ST_LABEL, velocityAbn };
 }
 
 function renderRightEyeSection({ indicators, brainRegions, rx, priorityLines, ST_ICON, ST_LABEL }, standalone = false) {
@@ -4265,10 +4303,53 @@ function renderRightEyeInterface() {
       </div>
     </div>
 
+    <div class="card" style="margin-top:16px">
+      <div class="card-header">
+        <h3>🎯 功能訓練處方</h3>
+        <span class="bcf-section-hint">依病等與策略，輸出優先排序的眼動訓練處方</span>
+      </div>
+      <div style="padding:16px 20px">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px;flex-wrap:wrap">
+          <label style="font-weight:600;color:var(--gray-700);white-space:nowrap">病等：</label>
+          <select id="re-patient-grade" class="select" style="width:auto;display:inline-block;min-width:160px">
+            <option value="重度">重度（紅）— 嚴重損傷</option>
+            <option value="中度" selected>中度（橘）— 中度損傷</option>
+            <option value="輕度">輕度（綠）— 輕度損傷</option>
+          </select>
+        </div>
+        <div style="font-weight:600;color:var(--gray-700);margin-bottom:10px">選擇本次訓練策略（可複選，系統分別顯示結果）</div>
+        <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:14px">
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:8px;transition:border-color .2s" onmouseenter="this.style.borderColor='#6366f1'" onmouseleave="this.style.borderColor='#e5e7eb'">
+            <input type="checkbox" id="re-strategy-1" style="margin-top:2px;accent-color:#6366f1">
+            <div>
+              <div style="font-weight:700;color:var(--gray-800)">策略1：保守模式</div>
+              <div style="font-size:12px;color:var(--gray-500);margin-top:2px">只取最弱前N項（重2／中3／輕4），適用病人狀況差、易疲勞、首次評估</div>
+            </div>
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:8px;transition:border-color .2s" onmouseenter="this.style.borderColor='#6366f1'" onmouseleave="this.style.borderColor='#e5e7eb'">
+            <input type="checkbox" id="re-strategy-2" style="margin-top:2px;accent-color:#6366f1">
+            <div>
+              <div style="font-weight:700;color:var(--gray-800)">策略2：標準模式</div>
+              <div style="font-size:12px;color:var(--gray-500);margin-top:2px">依病等調整訓練量（重4／中5／輕6），適用標準臨床流程</div>
+            </div>
+          </label>
+          <label style="display:flex;align-items:flex-start;gap:10px;cursor:pointer;padding:10px 12px;border:1.5px solid #e5e7eb;border-radius:8px;transition:border-color .2s" onmouseenter="this.style.borderColor='#6366f1'" onmouseleave="this.style.borderColor='#e5e7eb'">
+            <input type="checkbox" id="re-strategy-3" style="margin-top:2px;accent-color:#6366f1">
+            <div>
+              <div style="font-weight:700;color:var(--gray-800)">策略3：核心迴路模式</div>
+              <div style="font-size:12px;color:var(--gray-500);margin-top:2px">優先完成一個完整神經迴路：Velocity慢→腦幹迴路（PPRF+riMLF+Midbrain）；Velocity正常+Overshoot→小腦迴路（CB+Vermis）；Velocity正常+Undershoot→皮質迴路（FEF+BG）</div>
+            </div>
+          </label>
+        </div>
+        <button class="btn btn-primary" onclick="generateREStrategyPrescription()" style="width:100%">依策略生成處方</button>
+        <div id="re-strategy-results" style="display:none;margin-top:16px"></div>
+      </div>
+    </div>
+
     <div class="bcf-action-bar">
       <button class="btn btn-outline" onclick="clearRightEyeForm()">清除重填</button>
       <button class="btn btn-secondary" id="re-ai-btn" onclick="readRightEyeWithAI()">🤖 AI 讀取截圖</button>
-      <button class="btn btn-primary" onclick="analyzeRightEyeStandalone()">👁 分析並產生處方</button>
+      <button class="btn btn-primary" onclick="analyzeRightEyeStandalone()">👁 完整分析</button>
       <button class="btn btn-success" id="re-save-btn" style="display:none" onclick="saveRightEyeAssessment()">💾 儲存評估</button>
     </div>
 
@@ -4819,6 +4900,160 @@ function analyzeRightEyeStandalone() {
   const saveBtn = document.getElementById('re-save-btn');
   if (saveBtn) saveBtn.style.display = '';
   resultsEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+// ===== RE STRATEGY PRESCRIPTION =====
+
+function getRECircuit(reResult) {
+  const rx = reResult.rx;
+  if (reResult.velocityAbn) {
+    const items = rx.filter(r => r.isBrainstem);
+    return { name: '腦幹迴路（PPRF+riMLF+Bilateral Midbrain）', items };
+  }
+  const cbItems = rx.filter(r => r.brainTarget && /CB|Vermis|Flocculus/.test(r.brainTarget));
+  if (cbItems.length > 0) {
+    return { name: '小腦迴路（CB+Vermis）', items: cbItems };
+  }
+  const ctxItems = rx.filter(r => r.brainTarget && /FEF|BG/.test(r.brainTarget));
+  if (ctxItems.length > 0) {
+    return { name: '皮質迴路（FEF+BG）', items: ctxItems };
+  }
+  return { name: '一般迴路', items: rx.slice(0, 3) };
+}
+
+function renderREStrategyBlock({ num, label, items, circuit }) {
+  const SEV_LABEL = { severe: '嚴重', moderate: '中度', mild: '輕度', normal: '正常' };
+  const SEV_COLOR = { severe: '#dc2626', moderate: '#d97706', mild: '#16a34a', normal: '#6b7280' };
+  const stratBg   = num === 1 ? '#fef9f0' : num === 2 ? '#f0f9ff' : '#f5f3ff';
+  const stratBord = num === 1 ? '#f59e0b' : num === 2 ? '#3b82f6' : '#7c3aed';
+
+  const rows = items.map((r, i) => `
+    <tr>
+      <td style="text-align:center;font-weight:700;color:${SEV_COLOR[r.severityLabel]||'#666'}">${i + 1}</td>
+      <td style="color:#1d4ed8;font-weight:600">${r.brainTarget || '—'}</td>
+      <td><span class="badge badge-primary" style="font-size:11px">${r.mode}</span>
+          <span style="font-size:12px;font-weight:600;margin-left:4px">${r.name}</span></td>
+      <td><span style="color:${SEV_COLOR[r.severityLabel]||'#666'};font-weight:700;font-size:13px">${SEV_LABEL[r.severityLabel]||'—'}</span></td>
+      <td style="font-size:11px;color:var(--gray-500)">${r.sortBasis || '—'}</td>
+    </tr>`).join('');
+
+  const circuitBadge = circuit
+    ? `<span style="font-size:11px;background:#eff6ff;color:#1d4ed8;padding:2px 8px;border-radius:10px;margin-left:8px">${circuit}</span>`
+    : '';
+
+  return `
+    <div style="border:1.5px solid ${stratBord};border-radius:10px;padding:14px;background:${stratBg}">
+      <div style="font-weight:700;color:var(--gray-800);font-size:14px;margin-bottom:4px">${label}${circuitBadge}</div>
+      <div style="font-size:12px;color:var(--gray-500);margin-bottom:10px">${items.length} 個訓練項目</div>
+      ${items.length > 0 ? `
+        <div style="overflow-x:auto">
+          <table class="data-table" style="margin:0;font-size:12px">
+            <thead>
+              <tr>
+                <th style="width:36px">順序</th>
+                <th>目標腦區</th>
+                <th>眼動機模式</th>
+                <th style="width:60px">嚴重度</th>
+                <th>排序依據</th>
+              </tr>
+            </thead>
+            <tbody>${rows}</tbody>
+          </table>
+        </div>` : '<div style="color:var(--gray-400);text-align:center;padding:20px">無對應訓練項目</div>'}
+    </div>`;
+}
+
+function generateREStrategyPrescription() {
+  const parseNum = v => { const n = parseFloat(v); return isNaN(n) ? null : n; };
+  const reData = {
+    spH:       parseNum(document.getElementById('re-spH')?.value),
+    spV:       parseNum(document.getElementById('re-spV')?.value),
+    spC:       parseNum(document.getElementById('re-spC')?.value),
+    eso:       parseNum(document.getElementById('re-eso')?.value),
+    svH:       parseNum(document.getElementById('re-svH')?.value),
+    svV:       parseNum(document.getElementById('re-svV')?.value),
+    svRight:   parseNum(document.getElementById('re-sv-right')?.value),
+    svLeft:    parseNum(document.getElementById('re-sv-left')?.value),
+    svUp:      parseNum(document.getElementById('re-sv-up')?.value),
+    svDown:    parseNum(document.getElementById('re-sv-down')?.value),
+    pldRight:  parseNum(document.getElementById('re-pld-right')?.value),
+    pldLeft:   parseNum(document.getElementById('re-pld-left')?.value),
+    orthRight: document.getElementById('re-orth-right')?.value || null,
+    orthLeft:  document.getElementById('re-orth-left')?.value || null,
+    syncH:     parseNum(document.getElementById('re-syncH')?.value),
+    syncV:     parseNum(document.getElementById('re-syncV')?.value),
+    intrusion: document.getElementById('re-intrusion')?.value || 'none',
+    intrusionAmp: document.getElementById('re-intrusion-amp')?.value || 'none',
+    hTotal:    parseNum(document.getElementById('re-h-total')?.value),
+    hOverR:    parseNum(document.getElementById('re-h-over-r')?.value),
+    hUnderR:   parseNum(document.getElementById('re-h-under-r')?.value),
+    hMissedR:  parseNum(document.getElementById('re-h-missed-r')?.value),
+    hOverL:    parseNum(document.getElementById('re-h-over-l')?.value),
+    hUnderL:   parseNum(document.getElementById('re-h-under-l')?.value),
+    hMissedL:  parseNum(document.getElementById('re-h-missed-l')?.value),
+    vTotal:    parseNum(document.getElementById('re-v-total')?.value),
+    vOverR:    parseNum(document.getElementById('re-v-over-r')?.value),
+    vUnderR:   parseNum(document.getElementById('re-v-under-r')?.value),
+    vMissedR:  parseNum(document.getElementById('re-v-missed-r')?.value),
+    vOverL:    parseNum(document.getElementById('re-v-over-l')?.value),
+    vUnderL:   parseNum(document.getElementById('re-v-under-l')?.value),
+    vMissedL:  parseNum(document.getElementById('re-v-missed-l')?.value),
+    hOverRGrade:  reAIGrades.rightward_overshoot,
+    hUnderRGrade: reAIGrades.rightward_undershoot,
+    hOverLGrade:  reAIGrades.leftward_overshoot,
+    hUnderLGrade: reAIGrades.leftward_undershoot,
+    vpLateralDrift: parseNum(document.getElementById('re-vp-lateral-drift')?.value),
+    vsLateralDrift: parseNum(document.getElementById('re-vs-lateral-drift')?.value),
+  };
+  const reResult = computeRightEyeRx(reData);
+  const stratEl = document.getElementById('re-strategy-results');
+  if (!stratEl) return;
+
+  if (!reResult.hasAbnormal) {
+    stratEl.innerHTML = `<div style="text-align:center;padding:20px;color:var(--success)">
+      <div style="font-size:32px;margin-bottom:4px">✅</div>
+      <strong>所有指標正常，無需眼動機處方</strong></div>`;
+    stratEl.style.display = 'block';
+    return;
+  }
+
+  const patientGrade = document.getElementById('re-patient-grade')?.value || '中度';
+  const s1 = document.getElementById('re-strategy-1')?.checked;
+  const s2 = document.getElementById('re-strategy-2')?.checked;
+  const s3 = document.getElementById('re-strategy-3')?.checked;
+
+  if (!s1 && !s2 && !s3) {
+    showToast('請至少勾選一個訓練策略', 'warning');
+    return;
+  }
+
+  const GRADE_LIMITS = { '重度': { s1: 2, s2: 4 }, '中度': { s1: 3, s2: 5 }, '輕度': { s1: 4, s2: 6 } };
+  const limits = GRADE_LIMITS[patientGrade] || GRADE_LIMITS['中度'];
+  const rx = reResult.rx;
+  const results = [];
+
+  if (s1) results.push({ num: 1, label: '策略1：保守模式', items: rx.slice(0, limits.s1), circuit: null });
+  if (s2) results.push({ num: 2, label: '策略2：標準模式', items: rx.slice(0, limits.s2), circuit: null });
+  if (s3) {
+    const circuit = getRECircuit(reResult);
+    results.push({ num: 3, label: '策略3：核心迴路模式', items: circuit.items, circuit: circuit.name });
+  }
+
+  const gradeColor = { '重度': '#dc2626', '中度': '#d97706', '輕度': '#16a34a' };
+  const headerHtml = `
+    <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;flex-wrap:wrap">
+      <span style="font-weight:700;color:var(--gray-700)">病等：</span>
+      <span style="background:${gradeColor[patientGrade]}1a;color:${gradeColor[patientGrade]};border:1px solid ${gradeColor[patientGrade]}44;padding:3px 12px;border-radius:12px;font-weight:700">${patientGrade}</span>
+      <span style="font-size:12px;color:var(--gray-500)">共 ${rx.length} 項異常，已依策略過濾</span>
+    </div>`;
+
+  const colStyle = results.length > 1
+    ? `display:grid;grid-template-columns:repeat(${results.length},1fr);gap:12px`
+    : '';
+
+  stratEl.innerHTML = headerHtml + `<div style="${colStyle}">${results.map(renderREStrategyBlock).join('')}</div>`;
+  stratEl.style.display = 'block';
+  stratEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 async function saveRightEyeAssessment() {
