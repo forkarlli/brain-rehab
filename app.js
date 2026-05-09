@@ -276,6 +276,8 @@ let RE_SACC_H_IMAGE = null;
 let RE_SACC_V_IMAGE = null;
 let reSaccDirResultsH = [];
 let reSaccDirResultsV = [];
+let reSaccDirConfidenceH = null;
+let reSaccDirConfidenceV = null;
 
 function getREPatientId() {
   return document.getElementById('assess-patient-select')?.value || '';
@@ -4218,27 +4220,35 @@ function renderRightEyeInterface() {
     <div class="card" style="margin-top:16px">
       <div class="card-header">
         <h3>🧭 方向性掃視分析</h3>
-        <span class="bcf-section-hint">上傳水平 / 垂直 Saccade 截圖 → AI 判定腦區定位與處方優先級</span>
+        <span class="bcf-section-hint">上傳軌跡圖截圖 → AI 從軌跡判定運動方向性腦區定位</span>
+      </div>
+      <div style="font-size:12px;color:var(--gray-500);margin-bottom:12px;padding:8px 10px;background:var(--gray-50);border-radius:var(--radius-sm);border-left:3px solid var(--primary)">
+        ⚠️ 「右眼/左眼」是哪顆眼球，不是運動方向。運動方向（往右/往左/往上/往下）只能從軌跡圖判讀。<br>
+        建議上傳順序：① Horizontal Saccades 軌跡截圖　② Vertical Saccades 軌跡截圖
       </div>
       <div class="sacc-dir-upload-grid">
         <div>
-          <div class="re-section-title">水平掃視截圖（Horizontal Saccades）</div>
+          <div class="re-section-title">① 水平掃視軌跡（Horizontal Saccades）</div>
           <div class="sacc-dir-upload-box" id="sacc-dir-h-zone">
             <div style="font-size:26px">↔</div>
-            <div style="font-size:12px;font-weight:600;color:var(--gray-600)">點擊或拖曳上傳水平 Saccade 截圖</div>
+            <div style="font-size:12px;font-weight:600;color:var(--gray-600)">點擊或拖曳上傳水平掃視軌跡截圖</div>
+            <div style="font-size:11px;color:var(--gray-400)">判定往右 / 往左 Overshoot 或 Undershoot</div>
             <input type="file" id="sacc-dir-h-input" accept="image/*" style="display:none">
             <div id="sacc-dir-h-preview-wrap"></div>
           </div>
+          <div id="re-sacc-dir-conf-h" style="display:none;margin-top:6px"></div>
           <button class="btn btn-secondary" id="re-sacc-dir-btn-horizontal" style="margin-top:8px;width:100%" onclick="analyzeSaccadeDirection('horizontal')">🤖 分析水平掃視</button>
         </div>
         <div>
-          <div class="re-section-title">垂直掃視截圖（Vertical Saccades）</div>
+          <div class="re-section-title">② 垂直掃視軌跡（Vertical Saccades）</div>
           <div class="sacc-dir-upload-box" id="sacc-dir-v-zone">
             <div style="font-size:26px">↕</div>
-            <div style="font-size:12px;font-weight:600;color:var(--gray-600)">點擊或拖曳上傳垂直 Saccade 截圖</div>
+            <div style="font-size:12px;font-weight:600;color:var(--gray-600)">點擊或拖曳上傳垂直掃視軌跡截圖</div>
+            <div style="font-size:11px;color:var(--gray-400)">判定往上 / 往下 Overshoot 或 Undershoot</div>
             <input type="file" id="sacc-dir-v-input" accept="image/*" style="display:none">
             <div id="sacc-dir-v-preview-wrap"></div>
           </div>
+          <div id="re-sacc-dir-conf-v" style="display:none;margin-top:6px"></div>
           <button class="btn btn-secondary" id="re-sacc-dir-btn-vertical" style="margin-top:8px;width:100%" onclick="analyzeSaccadeDirection('vertical')">🤖 分析垂直掃視</button>
         </div>
       </div>
@@ -4246,7 +4256,7 @@ function renderRightEyeInterface() {
         <div class="re-num-group">方向性掃視診斷結果</div>
         <table class="sacc-dir-result-table">
           <thead><tr>
-            <th>方向</th><th>類型</th><th>速度</th>
+            <th>運動方向</th><th>類型</th><th>速度</th>
             <th>腦區定位</th><th>系統標記</th><th>處方優先級</th>
           </tr></thead>
           <tbody id="re-sacc-dir-tbody"></tbody>
@@ -4383,6 +4393,8 @@ function clearRightEyeForm() {
   RE_SACC_V_IMAGE = null;
   reSaccDirResultsH = [];
   reSaccDirResultsV = [];
+  reSaccDirConfidenceH = null;
+  reSaccDirConfidenceV = null;
   const phWrap = document.getElementById('sacc-dir-h-preview-wrap');
   const pvWrap = document.getElementById('sacc-dir-v-preview-wrap');
   if (phWrap) phWrap.innerHTML = '';
@@ -4391,6 +4403,10 @@ function clearRightEyeForm() {
   const zoneV = document.getElementById('sacc-dir-v-zone');
   if (zoneH) zoneH.classList.remove('has-image');
   if (zoneV) zoneV.classList.remove('has-image');
+  const confH = document.getElementById('re-sacc-dir-conf-h');
+  const confV = document.getElementById('re-sacc-dir-conf-v');
+  if (confH) confH.style.display = 'none';
+  if (confV) confV.style.display = 'none';
   const saccDirRes = document.getElementById('re-sacc-dir-results');
   if (saccDirRes) saccDirRes.style.display = 'none';
 }
@@ -4498,11 +4514,15 @@ async function analyzeSaccadeDirection(direction) {
       throw new Error(errBody.error || `HTTP ${resp.status}`);
     }
     const result = await resp.json();
+    const confidence = result.confidence ?? null;
     if (direction === 'horizontal') {
       reSaccDirResultsH = result.diagnoses || [];
+      reSaccDirConfidenceH = confidence;
     } else {
       reSaccDirResultsV = result.diagnoses || [];
+      reSaccDirConfidenceV = confidence;
     }
+    renderSaccDirConfidence(direction, confidence);
     renderSaccDirResults();
     showToast('方向性掃視分析完成', 'success');
   } catch (err) {
@@ -4510,6 +4530,20 @@ async function analyzeSaccadeDirection(direction) {
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = origText; }
   }
+}
+
+function renderSaccDirConfidence(direction, confidence) {
+  const key = direction === 'horizontal' ? 'h' : 'v';
+  const el  = document.getElementById(`re-sacc-dir-conf-${key}`);
+  if (!el) return;
+  if (confidence === null || confidence === undefined) { el.style.display = 'none'; return; }
+  const pct  = Math.round(confidence * 100);
+  const low  = confidence < 0.6;
+  el.style.display = 'block';
+  el.innerHTML = `<span style="font-size:12px;padding:2px 8px;border-radius:10px;font-weight:600;
+    background:${low ? '#fff3e0' : '#f0fdf4'};color:${low ? '#C55A11' : '#16a34a'}">
+    AI 信心分數：${pct}%${low ? '　⚠️ 建議手動確認' : '　✓'}
+  </span>`;
 }
 
 function renderSaccDirResults() {
@@ -4520,37 +4554,37 @@ function renderSaccDirResults() {
   if (!resultsEl || !tbody) return;
   if (allResults.length === 0) { resultsEl.style.display = 'none'; return; }
 
-  const priorityClass = p => ({
-    brainstem_activation:  'priority-brainstem_activation',
-    cerebellar_calibration:'priority-cerebellar_calibration',
-    cortical_calibration:  'priority-cortical_calibration',
-  }[p] || '');
-
-  tbody.innerHTML = allResults.map(d => `
-    <tr>
-      <td><strong>${d.direction}</strong></td>
+  tbody.innerHTML = allResults.map(d => {
+    const badgeStyle = d.priority_color
+      ? `style="background:${d.priority_color}22;color:${d.priority_color};border:1px solid ${d.priority_color}44"`
+      : '';
+    const evidenceHtml = d.evidence
+      ? `<div style="font-size:11px;color:var(--gray-500);margin-top:2px">${d.evidence}</div>` : '';
+    return `<tr>
+      <td><strong>${d.direction}</strong>${evidenceHtml}</td>
       <td>${d.type}</td>
-      <td>${d.velocity_slow ? '⚠️ 慢速' : '正常'}</td>
+      <td>${d.velocity_slow ? '<span style="color:#C55A11;font-weight:600">⚠ 慢速</span>' : '<span style="color:var(--gray-500)">正常</span>'}</td>
       <td style="color:var(--danger);font-weight:500">${d.region}</td>
       <td><code style="font-size:11px;background:var(--gray-100);padding:1px 5px;border-radius:4px">${d.tag}</code></td>
-      <td><span class="priority-badge ${priorityClass(d.priority)}">${d.priority_label}</span></td>
-    </tr>`).join('');
+      <td><span class="priority-badge" ${badgeStyle}>${d.priority_label}</span></td>
+    </tr>`;
+  }).join('');
 
   if (treatEl) {
     const byPriority = {};
     allResults.forEach(d => {
-      if (!byPriority[d.priority]) byPriority[d.priority] = { label: d.priority_label, treatments: [] };
+      if (!byPriority[d.priority]) byPriority[d.priority] = { label: d.priority_label, color: d.priority_color, treatments: [] };
       d.treatments.forEach(t => { if (!byPriority[d.priority].treatments.includes(t)) byPriority[d.priority].treatments.push(t); });
     });
-    const order = ['brainstem_activation', 'cerebellar_calibration', 'cortical_calibration'];
+    const order  = ['brainstem_activation', 'cerebellar_calibration', 'cortical_calibration'];
     const active = order.filter(p => byPriority[p]);
     treatEl.innerHTML = active.length === 0 ? '' : `
       <div class="re-num-group">建議治療方向（依優先序）</div>
       ${active.map((p, i) => {
-        const info = byPriority[p];
-        const cls  = priorityClass(p);
+        const info  = byPriority[p];
+        const color = info.color || '#666';
         return `<div style="margin-bottom:8px">
-          <span class="priority-badge ${cls}" style="margin-bottom:4px;display:inline-block">${i + 1}. ${info.label}</span>
+          <span class="priority-badge" style="background:${color}22;color:${color};border:1px solid ${color}44;display:inline-block;margin-bottom:4px">${i + 1}. ${info.label}</span>
           <ul style="margin:2px 0 0;padding-left:18px;font-size:13px;color:var(--gray-700)">
             ${info.treatments.map(t => `<li>${t}</li>`).join('')}
           </ul>
@@ -4741,33 +4775,29 @@ function analyzeRightEyeStandalone() {
       </div>` : '';
 
     const allSaccDir = [...reSaccDirResultsH, ...reSaccDirResultsV];
-    const saccDirSection = allSaccDir.length > 0 ? (() => {
-      const priorityClass = p => ({
-        brainstem_activation:  'priority-brainstem_activation',
-        cerebellar_calibration:'priority-cerebellar_calibration',
-        cortical_calibration:  'priority-cortical_calibration',
-      }[p] || '');
-      return `
-        <div class="bcf-result-section" style="margin-top:12px">
-          <h4>🧭 方向性掃視腦區定位</h4>
-          <table class="sacc-dir-result-table" style="margin-top:8px">
-            <thead><tr>
-              <th>方向</th><th>類型</th><th>速度</th>
-              <th>腦區定位</th><th>系統標記</th><th>處方優先級</th>
-            </tr></thead>
-            <tbody>${allSaccDir.map(d => `
-              <tr>
-                <td><strong>${d.direction}</strong></td>
-                <td>${d.type}</td>
-                <td>${d.velocity_slow ? '⚠️ 慢速' : '正常'}</td>
-                <td style="color:var(--danger);font-weight:500">${d.region}</td>
-                <td><code style="font-size:11px;background:var(--gray-100);padding:1px 5px;border-radius:4px">${d.tag}</code></td>
-                <td><span class="priority-badge ${priorityClass(d.priority)}">${d.priority_label}</span></td>
-              </tr>`).join('')}
-            </tbody>
-          </table>
-        </div>`;
-    })() : '';
+    const saccDirSection = allSaccDir.length > 0 ? `
+      <div class="bcf-result-section" style="margin-top:12px">
+        <h4>🧭 方向性掃視腦區定位</h4>
+        <table class="sacc-dir-result-table" style="margin-top:8px">
+          <thead><tr>
+            <th>運動方向</th><th>類型</th><th>速度</th>
+            <th>腦區定位</th><th>系統標記</th><th>處方優先級</th>
+          </tr></thead>
+          <tbody>${allSaccDir.map(d => {
+            const color = d.priority_color || '#666';
+            const evHtml = d.evidence ? `<div style="font-size:11px;color:var(--gray-500);margin-top:2px">${d.evidence}</div>` : '';
+            return `<tr>
+              <td><strong>${d.direction}</strong>${evHtml}</td>
+              <td>${d.type}</td>
+              <td>${d.velocity_slow ? '<span style="color:#C55A11;font-weight:600">⚠ 慢速</span>' : '<span style="color:var(--gray-500)">正常</span>'}</td>
+              <td style="color:var(--danger);font-weight:500">${d.region}</td>
+              <td><code style="font-size:11px;background:var(--gray-100);padding:1px 5px;border-radius:4px">${d.tag}</code></td>
+              <td><span class="priority-badge" style="background:${color}22;color:${color};border:1px solid ${color}44">${d.priority_label}</span></td>
+            </tr>`;
+          }).join('')}
+          </tbody>
+        </table>
+      </div>` : '';
 
     resultsEl.className = 'card';
     resultsEl.innerHTML = `

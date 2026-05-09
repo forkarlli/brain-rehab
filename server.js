@@ -395,27 +395,32 @@ try { saccadeDiag = JSON.parse(fs.readFileSync(SACCADE_DIAG_FILE, 'utf8')); } ca
   console.warn('saccade_diagnosis.json 未找到:', e.message);
 }
 
-const SACCADE_VISION_SYSTEM = `你是功能性神經科醫師助手。請分析這張 RightEye 掃視報告截圖。
-判斷以下項目並只回傳 JSON：
+const SACCADE_VISION_SYSTEM = `你是功能性神經科醫師助手，專門分析眼球運動軌跡圖。
+請分析這張 RightEye 掃視軌跡圖截圖。
+
+重要：軌跡圖顯示眼球在靶點之間來回移動的路徑。
+- Overshoot：眼球超過靶點後才停止（軌跡超出圓圈範圍）
+- Undershoot：眼球未到達靶點就停止（軌跡未到圓圈）
+- 速度判定：若截圖中有速度數值，對照報告正常範圍判定是否偏慢
+
+請判斷這是 Horizontal（水平）還是 Vertical（垂直）掃視圖，
+然後分析往各方向移動時的表現。
+
+只回傳 JSON，不要其他文字：
 {
   "direction": "horizontal" 或 "vertical",
-  "right_or_up": {
+  "confidence": 0 到 1 的信心分數,
+  "toward_right_or_up": {
     "type": "overshoot" 或 "undershoot" 或 "normal",
     "velocity_slow": true 或 false,
-    "count": 次數,
-    "velocity": 速度數值
+    "evidence": "判斷依據簡短說明"
   },
-  "left_or_down": {
+  "toward_left_or_down": {
     "type": "overshoot" 或 "undershoot" 或 "normal",
     "velocity_slow": true 或 false,
-    "count": 次數,
-    "velocity": 速度數值
-  },
-  "velocity_reference": "正常範圍標示（若報告有顯示）"
-}
-速度判定：若速度數值低於 RightEye 報告中標示的正常範圍，velocity_slow = true。
-Overshoot 判定：Overshot Target 次數 > Undershot Target 次數。
-Undershoot 判定：Undershot Target 次數 > Overshot Target 次數。`;
+    "evidence": "判斷依據簡短說明"
+  }
+}`;
 
 app.post('/api/analyze-saccade-direction', async (req, res) => {
   const { image } = req.body;
@@ -446,7 +451,7 @@ app.post('/api/analyze-saccade-direction', async (req, res) => {
       const diagMap = saccadeDiag[dir] || {};
       const mapSide = (sideData, sideKey) => {
         if (!sideData || sideData.type === 'normal') return null;
-        const isRight = sideKey === 'right_or_up';
+        const isRight = sideKey === 'toward_right_or_up';
         let key;
         if (dir === 'horizontal') {
           const s = isRight ? 'right' : 'left';
@@ -469,22 +474,22 @@ app.post('/api/analyze-saccade-direction', async (req, res) => {
           direction: dirLabel,
           type: sideData.type === 'overshoot' ? 'Overshoot' : 'Undershoot',
           velocity_slow: sideData.velocity_slow,
-          count: sideData.count,
-          velocity: sideData.velocity,
+          evidence: sideData.evidence || '',
           region: diag.region,
           tag: diag.tag,
           priority: diag.priority,
-          priority_label: prioInfo.description || diag.priority,
+          priority_label: prioInfo.label || diag.priority,
+          priority_color: prioInfo.color || null,
           treatments: prioInfo.treatments || [],
         };
       };
-      const d1 = mapSide(analysis.right_or_up,   'right_or_up');
-      const d2 = mapSide(analysis.left_or_down,  'left_or_down');
+      const d1 = mapSide(analysis.toward_right_or_up,  'toward_right_or_up');
+      const d2 = mapSide(analysis.toward_left_or_down, 'toward_left_or_down');
       if (d1) diagnoses.push(d1);
       if (d2) diagnoses.push(d2);
     }
 
-    res.json({ analysis, diagnoses });
+    res.json({ analysis, confidence: analysis.confidence ?? null, diagnoses });
   } catch (err) {
     console.error('analyze-saccade-direction error:', err.message);
     res.status(500).json({ error: err.message });
