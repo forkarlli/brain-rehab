@@ -4143,6 +4143,7 @@ function clearBCFForm() {
     if (normal) { normal.checked = true; markBCFItem(c.id, false); }
     toggleConvSublayer(c.id, false);
   });
+  clearBCFVoiceState();
   const resultsEl = document.getElementById('bcf-results');
   if (resultsEl) resultsEl.style.display = 'none';
   const saveBtn = document.getElementById('bcf-save-btn');
@@ -6687,20 +6688,8 @@ function initApp() {
   // Assessment patient filter
   document.getElementById('assess-patient-select')?.addEventListener('change', () => {
     renderAssessments();
-    const activeTab = document.querySelector('.tab-btn.active')?.dataset.tab;
-    if (activeTab === 'bcf') {
-      const resultsEl = document.getElementById('bcf-results');
-      if (resultsEl) resultsEl.style.display = 'none';
-      const saveBtn = document.getElementById('bcf-save-btn');
-      if (saveBtn) saveBtn.style.display = 'none';
-    }
-    if (activeTab === 'righteye') {
-      clearRightEyeForm();
-      const resultsEl = document.getElementById('re-results');
-      if (resultsEl) resultsEl.style.display = 'none';
-      const saveBtn = document.getElementById('re-save-btn');
-      if (saveBtn) saveBtn.style.display = 'none';
-    }
+    clearBCFForm();
+    clearRightEyeForm();
   });
 
   // Rx patient filter
