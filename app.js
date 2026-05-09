@@ -1494,11 +1494,11 @@ function renderBCFInterface() {
       </div>`;
   }).join('');
 
-  // Face compass (3-col × 3-row): diagonal visual C2/C4/C6/C8
-  // row1: [C2↗ 左上, empty, C6↖ 右上]
-  // row2: [empty,    FACE,  empty]
-  // row3: [C4↘ 左下, empty, C8↙ 右下]
-  const faceCompassOrder = ['C2',null,'C6', null,'FACE',null, 'C4',null,'C8'];
+  // Face compass (3-col × 3-row): diagonal visual C2/C4/C6/C8 (patient perspective)
+  // row1: [C6↖ 右上(螢幕左), empty, C2↗ 左上(螢幕右)]
+  // row2: [empty,             FACE,  empty]
+  // row3: [C8↙ 右下(螢幕左), empty, C4↘ 左下(螢幕右)]
+  const faceCompassOrder = ['C6',null,'C2', null,'FACE',null, 'C8',null,'C4'];
   const visualMap = Object.fromEntries(BCF_VISUAL_STIM.map(c => [c.id, c]));
   const visualCompassHTML = faceCompassOrder.map(id => {
     if (!id) return `<div class="bcf-eye-cell bcf-empty-cell"></div>`;
