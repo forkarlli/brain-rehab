@@ -476,6 +476,7 @@ app.post('/api/analyze-saccade-direction', async (req, res) => {
           velocity_slow: sideData.velocity_slow,
           evidence: sideData.evidence || '',
           region: diag.region,
+          mechanism: diag.mechanism || '',
           tag: diag.tag,
           priority: diag.priority,
           priority_label: prioInfo.label || diag.priority,

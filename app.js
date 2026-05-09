@@ -4560,11 +4560,13 @@ function renderSaccDirResults() {
       : '';
     const evidenceHtml = d.evidence
       ? `<div style="font-size:11px;color:var(--gray-500);margin-top:2px">${d.evidence}</div>` : '';
+    const mechanismHtml = d.mechanism
+      ? `<div style="font-size:11px;color:var(--gray-400);margin-top:2px;font-style:italic">${d.mechanism}</div>` : '';
     return `<tr>
       <td><strong>${d.direction}</strong>${evidenceHtml}</td>
       <td>${d.type}</td>
       <td>${d.velocity_slow ? '<span style="color:#C55A11;font-weight:600">⚠ 慢速</span>' : '<span style="color:var(--gray-500)">正常</span>'}</td>
-      <td style="color:var(--danger);font-weight:500">${d.region}</td>
+      <td style="color:var(--danger);font-weight:500">${d.region}${mechanismHtml}</td>
       <td><code style="font-size:11px;background:var(--gray-100);padding:1px 5px;border-radius:4px">${d.tag}</code></td>
       <td><span class="priority-badge" ${badgeStyle}>${d.priority_label}</span></td>
     </tr>`;
@@ -4785,12 +4787,13 @@ function analyzeRightEyeStandalone() {
           </tr></thead>
           <tbody>${allSaccDir.map(d => {
             const color = d.priority_color || '#666';
-            const evHtml = d.evidence ? `<div style="font-size:11px;color:var(--gray-500);margin-top:2px">${d.evidence}</div>` : '';
+            const evHtml   = d.evidence  ? `<div style="font-size:11px;color:var(--gray-500);margin-top:2px">${d.evidence}</div>`  : '';
+            const mechHtml = d.mechanism ? `<div style="font-size:11px;color:var(--gray-400);margin-top:2px;font-style:italic">${d.mechanism}</div>` : '';
             return `<tr>
               <td><strong>${d.direction}</strong>${evHtml}</td>
               <td>${d.type}</td>
               <td>${d.velocity_slow ? '<span style="color:#C55A11;font-weight:600">⚠ 慢速</span>' : '<span style="color:var(--gray-500)">正常</span>'}</td>
-              <td style="color:var(--danger);font-weight:500">${d.region}</td>
+              <td style="color:var(--danger);font-weight:500">${d.region}${mechHtml}</td>
               <td><code style="font-size:11px;background:var(--gray-100);padding:1px 5px;border-radius:4px">${d.tag}</code></td>
               <td><span class="priority-badge" style="background:${color}22;color:${color};border:1px solid ${color}44">${d.priority_label}</span></td>
             </tr>`;

@@ -1,23 +1,60 @@
 {
   "horizontal": {
     "right_overshoot":           { "region": "Right Fastigial Nucleus ↓", "tag": "Cerebellar_Inhibition_Deficit", "priority": "cerebellar_calibration" },
-    "right_undershoot_normal_v": { "region": "Left FEF ↓",                "tag": "Frontal_Lobe_Hypofunction",     "priority": "cortical_calibration" },
-    "right_undershoot_slow_v":   { "region": "Right PPRF ↓",              "tag": "Midbrain_PPRF_Weakness",         "priority": "brainstem_activation" },
-    "left_overshoot":            { "region": "Left Fastigial Nucleus ↓",  "tag": "Cerebellar_Inhibition_Deficit", "priority": "cerebellar_calibration" },
-    "left_undershoot_normal_v":  { "region": "Right FEF ↓",               "tag": "Frontal_Lobe_Hypofunction",     "priority": "cortical_calibration" },
-    "left_undershoot_slow_v":    { "region": "Left PPRF ↓",               "tag": "Midbrain_PPRF_Weakness",         "priority": "brainstem_activation" }
+    "right_undershoot_normal_v": {
+      "region": "Left FEF ↓ / Left BG Output Imbalance (Gain Control ↓)",
+      "mechanism": "速度尚可但精準度不足 → Left BG Indirect Loop ↑（過度抑制）",
+      "tag": "Frontal_BG_Hypofunction",
+      "priority": "cortical_calibration"
+    },
+    "right_undershoot_slow_v":   {
+      "region": "Right PPRF ↓ / Left BG Direct Loop ↓",
+      "mechanism": "速度極慢 + Undershoot → 缺乏推力，Direct Loop 動力不足",
+      "tag": "Midbrain_PPRF_BG_Weakness",
+      "priority": "brainstem_activation"
+    },
+    "left_overshoot":            { "region": "Left Fastigial Nucleus ↓", "tag": "Cerebellar_Inhibition_Deficit", "priority": "cerebellar_calibration" },
+    "left_undershoot_normal_v":  {
+      "region": "Right FEF ↓ / Right BG Output Imbalance (Gain Control ↓)",
+      "mechanism": "速度尚可但精準度不足 → Right BG Indirect Loop ↑",
+      "tag": "Frontal_BG_Hypofunction",
+      "priority": "cortical_calibration"
+    },
+    "left_undershoot_slow_v":    {
+      "region": "Left PPRF ↓ / Right BG Direct Loop ↓",
+      "mechanism": "速度極慢 + Undershoot → Direct Loop 動力不足",
+      "tag": "Midbrain_PPRF_BG_Weakness",
+      "priority": "brainstem_activation"
+    }
   },
   "vertical": {
-    "up_overshoot":              { "region": "Cerebellar Vermis / Fastigial Nucleus ↓",    "tag": "Cerebellar_Inhibition_Deficit", "priority": "cerebellar_calibration" },
-    "up_undershoot_normal_v":    { "region": "Bilateral FEF ↓",                            "tag": "Frontal_Lobe_Hypofunction",     "priority": "cortical_calibration" },
-    "up_undershoot_slow_v":      { "region": "riMLF ↓",                                    "tag": "Midbrain_riMLF_Weakness",        "priority": "brainstem_activation" },
-    "down_overshoot":            { "region": "Cerebellar Vermis (Nodulus) ↓",              "tag": "Cerebellar_Inhibition_Deficit", "priority": "cerebellar_calibration" },
-    "down_undershoot_normal_v":  { "region": "Bilateral FEF / Superior Colliculus ↓",      "tag": "Frontal_Lobe_Hypofunction",     "priority": "cortical_calibration" },
-    "down_undershoot_slow_v":    { "region": "riMLF / INC ↓",                              "tag": "Midbrain_riMLF_Weakness",        "priority": "brainstem_activation" }
+    "up_overshoot":              { "region": "Cerebellar Vermis / Fastigial Nucleus ↓",   "tag": "Cerebellar_Inhibition_Deficit", "priority": "cerebellar_calibration" },
+    "up_undershoot_normal_v":    { "region": "Bilateral FEF ↓",                           "tag": "Frontal_Lobe_Hypofunction",     "priority": "cortical_calibration" },
+    "up_undershoot_slow_v":      { "region": "riMLF ↓",                                   "tag": "Midbrain_riMLF_Weakness",        "priority": "brainstem_activation" },
+    "down_overshoot":            { "region": "Cerebellar Vermis (Nodulus) ↓",             "tag": "Cerebellar_Inhibition_Deficit", "priority": "cerebellar_calibration" },
+    "down_undershoot_normal_v":  { "region": "Bilateral FEF / Superior Colliculus ↓",     "tag": "Frontal_Lobe_Hypofunction",     "priority": "cortical_calibration" },
+    "down_undershoot_slow_v":    { "region": "riMLF / INC ↓",                             "tag": "Midbrain_riMLF_Weakness",        "priority": "brainstem_activation" }
   },
   "prescription_priority": {
-    "brainstem_activation":   { "label": "腦幹活化優先",    "color": "#C55A11", "treatments": ["OPK 視動刺激", "高頻短間隔垂直跳視", "VOR 訓練"] },
-    "cerebellar_calibration": { "label": "小腦校準優先",    "color": "#1F6B75", "treatments": ["慢速 Smooth Pursuit", "反向跳視 Anti-saccade", "精準度訓練"] },
-    "cortical_calibration":   { "label": "皮質/額葉刺激優先", "color": "#2E75B6", "treatments": ["高能量大振幅跳視", "複雜動作序列", "額葉認知整合訓練"] }
+    "brainstem_activation":   {
+      "label": "腦幹活化優先",
+      "color": "#C55A11",
+      "treatments": ["OPK 視動刺激", "高頻短間隔垂直跳視", "VOR 訓練"]
+    },
+    "cerebellar_calibration": {
+      "label": "小腦校準優先",
+      "color": "#1F6B75",
+      "treatments": ["慢速 Smooth Pursuit", "反向跳視 Anti-saccade", "精準度訓練"]
+    },
+    "cortical_calibration":   {
+      "label": "皮質/額葉+BG 刺激優先",
+      "color": "#2E75B6",
+      "treatments": [
+        "高能量大振幅跳視（激活 Direct Loop）",
+        "複雜動作序列（額葉-BG 整合）",
+        "節律性眼動訓練（改善 BG Gain Control）",
+        "額葉認知整合訓練"
+      ]
+    }
   }
 }
