@@ -4927,12 +4927,16 @@ function _handleBTrackSFiles(files) {
     if (parsed.path_ves != null && ecEl) ecEl.value = parsed.path_ves;
     _rombergUpdateRq();
 
-    const dir = _btracksAngleDirection(parsed.cop_ap_ves, parsed.cop_ang_ves);
+    const dirFromAng = _btracksAngleDirection(parsed.cop_ap_ves, parsed.cop_ang_ves);
+    const dirFromMLAP = _btracksMLAPDirection(parsed.cop_ml_ves, parsed.cop_ap_ves);
+    const dir = dirFromAng || dirFromMLAP;
+    const dirSource = dirFromAng ? 'AP+Ang' : (dirFromMLAP ? 'ML+AP 推算' : '');
     if (dir && dirEl) dirEl.value = dir;
 
     const rq = parsed.path_std && parsed.path_ves ? (parsed.path_ves / parsed.path_std).toFixed(2) : '—';
     const v = k => parsed[k] != null ? parsed[k] : '—';
     if (summary) {
+      const angDisplay = parsed.cop_ang_ves != null ? parsed.cop_ang_ves : `<span style="color:#d97706;">— (由ML+AP推算)</span>`;
       summary.innerHTML = `
         <div style="font-weight:600;color:#1d4ed8;margin-bottom:8px;">📊 BTrackS AI 解析結果</div>
         <table style="width:100%;font-size:12px;border-collapse:collapse;">
@@ -4951,12 +4955,13 @@ function _handleBTrackSFiles(files) {
             <td style="padding:3px 8px;text-align:right;">${v('path_ves')}</td>
             <td style="padding:3px 8px;text-align:right;">${v('cop_ml_ves')}</td>
             <td style="padding:3px 8px;text-align:right;">${v('cop_ap_ves')}</td>
-            <td style="padding:3px 8px;text-align:right;">${v('cop_ang_ves')}</td>
+            <td style="padding:3px 8px;text-align:right;">${angDisplay}</td>
           </tr>
         </table>
         <div style="margin-top:10px;display:flex;gap:20px;flex-wrap:wrap;font-size:13px;font-weight:600;">
           <span>RQ = <strong style="color:#1d4ed8;">${rq}</strong></span>
-          ${dir ? `<span>偏移方向：<strong style="color:#1d4ed8;">${dir}</strong></span>` : '<span style="color:#9ca3af;">方向待計算（請確認 AP/Ang）</span>'}
+          ${dir ? `<span>偏移方向：<strong style="color:#1d4ed8;">${dir}</strong><span style="font-size:11px;font-weight:400;color:#6b7280;margin-left:4px;">(${dirSource})</span></span>`
+                : '<span style="color:#9ca3af;font-weight:400;">無法推算方向，請手動選擇</span>'}
         </div>`;
     }
     showToast('BTrackS 圖片解析成功，已自動填入數值', 'success');
@@ -5062,7 +5067,7 @@ function parseBTrackSReport(htmlText) {
   return result;
 }
 
-// Direction from VES COP: |AP| < 2 means near-neutral AP → pure lateral if angled
+// Direction from VES COP using AP + Ang values
 function _btracksAngleDirection(ap, ang) {
   if (ap === null || ang === null) return '';
   if (Math.abs(ap) < 2) {
@@ -5076,6 +5081,20 @@ function _btracksAngleDirection(ap, ang) {
   if (ap < 0 && ang > 15)   return 'RB';
   if (ap < 0 && ang < -15)  return 'LB';
   return 'PBk';
+}
+
+// Fallback direction from ML + AP only (when Ang is unavailable)
+function _btracksMLAPDirection(ml, ap) {
+  if (ml === null || ap === null) return '';
+  if (ap > 3  && Math.abs(ml) < 1.5)  return 'PF';
+  if (ap < -3 && Math.abs(ml) < 1.5)  return 'PBk';
+  if (ml > 1.5  && ap > 1.5)          return 'RF';
+  if (ml > 1.5  && ap < -1.5)         return 'RB';
+  if (ml > 1.5  && Math.abs(ap) <= 1.5) return 'PR';
+  if (ml < -1.5 && ap > 1.5)          return 'LF';
+  if (ml < -1.5 && ap < -1.5)         return 'LB';
+  if (ml < -1.5 && Math.abs(ap) <= 1.5) return 'PL';
+  return '';
 }
 
 function _renderRombergResultHTML(result) {
@@ -5236,12 +5255,16 @@ function _mBTrackSFiles(files) {
     if (parsed.path_ves != null && ecEl) ecEl.value = parsed.path_ves;
     _mRombergUpdateRq();
 
-    const dir = _btracksAngleDirection(parsed.cop_ap_ves, parsed.cop_ang_ves);
+    const dirFromAng  = _btracksAngleDirection(parsed.cop_ap_ves, parsed.cop_ang_ves);
+    const dirFromMLAP = _btracksMLAPDirection(parsed.cop_ml_ves, parsed.cop_ap_ves);
+    const dir = dirFromAng || dirFromMLAP;
+    const dirSource = dirFromAng ? 'AP+Ang' : (dirFromMLAP ? 'ML+AP 推算' : '');
     if (dir && dirEl) dirEl.value = dir;
 
     const rq = parsed.path_std && parsed.path_ves ? (parsed.path_ves / parsed.path_std).toFixed(2) : '—';
     const v = k => parsed[k] != null ? parsed[k] : '—';
     if (summary) {
+      const angDisplay = parsed.cop_ang_ves != null ? parsed.cop_ang_ves : `<span style="color:#d97706;">— (由ML+AP推算)</span>`;
       summary.innerHTML = `
         <div style="font-weight:600;color:#1d4ed8;margin-bottom:8px;">📊 BTrackS AI 解析結果</div>
         <table style="width:100%;font-size:12px;border-collapse:collapse;">
@@ -5260,12 +5283,13 @@ function _mBTrackSFiles(files) {
             <td style="padding:3px 8px;text-align:right;">${v('path_ves')}</td>
             <td style="padding:3px 8px;text-align:right;">${v('cop_ml_ves')}</td>
             <td style="padding:3px 8px;text-align:right;">${v('cop_ap_ves')}</td>
-            <td style="padding:3px 8px;text-align:right;">${v('cop_ang_ves')}</td>
+            <td style="padding:3px 8px;text-align:right;">${angDisplay}</td>
           </tr>
         </table>
         <div style="margin-top:10px;display:flex;gap:20px;flex-wrap:wrap;font-size:13px;font-weight:600;">
           <span>RQ = <strong style="color:#1d4ed8;">${rq}</strong></span>
-          ${dir ? `<span>偏移方向：<strong style="color:#1d4ed8;">${dir}</strong></span>` : '<span style="color:#9ca3af;">方向待計算（請確認 AP/Ang）</span>'}
+          ${dir ? `<span>偏移方向：<strong style="color:#1d4ed8;">${dir}</strong><span style="font-size:11px;font-weight:400;color:#6b7280;margin-left:4px;">(${dirSource})</span></span>`
+                : '<span style="color:#9ca3af;font-weight:400;">無法推算方向，請手動選擇</span>'}
         </div>`;
     }
     showToast('BTrackS 圖片解析成功，已自動填入數值', 'success');

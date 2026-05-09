@@ -349,25 +349,32 @@ app.post('/api/parse-btracks-image', async (req, res) => {
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-5',
       max_tokens: 512,
-      system: `你是 BTrackS mCTSIB 平衡測試報告數值提取助理。
-圖片可能是以下兩種之一或兩者並存：
-1. Main Results 表格：欄位為 DATE | STD | % | PRO | % | VIS | % | VES | % | COMP | %，其中 STD/PRO/VIS/VES 欄為路徑長度數字（整數，單位 cm）。
-2. COP Details 表格：欄位為 DATE | STD (ML,AP,ANG) | PRO (ML,AP,ANG) | VIS (ML,AP,ANG) | VEST (ML AP,ANG)，每格以逗號分隔 ML、AP、ANG 三個數字（可含小數）。
-只回傳 JSON，不附加任何說明或 markdown。`,
+      system: `你是 BTrackS mCTSIB 平衡測試報告數值提取助理，只回傳 JSON，不附加任何說明或 markdown。
+
+圖片類型說明：
+1. Main Results 表格：深色標題列，欄位順序為 DATE | STD | % | PRO | % | VIS | % | VES | % | COMP | %。
+   STD / PRO / VIS / VES 欄的數字是路徑長度（整數，單位 cm）。
+
+2. COP Details 表格：深色標題列，欄位為 DATE | STD (ML,AP,ANG) | PRO (ML,AP,ANG) | VIS (ML,AP,ANG) | VEST (ML AP,ANG)。
+   每個資料格內含三個數字，以逗號或空格分隔，依序為 ML（內外偏移）、AP（前後偏移）、ANG（角度，單位度，可為正數或負數）。
+   例如 "1.9, 8.5, 7" 表示 ML=1.9、AP=8.5、ANG=7。
+   例如 "2.1, -3.4, -12" 表示 ML=2.1、AP=-3.4、ANG=-12。
+   ANG 是第三個數字，請務必讀取並回傳，即使只是個位數也不可遺漏。`,
       messages: [{
         role: 'user',
         content: [
           ...imageBlocks,
-          { type: 'text', text: `從圖片中提取數值，回傳以下 JSON（找不到的欄位填 null）：
+          { type: 'text', text: `仔細讀取圖片中所有數字。回傳以下 JSON（找不到的欄位填 null）：
 {
-  "path_std": <STD 路徑長度，number | null>,
-  "path_pro": <PRO 路徑長度，number | null>,
-  "path_vis": <VIS 路徑長度，number | null>,
-  "path_ves": <VES 或 VEST 路徑長度，number | null>,
-  "cop_ml_ves": <VES/VEST 的 ML 值，number | null>,
-  "cop_ap_ves": <VES/VEST 的 AP 值，number | null>,
-  "cop_ang_ves": <VES/VEST 的 ANG/角度值，number | null>
-}` },
+  "path_std": <Main Results 中 STD 欄的路徑長度整數，number | null>,
+  "path_pro": <Main Results 中 PRO 欄的路徑長度整數，number | null>,
+  "path_vis": <Main Results 中 VIS 欄的路徑長度整數，number | null>,
+  "path_ves": <Main Results 中 VES 欄的路徑長度整數，number | null>,
+  "cop_ml_ves": <COP Details 中 VEST 欄的第 1 個數字（ML），number | null>,
+  "cop_ap_ves": <COP Details 中 VEST 欄的第 2 個數字（AP），number | null>,
+  "cop_ang_ves": <COP Details 中 VEST 欄的第 3 個數字（ANG，角度，可為正或負），number | null>
+}
+重要：cop_ang_ves 是 VEST 格中逗號後的第三個數字，請務必提取，不可填 null 除非圖片中確實看不到任何數字。` },
         ],
       }],
     });
