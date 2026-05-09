@@ -1255,19 +1255,12 @@ const CERVICAL_BRAIN_MAP = {
            : v === 'right-long' ? { brain: ['Right CB'], training: '訓練Right CB' } : null,
 };
 const BCF_VISUAL_STIM = [
-  { id: 'C1', dir: '左耳', type: '聽覺' },
-  { id: 'C2', dir: '左上', type: '視覺' },
-  { id: 'C3', dir: '左',   type: '視覺' },
-  { id: 'C4', dir: '左下', type: '視覺' },
-  { id: 'C5', dir: '右耳', type: '聽覺' },
-  { id: 'C6', dir: '右上', type: '視覺' },
-  { id: 'C7', dir: '右',   type: '視覺' },
-  { id: 'C8', dir: '右下', type: '視覺' },
+  { id: 'C2', dir: '左上↖', type: '視覺' },
+  { id: 'C4', dir: '左下↙', type: '視覺' },
+  { id: 'C6', dir: '右上↗', type: '視覺' },
+  { id: 'C8', dir: '右下↘', type: '視覺' },
 ];
-const BCF_STANCE = [
-  { id: 'L1', label: '右前左後站立' },
-  { id: 'L2', label: '左前右後站立' },
-];
+const BCF_STANCE = [];
 const BCF_CONVERGENCE = [
   {
     id: 'conv-up',  label: '上方Convergence', desc: '手指從斜上方靠近眉心',
@@ -1501,41 +1494,27 @@ function renderBCFInterface() {
       </div>`;
   }).join('');
 
-  // Face compass (5-col × 3-row):
-  // row1: [empty, C6右上, empty, C2左上, empty]
-  // row2: [C5右耳, C7右, FACE, C3左, C1左耳]
-  // row3: [empty, C8右下, empty, C4左下, empty]
-  const faceCompassOrder = [null,'C6',null,'C2',null, 'C5','C7','FACE','C3','C1', null,'C8',null,'C4',null];
+  // Face compass (3-col × 3-row): diagonal visual only C2/C4/C6/C8
+  // row1: [C2↖, empty, C6↗]
+  // row2: [empty, FACE, empty]
+  // row3: [C4↙, empty, C8↘]
+  const faceCompassOrder = ['C2',null,'C6', null,'FACE',null, 'C4',null,'C8'];
   const visualMap = Object.fromEntries(BCF_VISUAL_STIM.map(c => [c.id, c]));
   const visualCompassHTML = faceCompassOrder.map(id => {
     if (!id) return `<div class="bcf-eye-cell bcf-empty-cell"></div>`;
     if (id === 'FACE') return `<div class="bcf-eye-cell bcf-center-eye">
       <img src="images/face.png" alt="人臉刺激圖" style="width:120px;height:150px;object-fit:contain;display:block;"></div>`;
     const c = visualMap[id];
-    const codeClass = c.type === '聽覺' ? 'auditory-code' : 'visual-code';
-    const tagClass  = c.type === '聽覺' ? 'tag-auditory' : 'tag-visual';
     return `
       <div class="bcf-eye-cell" id="cell-${c.id}">
-        <div class="bcf-cell-header"><span class="bcf-cell-code ${codeClass}">${c.id}</span></div>
+        <div class="bcf-cell-header"><span class="bcf-cell-code visual-code">${c.id}</span></div>
         <div class="bcf-cell-dir">${c.dir}</div>
-        <div class="bcf-cell-type-tag ${tagClass}">${c.type}</div>
+        <div class="bcf-cell-type-tag tag-visual">${c.type}</div>
         <label class="bcf-check-label diff-check">
           <input type="checkbox" name="${c.id}" value="diff" onchange="markBCFItem('${c.id}',this.checked)"> 有差異
         </label>
       </div>`;
   }).join('');
-  const stanceHTML = BCF_STANCE.map(s => `
-    <div class="bcf-stance-item" id="cell-${s.id}">
-      <div class="bcf-stance-header">
-        <span class="bcf-item-code stance-code">${s.id}</span>
-        <span class="bcf-stance-label">${s.label}</span>
-      </div>
-      <div class="bcf-arm-options">
-        <label class="bcf-arm-opt"><input type="radio" name="${s.id}" value="none" checked onchange="handleBCFArm('${s.id}')"> 無差異</label>
-        <label class="bcf-arm-opt left-opt"><input type="radio" name="${s.id}" value="left-long" onchange="handleBCFArm('${s.id}')"> 左長右短</label>
-        <label class="bcf-arm-opt right-opt"><input type="radio" name="${s.id}" value="right-long" onchange="handleBCFArm('${s.id}')"> 左短右長</label>
-      </div>
-    </div>`).join('');
 
   const convHTML = BCF_CONVERGENCE.map(c => `
     <div class="bcf-conv-item" id="cell-${c.id}">
@@ -1607,13 +1586,12 @@ function renderBCFInterface() {
 
     <div class="card">
       <div class="card-header">
-        <h3>三、視覺與聽覺刺激反應測試 C1–C8</h3>
-        <span class="bcf-section-hint">刺激位置圍繞臉部 — 勾選有差異的反應</span>
+        <h3>三、對角視覺刺激反應測試 C2/C4/C6/C8</h3>
+        <span class="bcf-section-hint">四個對角方向視覺刺激 — 勾選有差異的反應</span>
       </div>
       <div class="bcf-compass-wrapper">
         <div class="bcf-face-compass">${visualCompassHTML}</div>
       </div>
-      <div class="bcf-stance-row">${stanceHTML}</div>
     </div>
 
     <div class="card">

@@ -1263,10 +1263,10 @@ body {
   color: var(--gray-700);
 }
 
-/* Face compass (5-col × 3-row for C1–C8) */
+/* Face compass (3-col × 3-row for C2/C4/C6/C8 diagonal) */
 .bcf-face-compass {
   display: grid;
-  grid-template-columns: repeat(5, 140px);
+  grid-template-columns: repeat(3, 160px);
   grid-template-rows: repeat(3, auto);
   gap: 8px;
 }
@@ -1696,7 +1696,7 @@ body {
 @media (max-width: 640px) {
   .bcf-eye-compass { grid-template-columns: repeat(3, 140px); }
   .bcf-cervical-compass { grid-template-columns: repeat(3, 140px); }
-  .bcf-face-compass { grid-template-columns: repeat(5, 100px); }
+  .bcf-face-compass { grid-template-columns: repeat(3, 110px); }
   .bcf-patient-row { flex-direction: column; }
   .bcf-conv-radios { margin-left: 0; }
   .bcf-sublayer-options { gap: 6px; }
