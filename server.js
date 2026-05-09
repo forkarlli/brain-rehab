@@ -255,6 +255,7 @@ app.post('/api/analyze-righteye', async (req, res) => {
   "syncH": <Synchronization SP 水平 0~1>,
   "syncV": <Synchronization SP 垂直 0~1>,
   "intrusion": <"none" | "up" | "down" | "left" | "right">,
+  "intrusionAmp": <Intrusion 振幅大小: "small" | "large" | null（small=小振幅震顫/固視不穩；large=大幅擺動/交叉脊髓束；無 intrusion 填 null）>,
   "hTotal": <Horizontal Saccade 總次數>,
   "hOverR": <Horizontal 右向 Overshoot 次數>,
   "hUnderR": <Horizontal 右向 Undershoot 次數>,
@@ -321,7 +322,13 @@ app.post('/api/analyze-righteye', async (req, res) => {
    - 只有在數據真正呈現雙側相當時才使用 Bilateral
    - orthogonal 偏移方向請明確填入 "up" 或 "down"，無偏移填 "none"
 
-5. 數值提取：仔細讀取圖片中所有數字，包括小數點。找不到的欄位填 null。
+5. Intrusion 振幅判斷（intrusionAmp）：
+   若圖片中有 Fixation/Intrusion 相關波形，判斷振幅大小：
+   - "small"：小幅震顫（固視不穩定，Flocculus/SC 問題，波形偏離中心 <5° 或細微漂移）
+   - "large"：大幅擺動（Cross-Cord Pathway 問題，波形大幅偏離 >5° 或明顯來回振盪）
+   - null：無 intrusion（intrusion 填 "none" 時同步填 null）
+
+6. 數值提取：仔細讀取圖片中所有數字，包括小數點。找不到的欄位填 null。
 
 只回傳 JSON，不附加任何說明文字。`,
       messages: [{ role: 'user', content: [...imageBlocks, { type: 'text', text: userPrompt }] }],

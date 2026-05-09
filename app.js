@@ -2776,24 +2776,24 @@ function computeRightEyeRx(data) {
     }] : []),
     // ── 視野四象限 C1-C4 ──
     ...(vqC1 && vqC1 !== 'none' ? [{
-      label: 'C1 左上視野（↖）', value: vqC1 === 'right-strong' ? '左量右強' : '左強右量',
-      status: 'severe', brain: ['Right Temporal Lobe'],
-      note: 'Right Temporal Lobe ↓（左上視野反應異常）',
-    }] : []),
-    ...(vqC2 && vqC2 !== 'none' ? [{
-      label: 'C2 左下視野（↙）', value: vqC2 === 'right-strong' ? '左量右強' : '左強右量',
-      status: 'severe', brain: ['Right Parietal Lobe'],
-      note: 'Right Parietal Lobe ↓（左下視野反應異常）',
-    }] : []),
-    ...(vqC3 && vqC3 !== 'none' ? [{
-      label: 'C3 右上視野（↗）', value: vqC3 === 'right-strong' ? '左量右強' : '左強右量',
+      label: 'C1 右上視野（↖）', value: vqC1 === 'right-strong' ? '左量右強' : '左強右量',
       status: 'severe', brain: ['Left Temporal Lobe'],
       note: 'Left Temporal Lobe ↓（右上視野反應異常）',
     }] : []),
-    ...(vqC4 && vqC4 !== 'none' ? [{
-      label: 'C4 右下視野（↘）', value: vqC4 === 'right-strong' ? '左量右強' : '左強右量',
+    ...(vqC2 && vqC2 !== 'none' ? [{
+      label: 'C2 左上視野（↗）', value: vqC2 === 'right-strong' ? '左量右強' : '左強右量',
+      status: 'severe', brain: ['Right Temporal Lobe'],
+      note: 'Right Temporal Lobe ↓（左上視野反應異常）',
+    }] : []),
+    ...(vqC3 && vqC3 !== 'none' ? [{
+      label: 'C3 右下視野（↙）', value: vqC3 === 'right-strong' ? '左量右強' : '左強右量',
       status: 'severe', brain: ['Left Parietal Lobe'],
       note: 'Left Parietal Lobe ↓（右下視野反應異常）',
+    }] : []),
+    ...(vqC4 && vqC4 !== 'none' ? [{
+      label: 'C4 左下視野（↘）', value: vqC4 === 'right-strong' ? '左量右強' : '左強右量',
+      status: 'severe', brain: ['Right Parietal Lobe'],
+      note: 'Right Parietal Lobe ↓（左下視野反應異常）',
     }] : []),
   ];
 
@@ -3033,13 +3033,13 @@ function computeRightEyeRx(data) {
 
   // ── 視野四象限 C1-C4 → Temporal/Parietal 視野刺激訓練 ──
   if (vqC1 && vqC1 !== 'none')
-    addRx({ mode: 'M2', name: '左上視野 Saccade', angle: 'L45（左上視野刺激－Right Temporal ↓）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['C1 異常 → Right Temporal Lobe ↓ 左上視野刺激訓練'], priority: 2, brainTarget: 'Right Temporal Lobe', severityLabel: 'severe' });
+    addRx({ mode: 'M2', name: '右上視野 Saccade', angle: 'R45（右上視野刺激－Left Temporal ↓）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['C1 異常 → Left Temporal Lobe ↓ 右上視野刺激訓練'], priority: 2, brainTarget: 'Left Temporal Lobe', severityLabel: 'severe' });
   if (vqC2 && vqC2 !== 'none')
-    addRx({ mode: 'M1', name: '左下視野 Pursuit', angle: 'L45↓（左下視野刺激－Right Parietal ↓）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['C2 異常 → Right Parietal Lobe ↓ 左下視野刺激訓練'], priority: 2, brainTarget: 'Right Parietal Lobe', severityLabel: 'severe' });
+    addRx({ mode: 'M2', name: '左上視野 Saccade', angle: 'L45（左上視野刺激－Right Temporal ↓）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['C2 異常 → Right Temporal Lobe ↓ 左上視野刺激訓練'], priority: 2, brainTarget: 'Right Temporal Lobe', severityLabel: 'severe' });
   if (vqC3 && vqC3 !== 'none')
-    addRx({ mode: 'M2', name: '右上視野 Saccade', angle: 'R45（右上視野刺激－Left Temporal ↓）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['C3 異常 → Left Temporal Lobe ↓ 右上視野刺激訓練'], priority: 2, brainTarget: 'Left Temporal Lobe', severityLabel: 'severe' });
+    addRx({ mode: 'M1', name: '右下視野 Pursuit', angle: 'R45↓（右下視野刺激－Left Parietal ↓）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['C3 異常 → Left Parietal Lobe ↓ 右下視野刺激訓練'], priority: 2, brainTarget: 'Left Parietal Lobe', severityLabel: 'severe' });
   if (vqC4 && vqC4 !== 'none')
-    addRx({ mode: 'M1', name: '右下視野 Pursuit', angle: 'R45↓（右下視野刺激－Left Parietal ↓）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['C4 異常 → Left Parietal Lobe ↓ 右下視野刺激訓練'], priority: 2, brainTarget: 'Left Parietal Lobe', severityLabel: 'severe' });
+    addRx({ mode: 'M1', name: '左下視野 Pursuit', angle: 'L45↓（左下視野刺激－Right Parietal ↓）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['C4 異常 → Right Parietal Lobe ↓ 左下視野刺激訓練'], priority: 2, brainTarget: 'Right Parietal Lobe', severityLabel: 'severe' });
 
   // Step 1: 若 Velocity 水平或垂直任一異常 → 腦幹項目強制排最前面
   // Step 2: 其餘依嚴重度排序（嚴重>中度>輕度>正常）
@@ -4297,10 +4297,10 @@ function renderRightEyeInterface() {
         </div>
         <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:520px">
           ${[
-            { id: 'vq-c1', label: 'C1', arrow: '↖', direction: '左上視野', brain: 'Right Temporal Lobe', color: '#ef4444', bg: '#fef2f2' },
-            { id: 'vq-c3', label: 'C3', arrow: '↗', direction: '右上視野', brain: 'Left Temporal Lobe',  color: '#3b82f6', bg: '#eff6ff' },
-            { id: 'vq-c2', label: 'C2', arrow: '↙', direction: '左下視野', brain: 'Right Parietal Lobe', color: '#f59e0b', bg: '#fffbeb' },
-            { id: 'vq-c4', label: 'C4', arrow: '↘', direction: '右下視野', brain: 'Left Parietal Lobe',  color: '#8b5cf6', bg: '#f5f3ff' },
+            { id: 'vq-c1', label: 'C1', arrow: '↖', direction: '右上視野', brain: 'Left Temporal Lobe',  color: '#ef4444', bg: '#fef2f2' },
+            { id: 'vq-c3', label: 'C3', arrow: '↙', direction: '右下視野', brain: 'Left Parietal Lobe',  color: '#3b82f6', bg: '#eff6ff' },
+            { id: 'vq-c2', label: 'C2', arrow: '↗', direction: '左上視野', brain: 'Right Temporal Lobe', color: '#f59e0b', bg: '#fffbeb' },
+            { id: 'vq-c4', label: 'C4', arrow: '↘', direction: '左下視野', brain: 'Right Parietal Lobe', color: '#8b5cf6', bg: '#f5f3ff' },
           ].map(c => `
             <div style="border:1.5px solid ${c.color}44;border-radius:10px;padding:12px;background:${c.bg}">
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
