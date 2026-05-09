@@ -1586,7 +1586,7 @@ function renderBCFInterface() {
 
     <div class="card">
       <div class="card-header">
-        <h3>三、對角視覺刺激反應測試 C1/C2/C3/C4</h3>
+        <h3>三、對角視覺刺激反應測試 C2/C4/C6/C8</h3>
         <span class="bcf-section-hint">四個對角方向視覺刺激 — 勾選有差異的反應</span>
       </div>
       <div class="bcf-compass-wrapper">
