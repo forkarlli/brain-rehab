@@ -2922,82 +2922,80 @@ function computeRightEyeRx(data) {
   }
 
   // === Overshoot / Undershoot / Missed → 處方 ===
-  // 右向 Overshoot → Right CB 抑制不足 → M2 R90 低速精準
+  // Overshoot → CB → M3（低速精準抑制）
   if (hOverRSt === 'severe') {
-    addRx({ mode: 'M2', name: 'Saccade右向', angle: 'R90（Right CB 過衝-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 右向 Overshoot >50% → Right CB 精準抑制訓練'], priority: 2 });
+    addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑ 右向', angle: 'R90（Right CB 過衝-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 右向 Overshoot >50% → Right CB 抑制訓練，極低速精準'], priority: 2 });
   } else if (hOverRSt === 'moderate') {
-    addRx({ mode: 'M2', name: 'Saccade右向', angle: 'R90（Right CB 過衝-中度）', speed: 'S2', dist: 'D3', reps: '13', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 右向 Overshoot 30-50% → Right CB 精準訓練'], priority: 2 });
+    addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑ 右向', angle: 'R90（Right CB 過衝-中度）', speed: 'S3', dist: 'D3', reps: '13', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 右向 Overshoot 30-50% → Right CB 抑制訓練，中速'], priority: 2 });
   } else if (hOverRSt === 'mild') {
-    addRx({ mode: 'M2', name: 'Saccade右向', angle: 'R90（Right CB 過衝輕度）', speed: 'S2', dist: 'D3', reps: '10', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 右向 Overshoot 10-30% → Right CB 輕度訓練'], priority: 3 });
+    addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑ 右向', angle: 'R90（Right CB 過衝-輕度）', speed: 'S4', dist: 'D3', reps: '10', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 右向 Overshoot 10-30% → Right CB 輕度抑制'], priority: 3 });
   }
-  // 左向 Overshoot → Left CB 抑制不足 → M2 L90 低速精準
   if (hOverLSt === 'severe') {
-    addRx({ mode: 'M2', name: 'Saccade左向', angle: 'L90（Left CB 過衝-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 左向 Overshoot >50% → Left CB 精準抑制訓練'], priority: 2 });
+    addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑ 左向', angle: 'L90（Left CB 過衝-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 左向 Overshoot >50% → Left CB 抑制訓練，極低速精準'], priority: 2 });
   } else if (hOverLSt === 'moderate') {
-    addRx({ mode: 'M2', name: 'Saccade左向', angle: 'L90（Left CB 過衝-中度）', speed: 'S2', dist: 'D3', reps: '13', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 左向 Overshoot 30-50% → Left CB 精準訓練'], priority: 2 });
+    addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑ 左向', angle: 'L90（Left CB 過衝-中度）', speed: 'S3', dist: 'D3', reps: '13', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 左向 Overshoot 30-50% → Left CB 抑制訓練，中速'], priority: 2 });
   } else if (hOverLSt === 'mild') {
-    addRx({ mode: 'M2', name: 'Saccade左向', angle: 'L90（Left CB 過衝輕度）', speed: 'S2', dist: 'D3', reps: '10', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 左向 Overshoot 10-30% → Left CB 輕度訓練'], priority: 3 });
+    addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑ 左向', angle: 'L90（Left CB 過衝-輕度）', speed: 'S4', dist: 'D3', reps: '10', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 左向 Overshoot 10-30% → Left CB 輕度抑制'], priority: 3 });
   }
-  // Overshoot（垂直）→ CB Vermis 抑制不足 → M3 低速
   if (vOverRSt === 'severe' || vOverLSt === 'severe') {
-    addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑', angle: 'R0/L0（垂直，CB Vermis 過衝-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 垂直 Overshoot 嚴重（>50%）→ CB Vermis 抑制訓練，低速精準'], priority: 2 });
+    addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑ 垂直', angle: 'R0/L0（垂直 CB Vermis 過衝-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 垂直 Overshoot >50% → CB Vermis 抑制訓練，極低速'], priority: 2 });
   } else if (vOverRSt === 'moderate' || vOverLSt === 'moderate') {
-    addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑', angle: 'R0/L0（垂直，CB Vermis 過衝-中度）', speed: 'S2', dist: 'D3', reps: '13', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 垂直 Overshoot 中度（30-50%）→ CB Vermis 抑制訓練'], priority: 2 });
+    addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑ 垂直', angle: 'R0/L0（垂直 CB Vermis 過衝-中度）', speed: 'S3', dist: 'D3', reps: '13', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 垂直 Overshoot 30-50% → CB Vermis 抑制訓練，中速'], priority: 2 });
   } else if (vOverRSt === 'mild' || vOverLSt === 'mild') {
-    addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑', angle: 'R0/L0（垂直，CB Vermis 輕度）', speed: 'S2', dist: 'D3', reps: '10', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 垂直 Overshoot 輕度（10-30%）→ CB Vermis 抑制訓練'], priority: 3 });
+    addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑ 垂直', angle: 'R0/L0（垂直 CB Vermis 過衝-輕度）', speed: 'S4', dist: 'D3', reps: '10', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 垂直 Overshoot 10-30% → CB Vermis 輕度抑制'], priority: 3 });
   }
-  // 右向 Undershoot → Left BG + Right FEF 啟動不足 → M2 R90 中高速啟動訓練
+  // Undershoot → BG → M2 + FEF → M5（啟動訓練）
   if (hUnderRSt === 'severe') {
-    addRx({ mode: 'M2', name: 'Saccade右向', angle: 'R90（Left BG + Right FEF → 右向欠衝-嚴重）', speed: 'S4', dist: 'D5', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Undershoot >60% → Left BG + Right FEF 啟動訓練'], priority: 2 });
+    addRx({ mode: 'M2', name: 'Saccade右向 BG啟動', angle: 'R90（Left BG 欠衝-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Undershoot >60% → Left BG 啟動，極低速'], priority: 2 });
+    addRx({ mode: 'M5', name: 'Vergence Pursuit 右向 FEF', angle: 'R90（Right FEF 欠衝-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Undershoot >60% → Right FEF 激活訓練'], priority: 2 });
   } else if (hUnderRSt === 'moderate') {
-    addRx({ mode: 'M2', name: 'Saccade右向', angle: 'R90（Left BG + Right FEF → 右向欠衝-中度）', speed: 'S3', dist: 'D4', reps: '18', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Undershoot 40-60% → Left BG + Right FEF 中度啟動訓練'], priority: 2 });
+    addRx({ mode: 'M2', name: 'Saccade右向 BG啟動', angle: 'R90（Left BG 欠衝-中度）', speed: 'S3', dist: 'D3', reps: '13', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Undershoot 40-60% → Left BG 啟動，中速'], priority: 2 });
+    addRx({ mode: 'M5', name: 'Vergence Pursuit 右向 FEF', angle: 'R90（Right FEF 欠衝-中度）', speed: 'S3', dist: 'D3', reps: '13', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Undershoot 40-60% → Right FEF 中度激活'], priority: 2 });
   } else if (hUnderRSt === 'mild') {
-    addRx({ mode: 'M2', name: 'Saccade右向', angle: 'R90（Left BG + Right FEF → 右向欠衝輕度）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Undershoot 20-40% → Left BG + Right FEF 啟動強化'], priority: 3 });
+    addRx({ mode: 'M2', name: 'Saccade右向 BG啟動', angle: 'R90（Left BG 欠衝-輕度）', speed: 'S4', dist: 'D3', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Undershoot 20-40% → Left BG 輕度啟動'], priority: 3 });
+    addRx({ mode: 'M5', name: 'Vergence Pursuit 右向 FEF', angle: 'R90（Right FEF 欠衝-輕度）', speed: 'S4', dist: 'D3', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Undershoot 20-40% → Right FEF 輕度激活'], priority: 3 });
   }
-  // 左向 Undershoot → Right BG + Left FEF 啟動不足 → M2 L90 中高速啟動訓練
   if (hUnderLSt === 'severe') {
-    addRx({ mode: 'M2', name: 'Saccade左向', angle: 'L90（Right BG + Left FEF → 左向欠衝-嚴重）', speed: 'S4', dist: 'D5', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Undershoot >60% → Right BG + Left FEF 啟動訓練'], priority: 2 });
+    addRx({ mode: 'M2', name: 'Saccade左向 BG啟動', angle: 'L90（Right BG 欠衝-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Undershoot >60% → Right BG 啟動，極低速'], priority: 2 });
+    addRx({ mode: 'M5', name: 'Vergence Pursuit 左向 FEF', angle: 'L90（Left FEF 欠衝-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Undershoot >60% → Left FEF 激活訓練'], priority: 2 });
   } else if (hUnderLSt === 'moderate') {
-    addRx({ mode: 'M2', name: 'Saccade左向', angle: 'L90（Right BG + Left FEF → 左向欠衝-中度）', speed: 'S3', dist: 'D4', reps: '18', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Undershoot 40-60% → Right BG + Left FEF 中度啟動訓練'], priority: 2 });
+    addRx({ mode: 'M2', name: 'Saccade左向 BG啟動', angle: 'L90（Right BG 欠衝-中度）', speed: 'S3', dist: 'D3', reps: '13', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Undershoot 40-60% → Right BG 啟動，中速'], priority: 2 });
+    addRx({ mode: 'M5', name: 'Vergence Pursuit 左向 FEF', angle: 'L90（Left FEF 欠衝-中度）', speed: 'S3', dist: 'D3', reps: '13', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Undershoot 40-60% → Left FEF 中度激活'], priority: 2 });
   } else if (hUnderLSt === 'mild') {
-    addRx({ mode: 'M2', name: 'Saccade左向', angle: 'L90（Right BG + Left FEF → 左向欠衝輕度）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Undershoot 20-40% → Right BG + Left FEF 啟動強化'], priority: 3 });
+    addRx({ mode: 'M2', name: 'Saccade左向 BG啟動', angle: 'L90（Right BG 欠衝-輕度）', speed: 'S4', dist: 'D3', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Undershoot 20-40% → Right BG 輕度啟動'], priority: 3 });
+    addRx({ mode: 'M5', name: 'Vergence Pursuit 左向 FEF', angle: 'L90（Left FEF 欠衝-輕度）', speed: 'S4', dist: 'D3', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Undershoot 20-40% → Left FEF 輕度激活'], priority: 3 });
   }
-  // Undershoot（垂直）→ riMLF 垂直啟動不足 → M4 高速
   if (vUnderRSt === 'severe' || vUnderLSt === 'severe') {
-    addRx({ mode: 'M4', name: 'Saccade↑+Pursuit↓', angle: 'R0/L0（垂直，riMLF 欠衝-嚴重）', speed: 'S4', dist: 'D4', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 垂直 Undershoot 嚴重（>60%）→ riMLF 垂直啟動訓練'], priority: 2 });
+    addRx({ mode: 'M2', name: 'Saccade垂直 BG啟動', angle: 'R0/L0（riMLF BG 欠衝-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 垂直 Undershoot >60% → riMLF BG 啟動，極低速'], priority: 2 });
+    addRx({ mode: 'M5', name: 'Vergence Pursuit 垂直 FEF', angle: 'R0/L0（FEF 垂直欠衝-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 垂直 Undershoot >60% → FEF 垂直激活訓練'], priority: 2 });
   } else if (vUnderRSt === 'moderate' || vUnderLSt === 'moderate') {
-    addRx({ mode: 'M4', name: 'Saccade↑+Pursuit↓', angle: 'R0/L0（垂直，riMLF 欠衝-中度）', speed: 'S3', dist: 'D4', reps: '18', target: '有', bg: '空白背板', notes: ['RightEye: 垂直 Undershoot 中度（40-60%）→ riMLF 中度啟動訓練'], priority: 2 });
+    addRx({ mode: 'M2', name: 'Saccade垂直 BG啟動', angle: 'R0/L0（riMLF BG 欠衝-中度）', speed: 'S3', dist: 'D3', reps: '13', target: '有', bg: '空白背板', notes: ['RightEye: 垂直 Undershoot 40-60% → riMLF BG 中度啟動'], priority: 2 });
+    addRx({ mode: 'M5', name: 'Vergence Pursuit 垂直 FEF', angle: 'R0/L0（FEF 垂直欠衝-中度）', speed: 'S3', dist: 'D3', reps: '13', target: '有', bg: '空白背板', notes: ['RightEye: 垂直 Undershoot 40-60% → FEF 垂直中度激活'], priority: 2 });
   } else if (vUnderRSt === 'mild' || vUnderLSt === 'mild') {
-    addRx({ mode: 'M4', name: 'Saccade↑+Pursuit↓', angle: 'R0/L0（垂直，riMLF 輕度）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 垂直 Undershoot 輕度（20-40%）→ riMLF 訓練'], priority: 3 });
+    addRx({ mode: 'M2', name: 'Saccade垂直 BG啟動', angle: 'R0/L0（riMLF BG 欠衝-輕度）', speed: 'S4', dist: 'D3', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 垂直 Undershoot 20-40% → riMLF BG 輕度啟動'], priority: 3 });
+    addRx({ mode: 'M5', name: 'Vergence Pursuit 垂直 FEF', angle: 'R0/L0（FEF 垂直欠衝-輕度）', speed: 'S4', dist: 'D3', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 垂直 Undershoot 20-40% → FEF 垂直輕度激活'], priority: 3 });
   }
-  // 右向 Missed → Right PPRF/Left FEF → M2 R90
+  // Missed → PPRF/FEF → M5（反射性 Saccade 緊急訓練）
   if (hMissRSt === 'severe') {
-    addRx({ mode: 'M2', name: 'Saccade右向', angle: 'R90（Right PPRF/Left FEF Missed-嚴重）', speed: 'S5', dist: 'D4', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Missed >30% → Right PPRF/Left FEF 緊急強化 ⚠️'], priority: 1 });
+    addRx({ mode: 'M5', name: 'Vergence Saccade 右向 PPRF', angle: 'R90（Right PPRF/Left FEF Missed-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Missed >30% → Right PPRF/Left FEF 緊急激活 ⚠️'], priority: 1 });
   } else if (hMissRSt === 'moderate') {
-    addRx({ mode: 'M2', name: 'Saccade右向', angle: 'R90（Right PPRF/Left FEF Missed-中度）', speed: 'S4', dist: 'D4', reps: '18', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Missed 15-30% → Right PPRF/Left FEF 強化'], priority: 2 });
+    addRx({ mode: 'M5', name: 'Vergence Saccade 右向 PPRF', angle: 'R90（Right PPRF/Left FEF Missed-中度）', speed: 'S3', dist: 'D3', reps: '13', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Missed 15-30% → Right PPRF/Left FEF 中度強化'], priority: 2 });
   } else if (hMissRSt === 'mild') {
-    addRx({ mode: 'M2', name: 'Saccade右向', angle: 'R90（Right PPRF 輕度 Missed）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Missed 5-15% → Right PPRF 強化'], priority: 3 });
+    addRx({ mode: 'M5', name: 'Vergence Saccade 右向 PPRF', angle: 'R90（Right PPRF 輕度 Missed）', speed: 'S4', dist: 'D3', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Missed 5-15% → Right PPRF 輕度強化'], priority: 3 });
   }
-  // 左向 Missed → Left PPRF/Right FEF → M2 L90
   if (hMissLSt === 'severe') {
-    addRx({ mode: 'M2', name: 'Saccade左向', angle: 'L90（Left PPRF/Right FEF Missed-嚴重）', speed: 'S5', dist: 'D4', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Missed >30% → Left PPRF/Right FEF 緊急強化 ⚠️'], priority: 1 });
+    addRx({ mode: 'M5', name: 'Vergence Saccade 左向 PPRF', angle: 'L90（Left PPRF/Right FEF Missed-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Missed >30% → Left PPRF/Right FEF 緊急激活 ⚠️'], priority: 1 });
   } else if (hMissLSt === 'moderate') {
-    addRx({ mode: 'M2', name: 'Saccade左向', angle: 'L90（Left PPRF/Right FEF Missed-中度）', speed: 'S4', dist: 'D4', reps: '18', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Missed 15-30% → Left PPRF/Right FEF 強化'], priority: 2 });
+    addRx({ mode: 'M5', name: 'Vergence Saccade 左向 PPRF', angle: 'L90（Left PPRF/Right FEF Missed-中度）', speed: 'S3', dist: 'D3', reps: '13', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Missed 15-30% → Left PPRF/Right FEF 中度強化'], priority: 2 });
   } else if (hMissLSt === 'mild') {
-    addRx({ mode: 'M2', name: 'Saccade左向', angle: 'L90（Left PPRF 輕度 Missed）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Missed 5-15% → Left PPRF 強化'], priority: 3 });
+    addRx({ mode: 'M5', name: 'Vergence Saccade 左向 PPRF', angle: 'L90（Left PPRF 輕度 Missed）', speed: 'S4', dist: 'D3', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Missed 5-15% → Left PPRF 輕度強化'], priority: 3 });
   }
-  // Missed（垂直）→ riMLF/SC → M3
   if (vMissRSt === 'severe' || vMissLSt === 'severe') {
-    addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑', angle: 'R0/L0（riMLF/SC Missed-嚴重）', speed: 'S5', dist: 'D3', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 垂直 Missed 嚴重（>30%）→ riMLF/SC 緊急強化 ⚠️'], priority: 1 });
+    addRx({ mode: 'M5', name: 'Vergence Saccade 垂直 PPRF', angle: 'R0/L0（riMLF/SC Missed-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 垂直 Missed >30% → riMLF/SC 緊急激活 ⚠️'], priority: 1 });
   } else if (vMissRSt === 'moderate' || vMissLSt === 'moderate') {
-    addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑', angle: 'R0/L0（riMLF/SC Missed-中度）', speed: 'S4', dist: 'D3', reps: '18', target: '有', bg: '空白背板', notes: ['RightEye: 垂直 Missed 中度（15-30%）→ riMLF/SC 強化'], priority: 2 });
+    addRx({ mode: 'M5', name: 'Vergence Saccade 垂直 PPRF', angle: 'R0/L0（riMLF/SC Missed-中度）', speed: 'S3', dist: 'D3', reps: '13', target: '有', bg: '空白背板', notes: ['RightEye: 垂直 Missed 15-30% → riMLF/SC 中度強化'], priority: 2 });
   } else if (vMissRSt === 'mild' || vMissLSt === 'mild') {
-    addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑', angle: 'R0/L0（riMLF 輕度 Missed）', speed: 'S3', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 垂直 Missed 輕度（5-15%）→ riMLF 強化'], priority: 3 });
-  }
-  // 左右不對稱 Overshoot → 強化較弱側 CB
-  if (saccAsymAbn) {
-    const asymAngle = hOverRPct > hOverLPct ? 'R90（Right CB 不對稱）' : hOverLPct > hOverRPct ? 'L90（Left CB 不對稱）' : 'R90/L90（不對稱）';
-    addRx({ mode: 'M2', name: 'Saccade不對稱強化', angle: asymAngle, speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: Overshoot 左右不對稱 → 單側 CB 強化'], priority: 3 });
+    addRx({ mode: 'M5', name: 'Vergence Saccade 垂直 PPRF', angle: 'R0/L0（riMLF 輕度 Missed）', speed: 'S4', dist: 'D3', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 垂直 Missed 5-15% → riMLF 輕度強化'], priority: 3 });
   }
   // PLD 側性 → Parietal Cortex 訓練
   if (pldRSt !== 'normal' && pldRSt !== 'na') {
