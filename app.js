@@ -2549,7 +2549,8 @@ function computeRightEyeRx(data) {
           hTotal, hOverR, hUnderR, hMissedR, hOverL, hUnderL, hMissedL,
           vTotal, vOverR, vUnderR, vMissedR, vOverL, vUnderL, vMissedL,
           hOverRGrade, hUnderRGrade, hOverLGrade, hUnderLGrade,
-          vpLateralDrift, vsLateralDrift } = data;
+          vpLateralDrift, vsLateralDrift,
+          vqC1, vqC2, vqC3, vqC4 } = data;
 
   const spSt   = v => v === null ? 'na' : v > 90   ? 'normal' : v >= 80   ? 'mild' : 'severe';
   const esoSt  = v => v === null ? 'na' : v < 1.0  ? 'normal' : v <= 2.0  ? 'mild' : 'severe';
@@ -2823,6 +2824,27 @@ function computeRightEyeRx(data) {
       ] : [],
       note: isAbnLP(lpVSSt) ? `CB Vermis 垂直跳視側偏${lpVSSt === 'severe' ? ' + riMLF 垂直整合異常 ⚠️' : ''}` : '',
     }] : []),
+    // ── 視野四象限 C1-C4 ──
+    ...(vqC1 && vqC1 !== 'none' ? [{
+      label: 'C1 左上視野（↖）', value: vqC1 === 'right-strong' ? '左量右強' : '左強右量',
+      status: 'severe', brain: ['Right Temporal Lobe'],
+      note: 'Right Temporal Lobe ↓（左上視野反應異常）',
+    }] : []),
+    ...(vqC2 && vqC2 !== 'none' ? [{
+      label: 'C2 左下視野（↙）', value: vqC2 === 'right-strong' ? '左量右強' : '左強右量',
+      status: 'severe', brain: ['Right Parietal Lobe'],
+      note: 'Right Parietal Lobe ↓（左下視野反應異常）',
+    }] : []),
+    ...(vqC3 && vqC3 !== 'none' ? [{
+      label: 'C3 右上視野（↗）', value: vqC3 === 'right-strong' ? '左量右強' : '左強右量',
+      status: 'severe', brain: ['Left Temporal Lobe'],
+      note: 'Left Temporal Lobe ↓（右上視野反應異常）',
+    }] : []),
+    ...(vqC4 && vqC4 !== 'none' ? [{
+      label: 'C4 右下視野（↘）', value: vqC4 === 'right-strong' ? '左量右強' : '左強右量',
+      status: 'severe', brain: ['Left Parietal Lobe'],
+      note: 'Left Parietal Lobe ↓（右下視野反應異常）',
+    }] : []),
   ];
 
   const brainRegions = new Set();
@@ -3058,6 +3080,16 @@ function computeRightEyeRx(data) {
     addRx({ mode: 'M3', name: 'V-Saccade精準（LP）', angle: 'R0/L0（垂直，精準度優先）', speed: 'S2', dist: 'D3', reps: '15', target: '有（小目標）', bg: '空白背板', notes: ['Lateral Pulsion：速度降 15%，垂直跳視精準控制訓練'], priority: lpSev ? 2 : 3 });
     addRx({ mode: 'M4', name: 'V-Pursuit穩定（LP）', angle: 'U0/D0（垂直追隨側偏矯正）', speed: 'S2', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['Lateral Pulsion：垂直追隨水平偏移訓練'], priority: lpSev ? 2 : 3 });
   }
+
+  // ── 視野四象限 C1-C4 → Temporal/Parietal 視野刺激訓練 ──
+  if (vqC1 && vqC1 !== 'none')
+    addRx({ mode: 'M2', name: '左上視野 Saccade', angle: 'L45（左上視野刺激－Right Temporal ↓）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['C1 異常 → Right Temporal Lobe ↓ 左上視野刺激訓練'], priority: 2, brainTarget: 'Right Temporal Lobe', severityLabel: 'severe' });
+  if (vqC2 && vqC2 !== 'none')
+    addRx({ mode: 'M1', name: '左下視野 Pursuit', angle: 'L45↓（左下視野刺激－Right Parietal ↓）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['C2 異常 → Right Parietal Lobe ↓ 左下視野刺激訓練'], priority: 2, brainTarget: 'Right Parietal Lobe', severityLabel: 'severe' });
+  if (vqC3 && vqC3 !== 'none')
+    addRx({ mode: 'M2', name: '右上視野 Saccade', angle: 'R45（右上視野刺激－Left Temporal ↓）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['C3 異常 → Left Temporal Lobe ↓ 右上視野刺激訓練'], priority: 2, brainTarget: 'Left Temporal Lobe', severityLabel: 'severe' });
+  if (vqC4 && vqC4 !== 'none')
+    addRx({ mode: 'M1', name: '右下視野 Pursuit', angle: 'R45↓（右下視野刺激－Left Parietal ↓）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['C4 異常 → Left Parietal Lobe ↓ 右下視野刺激訓練'], priority: 2, brainTarget: 'Left Parietal Lobe', severityLabel: 'severe' });
 
   // Step 1: 若 Velocity 水平或垂直任一異常 → 腦幹項目強制排最前面
   // Step 2: 其餘依嚴重度排序（嚴重>中度>輕度>正常）
@@ -4305,6 +4337,47 @@ function renderRightEyeInterface() {
 
     <div class="card" style="margin-top:16px">
       <div class="card-header">
+        <h3>🔲 視野四象限測試 C1–C4</h3>
+        <span class="bcf-section-hint">對角方向視覺刺激 → 自動定位 Temporal / Parietal Lobe 弱化</span>
+      </div>
+      <div style="padding:16px 20px">
+        <div style="font-size:12px;color:var(--gray-500);margin-bottom:14px;padding:8px 10px;background:var(--gray-50);border-radius:6px;border-left:3px solid var(--primary)">
+          呈現對角視覺刺激並測試雙臂肌力反應。若某方向誘發手臂不對稱，表示對應皮質視野區弱化。
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;max-width:520px">
+          ${[
+            { id: 'vq-c1', label: 'C1', arrow: '↖', direction: '左上視野', brain: 'Right Temporal Lobe', color: '#ef4444', bg: '#fef2f2' },
+            { id: 'vq-c3', label: 'C3', arrow: '↗', direction: '右上視野', brain: 'Left Temporal Lobe',  color: '#3b82f6', bg: '#eff6ff' },
+            { id: 'vq-c2', label: 'C2', arrow: '↙', direction: '左下視野', brain: 'Right Parietal Lobe', color: '#f59e0b', bg: '#fffbeb' },
+            { id: 'vq-c4', label: 'C4', arrow: '↘', direction: '右下視野', brain: 'Left Parietal Lobe',  color: '#8b5cf6', bg: '#f5f3ff' },
+          ].map(c => `
+            <div style="border:1.5px solid ${c.color}44;border-radius:10px;padding:12px;background:${c.bg}">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px">
+                <span style="font-size:26px;line-height:1">${c.arrow}</span>
+                <div>
+                  <div style="font-weight:800;font-size:15px;color:${c.color}">${c.label}</div>
+                  <div style="font-size:11px;color:var(--gray-600)">${c.direction}</div>
+                </div>
+              </div>
+              <div style="font-size:11px;font-weight:600;color:${c.color};background:${c.color}18;padding:2px 7px;border-radius:8px;display:inline-block;margin-bottom:8px">${c.brain}</div>
+              <div style="display:flex;flex-direction:column;gap:4px">
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+                  <input type="radio" name="${c.id}" value="none" checked style="accent-color:${c.color}"> 無異常
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+                  <input type="radio" name="${c.id}" value="right-strong" style="accent-color:${c.color}"> 左量右強
+                </label>
+                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-size:13px">
+                  <input type="radio" name="${c.id}" value="left-strong" style="accent-color:${c.color}"> 左強右量
+                </label>
+              </div>
+            </div>`).join('')}
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top:16px">
+      <div class="card-header">
         <h3>🎯 功能訓練處方</h3>
         <span class="bcf-section-hint">依病等與策略，輸出優先排序的眼動訓練處方</span>
       </div>
@@ -4459,6 +4532,12 @@ function clearRightEyeForm() {
   if (reOrthL) reOrthL.value = 'none';
   const reNotes = document.getElementById('re-notes');
   if (reNotes) reNotes.value = '';
+  ['vq-c1','vq-c2','vq-c3','vq-c4'].forEach(name => {
+    const def = document.querySelector(`input[name="${name}"][value="none"]`);
+    if (def) def.checked = true;
+  });
+  const stratRes = document.getElementById('re-strategy-results');
+  if (stratRes) stratRes.style.display = 'none';
   const pid = getREPatientId();
   if (pid) localStorage.removeItem('righteye_images_' + pid);
   RE_IMAGES.length = 0;
@@ -4828,6 +4907,10 @@ function analyzeRightEyeStandalone() {
     hUnderLGrade: reAIGrades.leftward_undershoot,
     vpLateralDrift: parseNum(document.getElementById('re-vp-lateral-drift')?.value),
     vsLateralDrift: parseNum(document.getElementById('re-vs-lateral-drift')?.value),
+    vqC1: document.querySelector('input[name="vq-c1"]:checked')?.value || 'none',
+    vqC2: document.querySelector('input[name="vq-c2"]:checked')?.value || 'none',
+    vqC3: document.querySelector('input[name="vq-c3"]:checked')?.value || 'none',
+    vqC4: document.querySelector('input[name="vq-c4"]:checked')?.value || 'none',
   };
   const reResult = computeRightEyeRx(reData);
   const resultsEl = document.getElementById('re-results');
@@ -5004,6 +5087,10 @@ function generateREStrategyPrescription() {
     hUnderLGrade: reAIGrades.leftward_undershoot,
     vpLateralDrift: parseNum(document.getElementById('re-vp-lateral-drift')?.value),
     vsLateralDrift: parseNum(document.getElementById('re-vs-lateral-drift')?.value),
+    vqC1: document.querySelector('input[name="vq-c1"]:checked')?.value || 'none',
+    vqC2: document.querySelector('input[name="vq-c2"]:checked')?.value || 'none',
+    vqC3: document.querySelector('input[name="vq-c3"]:checked')?.value || 'none',
+    vqC4: document.querySelector('input[name="vq-c4"]:checked')?.value || 'none',
   };
   const reResult = computeRightEyeRx(reData);
   const stratEl = document.getElementById('re-strategy-results');
@@ -5105,6 +5192,11 @@ async function saveRightEyeAssessment() {
     // Lateral Pulsion
     vpLateralDrift: parseNum(document.getElementById('re-vp-lateral-drift')?.value),
     vsLateralDrift: parseNum(document.getElementById('re-vs-lateral-drift')?.value),
+    // Visual Quadrant C1-C4
+    vqC1: document.querySelector('input[name="vq-c1"]:checked')?.value || 'none',
+    vqC2: document.querySelector('input[name="vq-c2"]:checked')?.value || 'none',
+    vqC3: document.querySelector('input[name="vq-c3"]:checked')?.value || 'none',
+    vqC4: document.querySelector('input[name="vq-c4"]:checked')?.value || 'none',
     // Horizontal Saccades
     hTotal:   parseNum(document.getElementById('re-h-total')?.value),
     hOverR:   parseNum(document.getElementById('re-h-over-r')?.value),
