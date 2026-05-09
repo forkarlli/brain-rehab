@@ -388,6 +388,109 @@ app.post('/api/parse-btracks-image', async (req, res) => {
   }
 });
 
+// ===== SACCADE DIRECTION ANALYSIS =====
+const SACCADE_DIAG_FILE = path.join(__dirname, 'saccade_diagnosis.json');
+let saccadeDiag = null;
+try { saccadeDiag = JSON.parse(fs.readFileSync(SACCADE_DIAG_FILE, 'utf8')); } catch (e) {
+  console.warn('saccade_diagnosis.json 未找到:', e.message);
+}
+
+const SACCADE_VISION_SYSTEM = `你是功能性神經科醫師助手。請分析這張 RightEye 掃視報告截圖。
+判斷以下項目並只回傳 JSON：
+{
+  "direction": "horizontal" 或 "vertical",
+  "right_or_up": {
+    "type": "overshoot" 或 "undershoot" 或 "normal",
+    "velocity_slow": true 或 false,
+    "count": 次數,
+    "velocity": 速度數值
+  },
+  "left_or_down": {
+    "type": "overshoot" 或 "undershoot" 或 "normal",
+    "velocity_slow": true 或 false,
+    "count": 次數,
+    "velocity": 速度數值
+  },
+  "velocity_reference": "正常範圍標示（若報告有顯示）"
+}
+速度判定：若速度數值低於 RightEye 報告中標示的正常範圍，velocity_slow = true。
+Overshoot 判定：Overshot Target 次數 > Undershot Target 次數。
+Undershoot 判定：Undershot Target 次數 > Overshot Target 次數。`;
+
+app.post('/api/analyze-saccade-direction', async (req, res) => {
+  const { image } = req.body;
+  if (!image || !image.data) {
+    return res.status(400).json({ error: '未收到圖片資料' });
+  }
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-5',
+      max_tokens: 1024,
+      system: SACCADE_VISION_SYSTEM,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: image.mediaType || 'image/jpeg', data: image.data } },
+          { type: 'text', text: '請分析此張 RightEye 掃視報告，回傳 JSON 結果。' },
+        ],
+      }],
+    });
+    const raw = response.content[0].text.trim();
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('AI 回覆格式錯誤，請重試');
+    const analysis = JSON.parse(jsonMatch[0]);
+
+    const diagnoses = [];
+    if (saccadeDiag) {
+      const dir = analysis.direction;
+      const diagMap = saccadeDiag[dir] || {};
+      const mapSide = (sideData, sideKey) => {
+        if (!sideData || sideData.type === 'normal') return null;
+        const isRight = sideKey === 'right_or_up';
+        let key;
+        if (dir === 'horizontal') {
+          const s = isRight ? 'right' : 'left';
+          key = sideData.type === 'overshoot' ? `${s}_overshoot`
+              : !sideData.velocity_slow        ? `${s}_undershoot_normal_v`
+              :                                  `${s}_undershoot_slow_v`;
+        } else {
+          const s = isRight ? 'up' : 'down';
+          key = sideData.type === 'overshoot' ? `${s}_overshoot`
+              : !sideData.velocity_slow        ? `${s}_undershoot_normal_v`
+              :                                  `${s}_undershoot_slow_v`;
+        }
+        const diag = diagMap[key];
+        if (!diag) return null;
+        const prioInfo = (saccadeDiag.prescription_priority || {})[diag.priority] || {};
+        const dirLabel = dir === 'horizontal'
+          ? (isRight ? '往右' : '往左')
+          : (isRight ? '往上' : '往下');
+        return {
+          direction: dirLabel,
+          type: sideData.type === 'overshoot' ? 'Overshoot' : 'Undershoot',
+          velocity_slow: sideData.velocity_slow,
+          count: sideData.count,
+          velocity: sideData.velocity,
+          region: diag.region,
+          tag: diag.tag,
+          priority: diag.priority,
+          priority_label: prioInfo.description || diag.priority,
+          treatments: prioInfo.treatments || [],
+        };
+      };
+      const d1 = mapSide(analysis.right_or_up,   'right_or_up');
+      const d2 = mapSide(analysis.left_or_down,  'left_or_down');
+      if (d1) diagnoses.push(d1);
+      if (d2) diagnoses.push(d2);
+    }
+
+    res.json({ analysis, diagnoses });
+  } catch (err) {
+    console.error('analyze-saccade-direction error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: '未收到音檔' });
   const audioBase64 = req.file.buffer.toString('base64');

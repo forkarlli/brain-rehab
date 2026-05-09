@@ -271,6 +271,12 @@ const RE_IMAGES = [];
 // AI-detected directional saccade grades (filled by readRightEyeWithAI)
 let reAIGrades = { rightward_overshoot: null, rightward_undershoot: null, leftward_overshoot: null, leftward_undershoot: null };
 
+// Directional saccade analysis state
+let RE_SACC_H_IMAGE = null;
+let RE_SACC_V_IMAGE = null;
+let reSaccDirResultsH = [];
+let reSaccDirResultsV = [];
+
 function getREPatientId() {
   return document.getElementById('assess-patient-select')?.value || '';
 }
@@ -4209,6 +4215,46 @@ function renderRightEyeInterface() {
       </div>
     </div>
 
+    <div class="card" style="margin-top:16px">
+      <div class="card-header">
+        <h3>🧭 方向性掃視分析</h3>
+        <span class="bcf-section-hint">上傳水平 / 垂直 Saccade 截圖 → AI 判定腦區定位與處方優先級</span>
+      </div>
+      <div class="sacc-dir-upload-grid">
+        <div>
+          <div class="re-section-title">水平掃視截圖（Horizontal Saccades）</div>
+          <div class="sacc-dir-upload-box" id="sacc-dir-h-zone">
+            <div style="font-size:26px">↔</div>
+            <div style="font-size:12px;font-weight:600;color:var(--gray-600)">點擊或拖曳上傳水平 Saccade 截圖</div>
+            <input type="file" id="sacc-dir-h-input" accept="image/*" style="display:none">
+            <div id="sacc-dir-h-preview-wrap"></div>
+          </div>
+          <button class="btn btn-secondary" id="re-sacc-dir-btn-horizontal" style="margin-top:8px;width:100%" onclick="analyzeSaccadeDirection('horizontal')">🤖 分析水平掃視</button>
+        </div>
+        <div>
+          <div class="re-section-title">垂直掃視截圖（Vertical Saccades）</div>
+          <div class="sacc-dir-upload-box" id="sacc-dir-v-zone">
+            <div style="font-size:26px">↕</div>
+            <div style="font-size:12px;font-weight:600;color:var(--gray-600)">點擊或拖曳上傳垂直 Saccade 截圖</div>
+            <input type="file" id="sacc-dir-v-input" accept="image/*" style="display:none">
+            <div id="sacc-dir-v-preview-wrap"></div>
+          </div>
+          <button class="btn btn-secondary" id="re-sacc-dir-btn-vertical" style="margin-top:8px;width:100%" onclick="analyzeSaccadeDirection('vertical')">🤖 分析垂直掃視</button>
+        </div>
+      </div>
+      <div id="re-sacc-dir-results" style="display:none;margin-top:16px">
+        <div class="re-num-group">方向性掃視診斷結果</div>
+        <table class="sacc-dir-result-table">
+          <thead><tr>
+            <th>方向</th><th>類型</th><th>速度</th>
+            <th>腦區定位</th><th>系統標記</th><th>處方優先級</th>
+          </tr></thead>
+          <tbody id="re-sacc-dir-tbody"></tbody>
+        </table>
+        <div id="re-sacc-dir-treatments" style="margin-top:14px"></div>
+      </div>
+    </div>
+
     <div class="bcf-action-bar">
       <button class="btn btn-outline" onclick="clearRightEyeForm()">清除重填</button>
       <button class="btn btn-secondary" id="re-ai-btn" onclick="readRightEyeWithAI()">🤖 AI 讀取截圖</button>
@@ -4242,6 +4288,9 @@ function renderRightEyeInterface() {
 
   const patientSel = document.getElementById('assess-patient-select');
   if (patientSel) patientSel.addEventListener('change', () => loadREImages(patientSel.value));
+
+  setupSaccDirUploadZone('horizontal');
+  setupSaccDirUploadZone('vertical');
 
   populatePatientSelects();
 }
@@ -4330,6 +4379,20 @@ function clearRightEyeForm() {
   if (resultsEl) resultsEl.style.display = 'none';
   const saveBtn = document.getElementById('re-save-btn');
   if (saveBtn) saveBtn.style.display = 'none';
+  RE_SACC_H_IMAGE = null;
+  RE_SACC_V_IMAGE = null;
+  reSaccDirResultsH = [];
+  reSaccDirResultsV = [];
+  const phWrap = document.getElementById('sacc-dir-h-preview-wrap');
+  const pvWrap = document.getElementById('sacc-dir-v-preview-wrap');
+  if (phWrap) phWrap.innerHTML = '';
+  if (pvWrap) pvWrap.innerHTML = '';
+  const zoneH = document.getElementById('sacc-dir-h-zone');
+  const zoneV = document.getElementById('sacc-dir-v-zone');
+  if (zoneH) zoneH.classList.remove('has-image');
+  if (zoneV) zoneV.classList.remove('has-image');
+  const saccDirRes = document.getElementById('re-sacc-dir-results');
+  if (saccDirRes) saccDirRes.style.display = 'none';
 }
 
 // ===== RIGHTEYE AI ANALYSIS =====
@@ -4364,6 +4427,137 @@ function renderAISaccadeSummary() {
         </tr>`;
       }).join('')}</tbody>
     </table>`;
+}
+
+// ===== DIRECTIONAL SACCADE ANALYSIS =====
+function setupSaccDirUploadZone(direction) {
+  const key   = direction === 'horizontal' ? 'h' : 'v';
+  const zone  = document.getElementById(`sacc-dir-${key}-zone`);
+  const input = document.getElementById(`sacc-dir-${key}-input`);
+  if (!zone || !input) return;
+  zone.addEventListener('click', () => input.click());
+  input.addEventListener('change', e => {
+    const f = e.target.files[0];
+    if (f) loadSaccDirImage(direction, f);
+    e.target.value = '';
+  });
+  zone.addEventListener('dragover', e => { e.preventDefault(); zone.classList.add('drag-over'); });
+  zone.addEventListener('dragleave', () => zone.classList.remove('drag-over'));
+  zone.addEventListener('drop', e => {
+    e.preventDefault();
+    zone.classList.remove('drag-over');
+    const f = Array.from(e.dataTransfer.files).find(f => f.type.startsWith('image/'));
+    if (f) loadSaccDirImage(direction, f);
+  });
+}
+
+function loadSaccDirImage(direction, file) {
+  const reader = new FileReader();
+  reader.onload = e => {
+    const dataUrl  = e.target.result;
+    const data     = dataUrl.includes(',') ? dataUrl.split(',')[1] : dataUrl;
+    const mediaType = file.type || 'image/jpeg';
+    if (direction === 'horizontal') {
+      RE_SACC_H_IMAGE = { data, mediaType, dataUrl };
+    } else {
+      RE_SACC_V_IMAGE = { data, mediaType, dataUrl };
+    }
+    renderSaccDirPreview(direction, dataUrl);
+  };
+  reader.readAsDataURL(file);
+}
+
+function renderSaccDirPreview(direction, dataUrl) {
+  const key  = direction === 'horizontal' ? 'h' : 'v';
+  const wrap = document.getElementById(`sacc-dir-${key}-preview-wrap`);
+  const zone = document.getElementById(`sacc-dir-${key}-zone`);
+  if (wrap) {
+    wrap.innerHTML = `<img src="${dataUrl}" class="sacc-dir-preview" alt="截圖"
+      onclick="event.stopPropagation();window.open(this.src)">`;
+  }
+  if (zone) zone.classList.add('has-image');
+}
+
+async function analyzeSaccadeDirection(direction) {
+  const img = direction === 'horizontal' ? RE_SACC_H_IMAGE : RE_SACC_V_IMAGE;
+  if (!img) {
+    showToast(`請先上傳${direction === 'horizontal' ? '水平' : '垂直'} Saccade 截圖`, 'error');
+    return;
+  }
+  const btn      = document.getElementById(`re-sacc-dir-btn-${direction}`);
+  const origText = btn?.textContent || '🤖 分析';
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ AI 分析中…'; }
+  try {
+    const resp = await fetch('https://brain-rehab-production.up.railway.app/api/analyze-saccade-direction', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ image: { data: img.data, mediaType: img.mediaType } }),
+    });
+    if (!resp.ok) {
+      const errBody = await resp.json().catch(() => ({}));
+      throw new Error(errBody.error || `HTTP ${resp.status}`);
+    }
+    const result = await resp.json();
+    if (direction === 'horizontal') {
+      reSaccDirResultsH = result.diagnoses || [];
+    } else {
+      reSaccDirResultsV = result.diagnoses || [];
+    }
+    renderSaccDirResults();
+    showToast('方向性掃視分析完成', 'success');
+  } catch (err) {
+    showToast('分析失敗：' + err.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = origText; }
+  }
+}
+
+function renderSaccDirResults() {
+  const allResults = [...reSaccDirResultsH, ...reSaccDirResultsV];
+  const resultsEl  = document.getElementById('re-sacc-dir-results');
+  const tbody      = document.getElementById('re-sacc-dir-tbody');
+  const treatEl    = document.getElementById('re-sacc-dir-treatments');
+  if (!resultsEl || !tbody) return;
+  if (allResults.length === 0) { resultsEl.style.display = 'none'; return; }
+
+  const priorityClass = p => ({
+    brainstem_activation:  'priority-brainstem_activation',
+    cerebellar_calibration:'priority-cerebellar_calibration',
+    cortical_calibration:  'priority-cortical_calibration',
+  }[p] || '');
+
+  tbody.innerHTML = allResults.map(d => `
+    <tr>
+      <td><strong>${d.direction}</strong></td>
+      <td>${d.type}</td>
+      <td>${d.velocity_slow ? '⚠️ 慢速' : '正常'}</td>
+      <td style="color:var(--danger);font-weight:500">${d.region}</td>
+      <td><code style="font-size:11px;background:var(--gray-100);padding:1px 5px;border-radius:4px">${d.tag}</code></td>
+      <td><span class="priority-badge ${priorityClass(d.priority)}">${d.priority_label}</span></td>
+    </tr>`).join('');
+
+  if (treatEl) {
+    const byPriority = {};
+    allResults.forEach(d => {
+      if (!byPriority[d.priority]) byPriority[d.priority] = { label: d.priority_label, treatments: [] };
+      d.treatments.forEach(t => { if (!byPriority[d.priority].treatments.includes(t)) byPriority[d.priority].treatments.push(t); });
+    });
+    const order = ['brainstem_activation', 'cerebellar_calibration', 'cortical_calibration'];
+    const active = order.filter(p => byPriority[p]);
+    treatEl.innerHTML = active.length === 0 ? '' : `
+      <div class="re-num-group">建議治療方向（依優先序）</div>
+      ${active.map((p, i) => {
+        const info = byPriority[p];
+        const cls  = priorityClass(p);
+        return `<div style="margin-bottom:8px">
+          <span class="priority-badge ${cls}" style="margin-bottom:4px;display:inline-block">${i + 1}. ${info.label}</span>
+          <ul style="margin:2px 0 0;padding-left:18px;font-size:13px;color:var(--gray-700)">
+            ${info.treatments.map(t => `<li>${t}</li>`).join('')}
+          </ul>
+        </div>`;
+      }).join('')}`;
+  }
+  resultsEl.style.display = 'block';
 }
 
 async function readRightEyeWithAI() {
@@ -4546,6 +4740,35 @@ function analyzeRightEyeStandalone() {
         </div>
       </div>` : '';
 
+    const allSaccDir = [...reSaccDirResultsH, ...reSaccDirResultsV];
+    const saccDirSection = allSaccDir.length > 0 ? (() => {
+      const priorityClass = p => ({
+        brainstem_activation:  'priority-brainstem_activation',
+        cerebellar_calibration:'priority-cerebellar_calibration',
+        cortical_calibration:  'priority-cortical_calibration',
+      }[p] || '');
+      return `
+        <div class="bcf-result-section" style="margin-top:12px">
+          <h4>🧭 方向性掃視腦區定位</h4>
+          <table class="sacc-dir-result-table" style="margin-top:8px">
+            <thead><tr>
+              <th>方向</th><th>類型</th><th>速度</th>
+              <th>腦區定位</th><th>系統標記</th><th>處方優先級</th>
+            </tr></thead>
+            <tbody>${allSaccDir.map(d => `
+              <tr>
+                <td><strong>${d.direction}</strong></td>
+                <td>${d.type}</td>
+                <td>${d.velocity_slow ? '⚠️ 慢速' : '正常'}</td>
+                <td style="color:var(--danger);font-weight:500">${d.region}</td>
+                <td><code style="font-size:11px;background:var(--gray-100);padding:1px 5px;border-radius:4px">${d.tag}</code></td>
+                <td><span class="priority-badge ${priorityClass(d.priority)}">${d.priority_label}</span></td>
+              </tr>`).join('')}
+            </tbody>
+          </table>
+        </div>`;
+    })() : '';
+
     resultsEl.className = 'card';
     resultsEl.innerHTML = `
       <div class="card-header">
@@ -4554,6 +4777,7 @@ function analyzeRightEyeStandalone() {
       </div>
       <div class="bcf-results-body">
         ${renderRightEyeSection(reResult, true)}
+        ${saccDirSection}
         ${imgSection}
       </div>`;
   }

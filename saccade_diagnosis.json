@@ -1,0 +1,32 @@
+{
+  "horizontal": {
+    "right_overshoot":           { "region": "Right Fastigial Nucleus ↓", "tag": "Cerebellar_Inhibition_Deficit", "priority": "cerebellar_calibration" },
+    "right_undershoot_normal_v": { "region": "Left FEF ↓",                "tag": "Frontal_Lobe_Hypofunction",     "priority": "cortical_calibration" },
+    "right_undershoot_slow_v":   { "region": "Right PPRF ↓",              "tag": "Midbrain_PPRF_Weakness",         "priority": "brainstem_activation" },
+    "left_overshoot":            { "region": "Left Fastigial Nucleus ↓",  "tag": "Cerebellar_Inhibition_Deficit", "priority": "cerebellar_calibration" },
+    "left_undershoot_normal_v":  { "region": "Right FEF ↓",               "tag": "Frontal_Lobe_Hypofunction",     "priority": "cortical_calibration" },
+    "left_undershoot_slow_v":    { "region": "Left PPRF ↓",               "tag": "Midbrain_PPRF_Weakness",         "priority": "brainstem_activation" }
+  },
+  "vertical": {
+    "up_overshoot":              { "region": "Cerebellar Vermis / Fastigial Nucleus ↓",     "tag": "Cerebellar_Inhibition_Deficit", "priority": "cerebellar_calibration" },
+    "up_undershoot_normal_v":    { "region": "Bilateral FEF ↓",                             "tag": "Frontal_Lobe_Hypofunction",     "priority": "cortical_calibration" },
+    "up_undershoot_slow_v":      { "region": "riMLF ↓",                                     "tag": "Midbrain_riMLF_Weakness",        "priority": "brainstem_activation" },
+    "down_overshoot":            { "region": "Cerebellar Vermis (Nodulus) ↓",               "tag": "Cerebellar_Inhibition_Deficit", "priority": "cerebellar_calibration" },
+    "down_undershoot_normal_v":  { "region": "Bilateral FEF / Superior Colliculus ↓",       "tag": "Frontal_Lobe_Hypofunction",     "priority": "cortical_calibration" },
+    "down_undershoot_slow_v":    { "region": "riMLF / INC ↓",                               "tag": "Midbrain_riMLF_Weakness",        "priority": "brainstem_activation" }
+  },
+  "prescription_priority": {
+    "brainstem_activation": {
+      "description": "腦幹活化優先",
+      "treatments": ["OPK 視動刺激", "高頻短間隔垂直跳視", "VOR 訓練"]
+    },
+    "cerebellar_calibration": {
+      "description": "小腦校準優先",
+      "treatments": ["慢速 Smooth Pursuit", "反向跳視 (Anti-saccade)", "精準度訓練"]
+    },
+    "cortical_calibration": {
+      "description": "皮質/額葉刺激優先",
+      "treatments": ["高能量大振幅跳視", "複雜動作序列", "額葉認知整合訓練"]
+    }
+  }
+}
