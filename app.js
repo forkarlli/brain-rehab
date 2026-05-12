@@ -1375,6 +1375,35 @@ const REGION_SIDE_TYPE = {
 };
 const BILATERAL_REGIONS = new Set(['Bilateral Midbrain', 'Bilateral Pons']);
 
+// ===== BRAINSTEM GAZE / TONGUE LOCALIZATION =====
+const GAZE_DIRECTIONS = [
+  { id: 'upper_left',  label: '左上', icon: '↖' },
+  { id: 'up',          label: '上',   icon: '↑' },
+  { id: 'upper_right', label: '右上', icon: '↗' },
+  { id: 'left',        label: '左',   icon: '←' },
+  { id: 'convergence', label: '收斂', icon: '◎', isCenter: true },
+  { id: 'right',       label: '右',   icon: '→' },
+  { id: 'lower_left',  label: '左下', icon: '↙' },
+  { id: 'down',        label: '下',   icon: '↓' },
+  { id: 'lower_right', label: '右下', icon: '↘' },
+];
+
+const GAZE_BRAIN_MAP = {
+  convergence:  [{ area: '中腦（Midbrain）',          tag: 'MIDBRAIN',          nerve: 'EWN / 動眼神經核', layer: '中腦' }],
+  right:        [{ area: '右橋腦（Right Pons）',      tag: 'RIGHT_PONS',        nerve: '右側 PPRF',         layer: '橋腦' }],
+  left:         [{ area: '左橋腦（Left Pons）',       tag: 'LEFT_PONS',         nerve: '左側 PPRF',         layer: '橋腦' }],
+  up:           [{ area: 'Neural Integrator（中腦）',  tag: 'NEURAL_INTEGRATOR', nerve: 'riMLF / INC',       layer: '中腦' }],
+  down:         [{ area: 'Neural Integrator（中腦）',  tag: 'NEURAL_INTEGRATOR', nerve: 'riMLF / INC',       layer: '中腦' }],
+  upper_right:  [{ area: '中腦（Midbrain）',          tag: 'MIDBRAIN',          nerve: '',                  layer: '中腦' },
+                 { area: '右橋腦（Right Pons）',      tag: 'RIGHT_PONS',        nerve: '',                  layer: '橋腦' }],
+  upper_left:   [{ area: '中腦（Midbrain）',          tag: 'MIDBRAIN',          nerve: '',                  layer: '中腦' },
+                 { area: '左橋腦（Left Pons）',       tag: 'LEFT_PONS',         nerve: '',                  layer: '橋腦' }],
+  lower_right:  [{ area: '中腦（Midbrain）',          tag: 'MIDBRAIN',          nerve: '',                  layer: '中腦' },
+                 { area: '右橋腦（Right Pons）',      tag: 'RIGHT_PONS',        nerve: '',                  layer: '橋腦' }],
+  lower_left:   [{ area: '中腦（Midbrain）',          tag: 'MIDBRAIN',          nerve: '',                  layer: '中腦' },
+                 { area: '左橋腦（Left Pons）',       tag: 'LEFT_PONS',         nerve: '',                  layer: '橋腦' }],
+};
+
 function computeBCFDecision(regions) {
   let lCortex = 0, rCortex = 0;
   let lCereb  = 0, rCereb  = 0;
@@ -1422,6 +1451,218 @@ function computeBCFDecision(regions) {
     : new Set(['Left FEF',  'Right CB', 'Right Mes', 'Right PPRF']);
 
   return { trainSide, reason, keptSet, excludedSet, balanced: false, counts };
+}
+
+// ===== BRAINSTEM LOCALIZATION FUNCTIONS =====
+
+function computeBrainstemLocalization(reData) {
+  const tagMap = {};
+
+  function addRegion(tag, area, nerve, layer) {
+    if (!tagMap[tag]) tagMap[tag] = { tag, area, nerve, layer, gazeConfirmed: true, reConfirmed: false };
+  }
+
+  GAZE_DIRECTIONS.forEach(g => {
+    const hasDiff = document.querySelector(`input[name="gaze-${g.id}-diff"][value="yes"]`)?.checked;
+    if (!hasDiff) return;
+    (GAZE_BRAIN_MAP[g.id] || []).forEach(r => addRegion(r.tag, r.area, r.nerve, r.layer));
+  });
+
+  const tongueRightDiff = document.querySelector('input[name="tongue-right-diff"][value="yes"]')?.checked;
+  const tongueLeftDiff  = document.querySelector('input[name="tongue-left-diff"][value="yes"]')?.checked;
+  if (tongueRightDiff) addRegion('RIGHT_MEDULLA', 'Right Medulla（右側延腦）', 'CN XII 右側核', '延腦');
+  if (tongueLeftDiff)  addRegion('LEFT_MEDULLA',  'Left Medulla（左側延腦）',  'CN XII 左側核', '延腦');
+
+  if (Object.keys(tagMap).length === 0) return null;
+
+  const eso     = reData?.eso;
+  const svV     = reData?.svV;
+  const svRight = reData?.svRight;
+  const svLeft  = reData?.svLeft;
+  const hUnderR = reData?.hUnderR;
+  const hUnderL = reData?.hUnderL;
+  const hTotal  = reData?.hTotal;
+
+  const hasConvBCF = ['conv-up','conv-mid','conv-dn'].some(id =>
+    document.querySelector(`input[name="${id}"][value="abnormal"]`)?.checked
+  );
+
+  // RightEye supplement: auto-add regions indicated by RightEye even if gaze test did not fire
+  // These start with reConfirmed=true, gazeConfirmed=false (single RE confirmation → 🟠)
+  function addRERegion(tag, area, nerve, layer) {
+    if (tagMap[tag]) {
+      tagMap[tag].reConfirmed = true;
+    } else {
+      tagMap[tag] = { tag, area, nerve, layer, gazeConfirmed: false, reConfirmed: true };
+    }
+  }
+  if (svV !== null && svV < 100)
+    addRERegion('NEURAL_INTEGRATOR', 'Neural Integrator（中腦）', 'riMLF / INC', '中腦');
+  if (eso !== null && eso > 1.0)
+    addRERegion('MIDBRAIN', '中腦（Midbrain）', 'EWN / 動眼神經核', '中腦');
+  if (svRight !== null && svRight < 100)
+    addRERegion('RIGHT_PONS', '右橋腦（Right Pons）', '右側 PPRF', '橋腦');
+  if (svLeft !== null && svLeft < 100)
+    addRERegion('LEFT_PONS', '左橋腦（Left Pons）', '左側 PPRF', '橋腦');
+
+  // Upgrade to 🔴 when BOTH gaze test AND RightEye confirmed
+  if (tagMap['MIDBRAIN'] && tagMap['MIDBRAIN'].gazeConfirmed && tagMap['MIDBRAIN'].reConfirmed)
+    tagMap['MIDBRAIN'].reConfirmed = true;
+  if (tagMap['NEURAL_INTEGRATOR'] && tagMap['NEURAL_INTEGRATOR'].gazeConfirmed && tagMap['NEURAL_INTEGRATOR'].reConfirmed)
+    tagMap['NEURAL_INTEGRATOR'].reConfirmed = true;
+  if (tagMap['RIGHT_PONS'] && tagMap['RIGHT_PONS'].gazeConfirmed && tagMap['RIGHT_PONS'].reConfirmed)
+    tagMap['RIGHT_PONS'].reConfirmed = true;
+  if (tagMap['LEFT_PONS'] && tagMap['LEFT_PONS'].gazeConfirmed && tagMap['LEFT_PONS'].reConfirmed)
+    tagMap['LEFT_PONS'].reConfirmed = true;
+  if (tagMap['RIGHT_MEDULLA'] && hTotal > 0 && hUnderR !== null && (hUnderR / hTotal * 100) >= 20)
+    tagMap['RIGHT_MEDULLA'].reConfirmed = true;
+  if (tagMap['LEFT_MEDULLA'] && hTotal > 0 && hUnderL !== null && (hUnderL / hTotal * 100) >= 20)
+    tagMap['LEFT_MEDULLA'].reConfirmed = true;
+
+  const regions = Object.values(tagMap).map(r => {
+    const isDouble = r.gazeConfirmed && r.reConfirmed;
+    return {
+      ...r,
+      confidence: isDouble ? 'HIGH' : 'MODERATE',
+      badge: isDouble ? '🔴 雙重確認' : '🟠 單一確認',
+    };
+  });
+
+  const notes = [];
+  if (tagMap['RIGHT_MEDULLA']) notes.push('右延腦弱化 → 右側舌肌力量不足 → 左皮質功能下降（對側支配）');
+  if (tagMap['LEFT_MEDULLA'])  notes.push('左延腦弱化 → 左側舌肌力量不足 → 右皮質功能下降（對側支配）');
+
+  if (tagMap['MIDBRAIN']) {
+    let weakSide = null;
+    GAZE_DIRECTIONS.forEach(g => {
+      if (!document.querySelector(`input[name="gaze-${g.id}-diff"][value="yes"]`)?.checked) return;
+      if (!(GAZE_BRAIN_MAP[g.id] || []).some(r => r.tag === 'MIDBRAIN')) return;
+      const ws = document.querySelector(`input[name="gaze-${g.id}-weak"]:checked`)?.value;
+      if (ws === 'left') weakSide = '左';
+      else if (ws === 'right') weakSide = '右';
+    });
+    if (weakSide) notes.push(`中腦${weakSide}側弱化 → 推測${weakSide}側皮質功能下降（同側）`);
+  }
+
+  if (tagMap['RIGHT_PONS']) {
+    const hasCerebRight = regions.some(r => r.tag === 'RIGHT_PONS');
+    if (hasCerebRight) notes.push('右橋腦弱化 → 右側 PPRF 功能下降 → 左皮質 FEF 整合受損（對側掃視）');
+  }
+
+  return { regions, notes };
+}
+
+function computeNeurologicalStacking(brainstemResult) {
+  if (!brainstemResult) return [];
+  const stackingRx = [];
+  const { regions } = brainstemResult;
+
+  if (regions.some(r => r.tag === 'RIGHT_MEDULLA')) {
+    stackingRx.push({
+      name: 'Right Medulla 神經堆疊',
+      code: 'STACK-R-MEDULLA',
+      eyeMachine: { mode: 'M2（基礎）/ M4（進階）', angle: 'R90', background: '黃綠背板', frequency: '1.5–2.0 Hz', reps: '10–15 次 × 3 組' },
+      tongue: { direction: '右側頂（病人右臉頰內側）⚠️ 以病人方向為準', timing: '板子向右移動時同步用力頂', release: '板子回中心時放鬆' },
+      instruction: '請看著眼動機螢幕中心，當板子向右移動時，雙眼快速跟隨，同時舌頭用力頂住右側臉頰內側；板子回中心時眼睛跟回，舌頭放鬆。',
+      targetRegions: ['Right Medulla（CN XII）↑', 'Right Cerebellum ↑', 'Left Cortex（FEF + Motor）↑'],
+      successMetric: '右向眼跳 Undershoot 百分比下降',
+      upgrade: { from: 'M2 R90', to: 'M4 R90（更精準角度控制）' },
+    });
+  }
+
+  if (regions.some(r => r.tag === 'LEFT_MEDULLA')) {
+    stackingRx.push({
+      name: 'Left Medulla 神經堆疊',
+      code: 'STACK-L-MEDULLA',
+      eyeMachine: { mode: 'M2（基礎）/ M4（進階）', angle: 'L90', background: '黃綠背板', frequency: '1.5–2.0 Hz', reps: '10–15 次 × 3 組' },
+      tongue: { direction: '左側頂（病人左臉頰內側）⚠️ 以病人方向為準', timing: '板子向左移動時同步用力頂', release: '板子回中心時放鬆' },
+      instruction: '請看著眼動機螢幕中心，當板子向左移動時，雙眼快速跟隨，同時舌頭用力頂住左側臉頰內側；板子回中心時眼睛跟回，舌頭放鬆。',
+      targetRegions: ['Left Medulla（CN XII）↑', 'Left Cerebellum ↑', 'Right Cortex（FEF + Motor）↑'],
+      successMetric: '左向眼跳 Undershoot 百分比下降',
+      upgrade: { from: 'M2 L90', to: 'M4 L90' },
+    });
+  }
+
+  return stackingRx;
+}
+
+function renderBrainstemLocalizationSection(brainstemResult) {
+  if (!brainstemResult || brainstemResult.regions.length === 0) return '';
+  const { regions, notes } = brainstemResult;
+  const layerOrder = ['延腦', '橋腦', '中腦'];
+  const sorted = [...regions].sort((a, b) => layerOrder.indexOf(b.layer) - layerOrder.indexOf(a.layer));
+
+  const tableRows = sorted.map(r => `
+    <tr>
+      <td><span style="font-size:13px;font-weight:600;color:#1e40af">${r.layer}</span></td>
+      <td><span class="bcf-brain-region-tag" style="font-size:12px">🧠 ${r.area}</span></td>
+      <td style="font-size:11px;color:var(--gray-500)">${r.nerve || '—'}</td>
+      <td style="font-size:13px;font-weight:700">${r.badge}</td>
+    </tr>`).join('');
+
+  const notesHTML = notes.length > 0 ? `
+    <div style="margin-top:12px;padding:10px 14px;background:#fffbeb;border-left:3px solid #f59e0b;border-radius:4px">
+      <div style="font-size:12px;font-weight:700;color:#92400e;margin-bottom:6px">側化推論</div>
+      ${notes.map(n => `<div style="font-size:12px;color:#92400e;margin-bottom:3px">→ ${n}</div>`).join('')}
+    </div>` : '';
+
+  return `
+    <div class="bcf-result-section" style="border:2px solid #3b82f6;background:#eff6ff;border-radius:8px">
+      <h4 style="color:#1d4ed8;margin-bottom:10px">🧠 腦幹完整定位摘要</h4>
+      <div style="overflow-x:auto">
+        <table class="data-table" style="margin:0;font-size:12px">
+          <thead><tr><th>層級</th><th>弱化腦區</th><th>神經結構</th><th>確認程度</th></tr></thead>
+          <tbody>${tableRows}</tbody>
+        </table>
+      </div>
+      ${notesHTML}
+    </div>`;
+}
+
+function renderNeurologicalStackingSection(stackingRx) {
+  if (!stackingRx || stackingRx.length === 0) return '';
+  const cards = stackingRx.map(rx => `
+    <div class="bcf-stacking-card">
+      <div class="bcf-stacking-header">
+        🧠 神經堆疊處方 <span class="bcf-stacking-code">${rx.code}</span>
+      </div>
+      <div class="bcf-stacking-body">
+        <div class="bcf-stacking-section">
+          <div class="bcf-stacking-section-title">👁 眼動機設定</div>
+          <div class="bcf-stacking-row"><span>模式</span><span>${rx.eyeMachine.mode}</span></div>
+          <div class="bcf-stacking-row"><span>角度</span><span><strong>${rx.eyeMachine.angle}</strong></span></div>
+          <div class="bcf-stacking-row"><span>背板</span><span>${rx.eyeMachine.background}</span></div>
+          <div class="bcf-stacking-row"><span>頻率</span><span>${rx.eyeMachine.frequency}</span></div>
+        </div>
+        <div class="bcf-stacking-section">
+          <div class="bcf-stacking-section-title">👅 舌頭堆疊</div>
+          <div class="bcf-stacking-row"><span>方向</span><span style="font-weight:700;color:#1d4ed8">${rx.tongue.direction}</span></div>
+          <div class="bcf-stacking-row"><span>時機</span><span>${rx.tongue.timing}</span></div>
+          <div class="bcf-stacking-row"><span>放鬆</span><span>${rx.tongue.release}</span></div>
+        </div>
+        <div class="bcf-stacking-section">
+          <div class="bcf-stacking-section-title">📋 指導語</div>
+          <div style="font-size:12px;color:var(--gray-700);padding:8px;background:#f0fdf4;border-radius:4px;line-height:1.7">"${rx.instruction}"</div>
+        </div>
+        <div class="bcf-stacking-section">
+          <div class="bcf-stacking-section-title">🎯 目標腦區</div>
+          <div style="display:flex;flex-wrap:wrap;gap:4px">
+            ${rx.targetRegions.map(r => `<span class="bcf-brain-region-tag" style="font-size:11px">🧠 ${r}</span>`).join('')}
+          </div>
+        </div>
+        <div class="bcf-stacking-section" style="display:flex;gap:20px;flex-wrap:wrap;align-items:center">
+          <div><span style="font-size:12px;font-weight:600;color:var(--gray-600)">📊 組數：</span><span style="font-size:12px">${rx.eyeMachine.reps}</span></div>
+          <div><span style="font-size:12px;font-weight:600;color:var(--gray-600)">✅ 成效指標：</span><span style="font-size:12px">${rx.successMetric}</span></div>
+          <div><span style="font-size:12px;font-weight:600;color:var(--gray-600)">⬆ 升級：</span><span style="font-size:11px;color:#7c3aed">${rx.upgrade.from} → ${rx.upgrade.to}</span></div>
+        </div>
+      </div>
+    </div>`).join('');
+
+  return `
+    <div class="bcf-result-section">
+      <h4>🧬 進階神經堆疊處方 <span class="badge badge-danger" style="font-size:11px">${stackingRx.length} 組</span></h4>
+      <div class="bcf-stacking-grid">${cards}</div>
+    </div>`;
 }
 
 function renderBCFInterface() {
@@ -1600,6 +1841,89 @@ function renderBCFInterface() {
         <span class="bcf-section-hint">上／中／下三方位 — 有差異時展開頭部位置校正</span>
       </div>
       <div class="bcf-convergence-grid">${convHTML}</div>
+    </div>
+
+    <div class="card">
+      <div class="card-header">
+        <h3>五、延腦功能測試 — 舌頭推頂</h3>
+      </div>
+      <div style="padding:16px">
+        <div style="color:#dc2626;font-weight:600;margin-bottom:14px;font-size:13px;background:#fef2f2;padding:8px 12px;border-radius:6px;border-left:3px solid #dc2626">
+          ⚠️ 左右方向以病人為準（非治療師視角）
+        </div>
+        <div class="bcf-tongue-diagram-wrap">
+          <div style="font-size:10px;color:var(--gray-400);margin-bottom:4px;font-style:italic">治療師視角（面對病人）</div>
+          <svg width="300" height="130" viewBox="0 0 300 130" xmlns="http://www.w3.org/2000/svg">
+            <defs>
+              <marker id="arr-to-left" markerWidth="7" markerHeight="7" refX="3" refY="3.5" orient="auto">
+                <path d="M7,0 L0,3.5 L7,7 Z" fill="#dc2626"/>
+              </marker>
+              <marker id="arr-to-right" markerWidth="7" markerHeight="7" refX="4" refY="3.5" orient="auto">
+                <path d="M0,0 L7,3.5 L0,7 Z" fill="#3b82f6"/>
+              </marker>
+            </defs>
+            <!-- 口腔輪廓（俯視橢圓） -->
+            <ellipse cx="150" cy="75" rx="130" ry="50" fill="#fff1f2" stroke="#fca5a5" stroke-width="1.5" stroke-dasharray="4 2"/>
+            <!-- 圖左 = 病人右臉頰（紅色） -->
+            <circle cx="32" cy="75" r="24" fill="#fee2e2" stroke="#dc2626" stroke-width="2"/>
+            <text x="32" y="70" text-anchor="middle" font-size="8" fill="#dc2626" font-weight="bold" font-family="Arial,sans-serif">病人</text>
+            <text x="32" y="80" text-anchor="middle" font-size="8" fill="#dc2626" font-weight="bold" font-family="Arial,sans-serif">右臉頰</text>
+            <text x="32" y="91" text-anchor="middle" font-size="7" fill="#9ca3af" font-family="Arial,sans-serif">治療師左</text>
+            <!-- 圖右 = 病人左臉頰（藍色） -->
+            <circle cx="268" cy="75" r="24" fill="#dbeafe" stroke="#3b82f6" stroke-width="2"/>
+            <text x="268" y="70" text-anchor="middle" font-size="8" fill="#1d4ed8" font-weight="bold" font-family="Arial,sans-serif">病人</text>
+            <text x="268" y="80" text-anchor="middle" font-size="8" fill="#1d4ed8" font-weight="bold" font-family="Arial,sans-serif">左臉頰</text>
+            <text x="268" y="91" text-anchor="middle" font-size="7" fill="#9ca3af" font-family="Arial,sans-serif">治療師右</text>
+            <!-- 舌頭中央橢圓 -->
+            <ellipse cx="150" cy="75" rx="42" ry="30" fill="#fb7185" stroke="#f43f5e" stroke-width="1.5"/>
+            <text x="150" y="71" text-anchor="middle" font-size="11" fill="white" font-weight="bold" font-family="Arial,sans-serif">舌頭</text>
+            <text x="150" y="84" text-anchor="middle" font-size="9" fill="white" font-family="Arial,sans-serif">Tongue</text>
+            <!-- 箭頭：往右頂（舌頭→病人右臉頰，指向圖左） -->
+            <line x1="104" y1="75" x2="60" y2="75" stroke="#dc2626" stroke-width="2.5" marker-end="url(#arr-to-left)"/>
+            <!-- 箭頭：往左頂（舌頭→病人左臉頰，指向圖右） -->
+            <line x1="196" y1="75" x2="240" y2="75" stroke="#3b82f6" stroke-width="2.5" marker-end="url(#arr-to-right)"/>
+            <!-- 上方標題文字：圖左=往右頂，圖右=往左頂 -->
+            <text x="32"  y="16" text-anchor="middle" font-size="10" fill="#dc2626" font-weight="bold" font-family="Arial,sans-serif">往右頂 →</text>
+            <text x="268" y="16" text-anchor="middle" font-size="10" fill="#1d4ed8" font-weight="bold" font-family="Arial,sans-serif">← 往左頂</text>
+          </svg>
+        </div>
+
+        <div class="bcf-tongue-row">
+          <div class="bcf-tongue-item bcf-tongue-right-col">
+            <div class="bcf-tongue-item-title" style="color:#dc2626">→ 舌頭往右頂（病人右臉頰）</div>
+            <div class="bcf-tongue-controls">
+              <div class="bcf-gaze-toggle">
+                <label class="bcf-gaze-opt"><input type="radio" name="tongue-right-diff" value="no" checked onchange="handleGazeDiff('tongue-right',false)"> 無差異</label>
+                <label class="bcf-gaze-opt bcf-gaze-yes"><input type="radio" name="tongue-right-diff" value="yes" onchange="handleGazeDiff('tongue-right',true)"> 有差異</label>
+              </div>
+              <div class="bcf-gaze-weak" id="gaze-weak-tongue-right" style="display:none">
+                <span class="bcf-gaze-weak-label">哪側較弱：</span>
+                <label class="bcf-gaze-weak-opt"><input type="radio" name="tongue-right-weak" value="left"> 左</label>
+                <label class="bcf-gaze-weak-opt"><input type="radio" name="tongue-right-weak" value="right"> 右</label>
+                <label class="bcf-gaze-weak-opt"><input type="radio" name="tongue-right-weak" value="bilateral"> 雙側</label>
+              </div>
+            </div>
+            <textarea class="textarea" id="tongue-right-note" rows="2" placeholder="備註…" style="margin-top:6px;font-size:12px"></textarea>
+          </div>
+
+          <div class="bcf-tongue-item bcf-tongue-left-col">
+            <div class="bcf-tongue-item-title" style="color:#3b82f6">← 舌頭往左頂（病人左臉頰）</div>
+            <div class="bcf-tongue-controls">
+              <div class="bcf-gaze-toggle">
+                <label class="bcf-gaze-opt"><input type="radio" name="tongue-left-diff" value="no" checked onchange="handleGazeDiff('tongue-left',false)"> 無差異</label>
+                <label class="bcf-gaze-opt bcf-gaze-yes"><input type="radio" name="tongue-left-diff" value="yes" onchange="handleGazeDiff('tongue-left',true)"> 有差異</label>
+              </div>
+              <div class="bcf-gaze-weak" id="gaze-weak-tongue-left" style="display:none">
+                <span class="bcf-gaze-weak-label">哪側較弱：</span>
+                <label class="bcf-gaze-weak-opt"><input type="radio" name="tongue-left-weak" value="left"> 左</label>
+                <label class="bcf-gaze-weak-opt"><input type="radio" name="tongue-left-weak" value="right"> 右</label>
+                <label class="bcf-gaze-weak-opt"><input type="radio" name="tongue-left-weak" value="bilateral"> 雙側</label>
+              </div>
+            </div>
+            <textarea class="textarea" id="tongue-left-note" rows="2" placeholder="備註…" style="margin-top:6px;font-size:12px"></textarea>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div class="card">
@@ -1880,6 +2204,18 @@ function handleBCFArm(id) {
 function toggleConvSublayer(convId, show) {
   const sublayer = document.getElementById('conv-sub-' + convId);
   if (sublayer) sublayer.style.display = show ? 'block' : 'none';
+}
+
+function handleGazeDiff(id, hasDiff) {
+  const weakEl = document.getElementById('gaze-weak-' + id);
+  const cellEl = document.getElementById('gaze-cell-' + id);
+  if (weakEl) weakEl.style.display = hasDiff ? 'flex' : 'none';
+  if (cellEl) {
+    cellEl.classList.toggle('bcf-gaze-has-diff', hasDiff);
+    if (!hasDiff) {
+      cellEl.querySelectorAll('input[type="radio"][name$="-weak"]').forEach(r => r.checked = false);
+    }
+  }
 }
 
 // ============================================================
@@ -3519,6 +3855,11 @@ function generateBCFResults() {
     const crossResult   = computeCrossValidation(reData, affectedItems, activeMCodes);
     const crossValidHTML = crossResult.hasData ? renderCrossValidationSection(crossResult) : '';
 
+    const brainstemResult   = computeBrainstemLocalization(reData);
+    const brainstemHTML     = renderBrainstemLocalizationSection(brainstemResult);
+    const stackingRx        = computeNeurologicalStacking(brainstemResult);
+    const stackingHTML      = renderNeurologicalStackingSection(stackingRx);
+
     resultsEl.className = 'card';
     resultsEl.innerHTML = `
       <div class="card-header">
@@ -3586,9 +3927,11 @@ function generateBCFResults() {
           </div>
         </div>` : ''}
 
+        ${brainstemHTML}
         ${crossValidHTML}
         ${flyingChairHTML}
         ${rightEyeHTML}
+        ${stackingHTML}
 
         <div style="padding:20px 0 8px;border-top:1px solid var(--gray-200);text-align:center;margin-top:4px">
           <button class="btn btn-primary" onclick="generateIntegratedPrescription()" style="font-size:14px;padding:10px 28px;letter-spacing:.3px">🔀 產生整合處方</button>
@@ -4017,6 +4360,23 @@ async function saveBCFAssessment() {
   Object.values(stanceItems).forEach(v => { if (v !== 'none') diffCount++; });
   diffCount += Object.keys(convergenceItems).length;
 
+  // Collect gaze test data
+  const gazeItems = {};
+  GAZE_DIRECTIONS.forEach(g => {
+    const hasDiff = document.querySelector(`input[name="gaze-${g.id}-diff"][value="yes"]`)?.checked || false;
+    const weakSide = document.querySelector(`input[name="gaze-${g.id}-weak"]:checked`)?.value || null;
+    if (hasDiff) gazeItems[g.id] = { hasDiff, weakSide };
+  });
+
+  // Collect tongue test data
+  const tongueItems = {};
+  ['right', 'left'].forEach(side => {
+    const hasDiff = document.querySelector(`input[name="tongue-${side}-diff"][value="yes"]`)?.checked || false;
+    const weakSide = document.querySelector(`input[name="tongue-${side}-weak"]:checked`)?.value || null;
+    const note = document.getElementById(`tongue-${side}-note`)?.value || '';
+    if (hasDiff) tongueItems[side] = { hasDiff, weakSide, note };
+  });
+
   const therapist = document.getElementById('assess-therapist')?.value || '王小明';
   const notes     = document.getElementById('bcf-notes')?.value || '';
   const decObj    = { trainSide: dec.trainSide, reason: dec.reason, balanced: !!dec.balanced, noData: !!dec.noData, counts: dec.counts };
@@ -4032,6 +4392,7 @@ async function saveBCFAssessment() {
     score: totalItems - diffCount, maxScore: totalItems, prev: prevMTT,
     therapist, notes,
     eyeItems, cervicalItems, visualStimItems, stanceItems, convergenceItems,
+    gazeItems, tongueItems,
     brainRegions,
     decision: decObj,
   };
@@ -4081,6 +4442,20 @@ function clearBCFForm() {
     if (normal) { normal.checked = true; markBCFItem(c.id, false); }
     toggleConvSublayer(c.id, false);
   });
+  // Reset gaze test and tongue test
+  GAZE_DIRECTIONS.forEach(g => {
+    const noRadio = document.querySelector(`input[name="gaze-${g.id}-diff"][value="no"]`);
+    if (noRadio) { noRadio.checked = true; handleGazeDiff(g.id, false); }
+    document.querySelectorAll(`input[name="gaze-${g.id}-weak"]`).forEach(r => r.checked = false);
+  });
+  ['right', 'left'].forEach(side => {
+    const noRadio = document.querySelector(`input[name="tongue-${side}-diff"][value="no"]`);
+    if (noRadio) { noRadio.checked = true; handleGazeDiff('tongue-' + side, false); }
+    document.querySelectorAll(`input[name="tongue-${side}-weak"]`).forEach(r => r.checked = false);
+    const noteEl = document.getElementById('tongue-' + side + '-note');
+    if (noteEl) noteEl.value = '';
+  });
+
   clearBCFVoiceState();
   const resultsEl = document.getElementById('bcf-results');
   if (resultsEl) resultsEl.style.display = 'none';
