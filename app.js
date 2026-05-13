@@ -6662,6 +6662,39 @@ function renderModuleCards(patientId) {
   renderZone3(result);
 }
 
+function computeConsistency(moduleOutputs) {
+  const moduleSets = {};
+  for (const [mod, out] of Object.entries(moduleOutputs)) {
+    if (out && (out.abnormalCount ?? 0) > 0 && (out.weakRegions?.length ?? 0) > 0) {
+      moduleSets[mod] = new Set(
+        (out.weakRegions ?? []).map(r => normalizeBrainRegion(r.name))
+      );
+    }
+  }
+  const validMods = Object.keys(moduleSets);
+  if (validMods.length < 2) return { pct: 0, pairs: [], validMods };
+
+  const pairScores = [];
+  for (let i = 0; i < validMods.length; i++) {
+    for (let j = i + 1; j < validMods.length; j++) {
+      const a = moduleSets[validMods[i]];
+      const b = moduleSets[validMods[j]];
+      const intersection = new Set([...a].filter(x => b.has(x)));
+      const union = new Set([...a, ...b]);
+      const jaccard = union.size > 0 ? Math.round((intersection.size / union.size) * 100) : 0;
+      pairScores.push({
+        modA: validMods[i], modB: validMods[j],
+        intersection: [...intersection],
+        intersectionCount: intersection.size,
+        unionCount: union.size,
+        jaccard,
+      });
+    }
+  }
+  const avgJaccard = Math.round(pairScores.reduce((s, p) => s + p.jaccard, 0) / pairScores.length);
+  return { pct: avgJaccard, pairs: pairScores, validMods };
+}
+
 function runIntegratedAnalysis(patientId) {
   const getLatest = type => [...DB.assessments]
     .filter(a => a.patientId === patientId && a.type === type)
@@ -6744,14 +6777,16 @@ function runIntegratedAnalysis(patientId) {
     }
   }
 
-  // 一致性 = 跨模組確認數（sources≥2） / 所有模組聯集數
-  const allRegions    = Object.keys(brainRegionMap).length;
-  const highConf      = Object.values(brainRegionMap).filter(v => v.sources.length >= 2).length;
-  const consistencyPct = allRegions > 0 ? Math.round(highConf / allRegions * 100) : 0;
+  const allRegions = Object.keys(brainRegionMap).length;
+  const highConf   = Object.values(brainRegionMap).filter(v => v.sources.length >= 2).length;
+  const consistency = computeConsistency(moduleOutputs);
 
   return {
     weights, abnormalCounts, brainRegionMap,
-    consistencyPct, hasData: allRegions > 0,
+    consistencyPct: consistency.pct,
+    consistencyPairs: consistency.pairs,
+    consistencyValidMods: consistency.validMods,
+    hasData: allRegions > 0,
     activeModules, effectiveModuleCount,
     confirmedCount: highConf, totalRegionCount: allRegions,
   };
@@ -6772,7 +6807,7 @@ function renderZone3(result) {
 
   zone3.style.display = '';
 
-  const { weights, brainRegionMap, consistencyPct, activeModules, effectiveModuleCount, confirmedCount, totalRegionCount } = result;
+  const { weights, brainRegionMap, consistencyPct, consistencyPairs, activeModules, effectiveModuleCount, confirmedCount, totalRegionCount } = result;
   const MOD_LABELS = { balance: '平衡測試', muscle: '肌肉張力', rightEye: 'RightEye' };
   const MOD_COLORS = { balance: '#2563eb', muscle: '#16a34a', rightEye: '#9333ea' };
   const MOD_BADGE  = {
@@ -6800,8 +6835,8 @@ function renderZone3(result) {
     .sort(([, a], [, b]) => b.confidence - a.confidence);
 
   const tableRows = sorted.map(([region, info]) => {
-    const isHigh    = info.sources.length >= 2;   // 跨模組確認 = 高信心
-    const status    = isHigh ? '🔴 跨模組確認' : '🟡 單模組';
+    const isHigh    = info.sources.length >= 2;
+    const status    = isHigh ? '🔴 跨模組確認' : '🟡 單一模組';
     const statusClr = isHigh ? '#dc2626' : '#d97706';
     const confPct  = Math.round(info.confidence * 100);
     const uniqSrc  = [...new Set(info.sources)];
@@ -6823,13 +6858,34 @@ function renderZone3(result) {
       </tr>`;
   }).join('');
 
-  // Consistency indicator
-  const consClr = consistencyPct >= 80 ? '#16a34a' : consistencyPct >= 50 ? '#d97706' : '#dc2626';
-  const consBg  = consistencyPct >= 80 ? '#f0fdf4'  : consistencyPct >= 50 ? '#fffbeb' : '#fef2f2';
-  const consLbl = consistencyPct >= 80 ? '高度一致'  : consistencyPct >= 50 ? '部分一致' : '需進一步評估';
-  const highCnt = confirmedCount ?? Object.values(brainRegionMap).filter(v => v.sources.length >= 2).length;
-  const allCnt  = totalRegionCount ?? Object.keys(brainRegionMap).length;
+  // Consistency indicator (Jaccard-based)
+  const consClr = consistencyPct >= 60 ? '#16a34a' : consistencyPct >= 30 ? '#d97706' : '#dc2626';
+  const consBg  = consistencyPct >= 60 ? '#f0fdf4'  : consistencyPct >= 30 ? '#fffbeb' : '#fef2f2';
+  const consLbl = consistencyPct >= 60 ? '高度一致'  : consistencyPct >= 30 ? '部分一致' : '需進一步評估';
   const modCount = effectiveModuleCount ?? Object.keys(weights).length;
+
+  const pairs = consistencyPairs ?? [];
+  const pairRows = pairs.map(p => {
+    const pClr = p.jaccard >= 60 ? '#16a34a' : p.jaccard >= 30 ? '#d97706' : '#dc2626';
+    const sharedTags = p.intersection.map(r =>
+      `<span style="display:inline-block;background:#e0e7ff;color:#3730a3;border-radius:4px;padding:0 5px;font-size:9px;margin:1px">${r}</span>`
+    ).join('');
+    return `
+      <div style="margin-top:8px;padding:6px 8px;background:rgba(0,0,0,.03);border-radius:6px">
+        <div style="display:flex;justify-content:space-between;align-items:center">
+          <span style="font-size:11px;color:var(--gray-600)">${MOD_LABELS[p.modA]} ↔ ${MOD_LABELS[p.modB]}</span>
+          <span style="font-size:12px;font-weight:800;color:${pClr}">${p.jaccard}%</span>
+        </div>
+        <div style="font-size:10px;color:var(--gray-400);margin-top:2px">
+          共同 ${p.intersectionCount} 個 ／ 聯集 ${p.unionCount} 個
+          ${sharedTags ? '<br>' + sharedTags : ''}
+        </div>
+      </div>`;
+  }).join('');
+
+  const avgLabel = pairs.length > 1
+    ? `<div style="margin-top:6px;font-size:10px;color:var(--gray-400)">整體平均（${pairs.length} 對）：<b style="color:${consClr}">${consistencyPct}%</b></div>`
+    : '';
 
   const noBalanceBanner = (activeModules && !activeModules.includes('balance'))
     ? `<div style="margin-bottom:16px;padding:10px 16px;background:#fff7ed;border-left:4px solid #f97316;border-radius:6px;display:flex;align-items:flex-start;gap:10px">
@@ -6853,21 +6909,20 @@ function renderZone3(result) {
           ${weightBars}
         </div>
 
-        <!-- Consistency -->
-        <div style="display:flex;align-items:center;padding:16px;background:${consBg};border-radius:10px;border:1px solid ${consClr}25;gap:20px">
-          <div style="text-align:center;min-width:72px">
-            <div style="font-size:44px;font-weight:900;color:${consClr};line-height:1">${consistencyPct}%</div>
-            <div style="font-size:10px;color:${consClr};font-weight:700;margin-top:3px">${consLbl}</div>
-          </div>
-          <div>
-            <div style="font-size:13px;font-weight:700;color:var(--gray-800);margin-bottom:5px">🔗 跨系統診斷一致性</div>
-            <div style="font-size:11px;color:var(--gray-500)">基於 ${modCount} 個有效模組 ／ ${highCnt} 個確認腦區 ／ ${allCnt} 個總腦區</div>
-            <div style="font-size:11px;color:var(--gray-500);margin-top:4px;line-height:1.5">
-              ${consistencyPct >= 80 ? '多模組高度吻合，建議優先訓練高信心腦區'
-              : consistencyPct >= 50 ? '部分模組吻合，高信心腦區優先'
-              : '一致性偏低，建議完成更多評估模組'}
+        <!-- Consistency (Jaccard) -->
+        <div style="padding:16px;background:${consBg};border-radius:10px;border:1px solid ${consClr}25">
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:4px">
+            <div style="text-align:center;min-width:64px">
+              <div style="font-size:40px;font-weight:900;color:${consClr};line-height:1">${consistencyPct}%</div>
+              <div style="font-size:10px;color:${consClr};font-weight:700;margin-top:3px">${consLbl}</div>
+            </div>
+            <div>
+              <div style="font-size:13px;font-weight:700;color:var(--gray-800);margin-bottom:3px">🔗 跨系統診斷一致性</div>
+              <div style="font-size:10px;color:var(--gray-400)">Jaccard 相似度 ／ ${modCount} 個有效模組</div>
             </div>
           </div>
+          ${pairRows}
+          ${avgLabel}
         </div>
       </div>
 
