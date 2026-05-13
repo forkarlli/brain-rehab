@@ -108,7 +108,9 @@
 - Overshoot/Undershoot/Missed 接上處方輸出（mild/moderate/severe 均有腦區標籤、臨床注記、眼動機處方條目）
 
 ### 待完成（優先順序）
-1. RightEye 截圖 AI 自動讀取 → 自動填入表單數值
+1. 歷史處方「查看詳情」modal：目前儲存的整合處方在歷史記錄中只有卡片，點查看詳情是 placeholder
 
 ### 已完成（近期）
 - Intrusion 振幅過濾器：小振幅 → Flocculus/SC + M1固視穩定處方；大振幅 → Cross-Cord Pathway + M7複合處方
+- 當日處方產生器（Zone1-5）：三模組整合分析、策略選擇、處方表、PDF匯出、儲存至歷史
+- RightEye 截圖 AI 自動讀取（已完成，呼叫 Railway /api/analyze-righteye）
