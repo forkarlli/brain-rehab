@@ -6669,58 +6669,74 @@ function renderModuleCards(patientId) {
 }
 
 function computeConsistency(moduleOutputs) {
-  const REGION_GROUPS = {
-    cerebellum: ['Left CB', 'Right CB', 'CB Vermis', 'CB Flocculus'],
-    brainstem:  ['riMLF', 'Left PPRF', 'Right PPRF', 'Bilateral Midbrain',
-                 'Superior Colliculus', 'CN III', 'Left Mes', 'Right Mes'],
-    cortex:     ['Left FEF', 'Right FEF', 'Left Parietal', 'Right Parietal',
-                 'Left Temporal Lobe', 'Right Temporal Lobe'],
-    vestibular: ['Left Vestibular', 'Right Vestibular'],
+  // Side-specific neural groups (含側性的細分群組)
+  const SIDE_GROUPS = {
+    '左側小腦群':  ['Left CB'],
+    '右側小腦群':  ['Right CB'],
+    '雙側小腦群':  ['CB Vermis', 'CB Flocculus'],
+    '左側皮質群':  ['Left FEF', 'Left Parietal', 'Left Temporal Lobe'],
+    '右側皮質群':  ['Right FEF', 'Right Parietal', 'Right Temporal Lobe'],
+    '左側腦幹群':  ['Left PPRF', 'Left Mes'],
+    '右側腦幹群':  ['Right PPRF', 'Right Mes'],
+    '雙側腦幹群':  ['riMLF', 'Bilateral Midbrain', 'Superior Colliculus', 'CN III'],
+    '左側前庭群':  ['Left Vestibular'],
+    '右側前庭群':  ['Right Vestibular'],
   };
 
-  function getGroup(canonical) {
-    for (const [grp, list] of Object.entries(REGION_GROUPS)) {
+  function getSideGroup(canonical) {
+    for (const [grp, list] of Object.entries(SIDE_GROUPS)) {
       if (list.includes(canonical)) return grp;
     }
-    return 'other';
+    return '其他';
   }
 
-  function extractLaterality(weakRegions) {
-    let left = 0, right = 0;
+  function computeLaterality(weakRegions) {
+    let leftCount = 0, rightCount = 0, bilateralCount = 0;
     for (const r of (weakRegions ?? [])) {
-      const n = normalizeBrainRegion(r.name);
-      if (/^Left\b/.test(n)) left++;
-      else if (/^Right\b/.test(n)) right++;
+      const name = normalizeBrainRegion(r.name);
+      if (/^Left\b/.test(name)) leftCount++;
+      else if (/^Right\b/.test(name)) rightCount++;
+      else bilateralCount++;
     }
-    if (left === 0 && right === 0) return null;
-    if (left > right) return 'left';
-    if (right > left) return 'right';
-    return 'bilateral';
+    const total = leftCount + rightCount + bilateralCount || 1;
+    const leftPct  = Math.round(leftCount  / total * 100);
+    const rightPct = Math.round(rightCount / total * 100);
+    let dominantSide;
+    if (leftPct >= 60)       dominantSide = 'left';
+    else if (rightPct >= 60) dominantSide = 'right';
+    else                     dominantSide = 'bilateral';
+    return { dominantSide, leftPct, rightPct, leftCount, rightCount, bilateralCount };
   }
 
   // === Layer 1: Laterality ===
-  const latDecisions = {};
+  const perModLat = {};
   for (const [mod, out] of Object.entries(moduleOutputs)) {
-    if (!out || (out.weakRegions?.length ?? 0) === 0) continue;
-    const lat = extractLaterality(out.weakRegions);
-    if (lat !== null) latDecisions[mod] = lat;
+    if (out && (out.abnormalCount ?? 0) > 0 && (out.weakRegions?.length ?? 0) > 0) {
+      perModLat[mod] = computeLaterality(out.weakRegions);
+    }
   }
-  const latMods = Object.keys(latDecisions);
-  let latMatchCount = 0, majorityLat = null;
-  if (latMods.length > 0) {
-    const tally = {};
-    for (const v of Object.values(latDecisions)) tally[v] = (tally[v] ?? 0) + 1;
-    latMatchCount = Math.max(...Object.values(tally));
-    majorityLat = Object.entries(tally).sort(([,a],[,b]) => b - a)[0][0];
+  const sides = Object.values(perModLat).map(l => l.dominantSide);
+  const nLeft  = sides.filter(s => s === 'left').length;
+  const nRight = sides.filter(s => s === 'right').length;
+  let latScore, latStatus, latDetail;
+  if (sides.length < 2) {
+    latScore = 0;   latStatus = 'insufficient'; latDetail = '有效模組不足';
+  } else if (nLeft === sides.length) {
+    latScore = 100; latStatus = 'consistent-left';  latDetail = '✅ 所有模組均指向左側';
+  } else if (nRight === sides.length) {
+    latScore = 100; latStatus = 'consistent-right'; latDetail = '✅ 所有模組均指向右側';
+  } else if (nLeft > 0 && nRight > 0) {
+    latScore = 0;   latStatus = 'conflict';  latDetail = '❌ 側性矛盾：部分模組左側、部分右側，建議重新評估';
+  } else {
+    latScore = 50;  latStatus = 'partial';   latDetail = '⚠️ 部分一致：含雙側模組';
   }
-  const latPct = latMods.length > 0 ? Math.round(latMatchCount / latMods.length * 100) : 0;
 
-  // === Layer 2: Neural System Group ===
+  // === Layer 2: Side-specific Neural Group ===
   const moduleGroupSets = {};
   for (const [mod, out] of Object.entries(moduleOutputs)) {
     if (!out || (out.weakRegions?.length ?? 0) === 0) continue;
     const s = new Set();
-    for (const r of out.weakRegions) s.add(getGroup(normalizeBrainRegion(r.name)));
+    for (const r of out.weakRegions) s.add(getSideGroup(normalizeBrainRegion(r.name)));
     moduleGroupSets[mod] = s;
   }
   const groupMods = Object.keys(moduleGroupSets);
@@ -6755,14 +6771,14 @@ function computeConsistency(moduleOutputs) {
   const avgJaccard = jaccPairs.length > 0
     ? Math.round(jaccPairs.reduce((s, p) => s + p.jaccard, 0) / jaccPairs.length) : 0;
 
-  const combinedPct = Math.round(latPct * 0.5 + groupPct * 0.5);
-  const validMods = [...new Set([...latMods, ...groupMods])];
+  const combinedPct = Math.round(latScore * 0.5 + groupPct * 0.5);
+  const validMods = [...new Set([...Object.keys(perModLat), ...groupMods])];
 
   return {
     pct: combinedPct,
-    laterality: { pct: latPct, decisions: latDecisions, majorityLat, matchCount: latMatchCount, totalCount: latMods.length },
-    neuralGroup: { pct: groupPct, sharedGroups, totalGroups: [...allGroupsSet], moduleGroupSets: Object.fromEntries(groupMods.map(m => [m, [...moduleGroupSets[m]]])) },
-    jaccard: { pct: avgJaccard, pairs: jaccPairs },
+    laterality:  { pct: latScore, status: latStatus, detail: latDetail, perModule: perModLat },
+    neuralGroup: { pct: groupPct, sharedGroups, totalGroups: [...allGroupsSet] },
+    jaccard:     { pct: avgJaccard, pairs: jaccPairs },
     validMods,
   };
 }
@@ -6932,11 +6948,9 @@ function renderZone3(result) {
   }).join('');
 
   // Consistency — 3-layer display
-  const GROUP_LABELS_Z3 = { cerebellum: '小腦系統', brainstem: '腦幹系統', cortex: '皮質系統', vestibular: '前庭系統', other: '其他' };
-  const LAT_LABELS_Z3   = { left: '左側', right: '右側', bilateral: '雙側' };
   const modCount = effectiveModuleCount ?? Object.keys(weights).length;
 
-  const lat  = consistencyLat  ?? { pct: 0, decisions: {}, matchCount: 0, totalCount: 0, majorityLat: null };
+  const lat  = consistencyLat  ?? { pct: 0, status: 'insufficient', detail: '無資料', perModule: {} };
   const grp  = consistencyGroup ?? { pct: 0, sharedGroups: [], totalGroups: [] };
   const jacc = consistencyJaccard ?? { pct: 0, pairs: [] };
 
@@ -6952,13 +6966,37 @@ function renderZone3(result) {
   const consBg  = combinedPct >= 60 ? '#f0fdf4' : combinedPct >= 30 ? '#fffbeb' : '#fef2f2';
   const consLbl = combinedPct >= 60 ? '高度一致' : combinedPct >= 30 ? '部分一致' : '需進一步評估';
 
-  const latMajLabel = lat.majorityLat ? (LAT_LABELS_Z3[lat.majorityLat] ?? lat.majorityLat) : '—';
-  const latDetail = lat.totalCount > 0
-    ? `${lat.matchCount}/${lat.totalCount} 個模組同${latMajLabel}`
-    : '無有效側性資料';
+  // Per-module laterality bars
+  const LAT_SIDE_LABELS = { left: '左側傾向', right: '右側傾向', bilateral: '雙側' };
+  const perModLatRows = Object.entries(lat.perModule ?? {}).map(([mod, info]) => {
+    const sideClr = info.dominantSide === 'left' ? '#2563eb' : info.dominantSide === 'right' ? '#dc2626' : '#7c3aed';
+    return `
+      <div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
+        <span style="font-size:10px;color:var(--gray-600);min-width:54px">${MOD_LABELS[mod] ?? mod}</span>
+        <span style="font-size:9px;font-weight:700;color:${sideClr};min-width:46px">${LAT_SIDE_LABELS[info.dominantSide] ?? info.dominantSide}</span>
+        <div style="flex:1;display:flex;height:8px;border-radius:3px;overflow:hidden;background:var(--gray-100)">
+          <div style="width:${info.leftPct}%;background:#3b82f6;height:100%;transition:width .5s" title="左${info.leftPct}%"></div>
+          <div style="width:${info.rightPct}%;background:#ef4444;height:100%;transition:width .5s" title="右${info.rightPct}%"></div>
+        </div>
+        <span style="font-size:9px;color:#3b82f6;white-space:nowrap">左${info.leftPct}%</span>
+        <span style="font-size:9px;color:#ef4444;white-space:nowrap">右${info.rightPct}%</span>
+      </div>`;
+  }).join('');
 
-  const sharedGrpLabels = (grp.sharedGroups ?? []).map(g => GROUP_LABELS_Z3[g] ?? g).join('、');
-  const grpDetail = sharedGrpLabels ? `共同指向：${sharedGrpLabels}` : '無共同神經系統';
+  // Laterality status colours
+  const latIsGood    = lat.status === 'consistent-left' || lat.status === 'consistent-right';
+  const latIsConflict = lat.status === 'conflict';
+  const latStatusClr  = latIsGood ? '#15803d' : latIsConflict ? '#dc2626' : '#d97706';
+  const latStatusBg   = latIsGood ? '#f0fdf4'  : latIsConflict ? '#fef2f2'  : '#fffbeb';
+
+  const conflictMods = latIsConflict
+    ? Object.entries(lat.perModule ?? {})
+        .map(([mod, info]) => `${MOD_LABELS[mod] ?? mod}→${info.dominantSide === 'left' ? '左側' : info.dominantSide === 'right' ? '右側' : '雙側'}`)
+        .join(' vs ')
+    : '';
+
+  const sharedGrpLabels = (grp.sharedGroups ?? []).filter(g => g !== '其他').join('、');
+  const grpDetail = sharedGrpLabels ? `共同指向：${sharedGrpLabels}` : '無共同含側性群組';
 
   const jaccDetail = jacc.pairs.length > 0
     ? jacc.pairs.map(p => `${MOD_LABELS[p.modA]}↔${MOD_LABELS[p.modB]}: ${p.jaccard}%`).join('  ') : '';
@@ -6999,22 +7037,26 @@ function renderZone3(result) {
             </div>
           </div>
           <!-- Layer 1: Laterality -->
-          <div style="margin-bottom:10px">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
-              <span style="font-size:11px;color:var(--gray-600);min-width:88px">側性一致性</span>
+          <div style="margin-bottom:12px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
+              <span style="font-size:11px;font-weight:700;color:var(--gray-700);min-width:88px">側性一致性</span>
               ${_bar(lat.pct, _rowClr(lat.pct))}
               <span style="font-size:12px;font-weight:800;color:${_rowClr(lat.pct)};min-width:34px;text-align:right">${lat.pct}%</span>
             </div>
-            <div style="font-size:10px;color:var(--gray-400);margin-left:96px">${latDetail}</div>
+            ${perModLatRows}
+            <div style="margin-top:5px;padding:5px 8px;background:${latStatusBg};border-radius:5px;font-size:11px;color:${latStatusClr};font-weight:600;line-height:1.5">
+              ${lat.detail}${conflictMods ? '<br><span style="font-size:10px;font-weight:400">' + conflictMods + '</span>' : ''}
+              ${latIsConflict ? '<br><span style="font-size:10px;font-weight:400">建議重新評估確認側性</span>' : ''}
+            </div>
           </div>
           <!-- Layer 2: Neural Group -->
           <div style="margin-bottom:10px">
             <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
-              <span style="font-size:11px;color:var(--gray-600);min-width:88px">神經系統一致性</span>
+              <span style="font-size:11px;font-weight:700;color:var(--gray-700);min-width:88px">神經系統一致性</span>
               ${_bar(grp.pct, _rowClr(grp.pct))}
               <span style="font-size:12px;font-weight:800;color:${_rowClr(grp.pct)};min-width:34px;text-align:right">${grp.pct}%</span>
             </div>
-            <div style="font-size:10px;color:var(--gray-400);margin-left:96px">${grpDetail}</div>
+            <div style="font-size:10px;color:var(--gray-500);margin-left:96px">${grpDetail}</div>
           </div>
           <!-- Layer 3: Jaccard reference -->
           <div>
