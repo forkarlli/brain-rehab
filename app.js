@@ -6708,6 +6708,12 @@ function runIntegratedAnalysis(patientId) {
 
   const moduleOutputs = { balance: balanceOut, muscle: muscleOut, rightEye: reOut };
 
+  // 有效模組：有 weakRegions 資料的模組
+  const activeModules = Object.entries(moduleOutputs)
+    .filter(([, out]) => out && (out.weakRegions?.length ?? 0) > 0)
+    .map(([mod]) => mod);
+  const effectiveModuleCount = activeModules.length;
+
   // Compute weights from abnormal counts
   let totalAbnormal = 0;
   const abnormalCounts = {};
@@ -6720,7 +6726,7 @@ function runIntegratedAnalysis(patientId) {
     weights[mod] = totalAbnormal > 0 ? abnormalCounts[mod] / totalAbnormal : 1 / 3;
   }
 
-  // Merge brain regions across modules
+  // Merge brain regions — 同一模組每個腦區只計一次（避免 alias 合併後重複）
   const brainRegionMap = {};
   for (const [mod, out] of Object.entries(moduleOutputs)) {
     if (!out) continue;
@@ -6729,17 +6735,26 @@ function runIntegratedAnalysis(patientId) {
       if (!brainRegionMap[canonical]) {
         brainRegionMap[canonical] = { sources: [], confidence: 0, evidence: [] };
       }
-      brainRegionMap[canonical].sources.push(mod);
-      brainRegionMap[canonical].confidence += weights[mod];
+      // 每個模組對同一腦區只貢獻一次 confidence／source
+      if (!brainRegionMap[canonical].sources.includes(mod)) {
+        brainRegionMap[canonical].sources.push(mod);
+        brainRegionMap[canonical].confidence += weights[mod];
+      }
       brainRegionMap[canonical].evidence.push(region.evidence ?? '');
     }
   }
 
+  // 一致性 = 跨模組確認數（sources≥2） / 所有模組聯集數
   const allRegions    = Object.keys(brainRegionMap).length;
   const highConf      = Object.values(brainRegionMap).filter(v => v.sources.length >= 2).length;
   const consistencyPct = allRegions > 0 ? Math.round(highConf / allRegions * 100) : 0;
 
-  return { weights, abnormalCounts, brainRegionMap, consistencyPct, hasData: allRegions > 0 };
+  return {
+    weights, abnormalCounts, brainRegionMap,
+    consistencyPct, hasData: allRegions > 0,
+    activeModules, effectiveModuleCount,
+    confirmedCount: highConf, totalRegionCount: allRegions,
+  };
 }
 
 function renderZone3(result) {
@@ -6757,7 +6772,7 @@ function renderZone3(result) {
 
   zone3.style.display = '';
 
-  const { weights, brainRegionMap, consistencyPct } = result;
+  const { weights, brainRegionMap, consistencyPct, activeModules, effectiveModuleCount, confirmedCount, totalRegionCount } = result;
   const MOD_LABELS = { balance: '平衡測試', muscle: '肌肉張力', rightEye: 'RightEye' };
   const MOD_COLORS = { balance: '#2563eb', muscle: '#16a34a', rightEye: '#9333ea' };
   const MOD_BADGE  = {
@@ -6812,12 +6827,21 @@ function renderZone3(result) {
   const consClr = consistencyPct >= 80 ? '#16a34a' : consistencyPct >= 50 ? '#d97706' : '#dc2626';
   const consBg  = consistencyPct >= 80 ? '#f0fdf4'  : consistencyPct >= 50 ? '#fffbeb' : '#fef2f2';
   const consLbl = consistencyPct >= 80 ? '高度一致'  : consistencyPct >= 50 ? '部分一致' : '需進一步評估';
-  const highCnt = Object.values(brainRegionMap).filter(v => v.sources.length >= 2).length;
-  const allCnt  = Object.keys(brainRegionMap).length;
+  const highCnt = confirmedCount ?? Object.values(brainRegionMap).filter(v => v.sources.length >= 2).length;
+  const allCnt  = totalRegionCount ?? Object.keys(brainRegionMap).length;
+  const modCount = effectiveModuleCount ?? Object.keys(weights).length;
+
+  const noBalanceBanner = (activeModules && !activeModules.includes('balance'))
+    ? `<div style="margin-bottom:16px;padding:10px 16px;background:#fff7ed;border-left:4px solid #f97316;border-radius:6px;display:flex;align-items:flex-start;gap:10px">
+        <span style="font-size:16px;margin-top:1px">⚠️</span>
+        <span style="font-size:12px;color:#9a3412;line-height:1.5">平衡測試尚無數據，一致性分析僅基於 ${modCount} 個模組，建議完成平衡測試後再生成處方</span>
+       </div>`
+    : '';
 
   zone3.innerHTML = `
     <div class="rx-gen-section-title">第三區：整合分析結果</div>
     <div class="card" style="padding:20px;margin-bottom:20px">
+    ${noBalanceBanner}
 
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;flex-wrap:wrap">
 
@@ -6837,7 +6861,7 @@ function renderZone3(result) {
           </div>
           <div>
             <div style="font-size:13px;font-weight:700;color:var(--gray-800);margin-bottom:5px">🔗 跨系統診斷一致性</div>
-            <div style="font-size:11px;color:var(--gray-500)">高信心 ${highCnt} 個 ／ 總弱化腦區 ${allCnt} 個</div>
+            <div style="font-size:11px;color:var(--gray-500)">基於 ${modCount} 個有效模組 ／ ${highCnt} 個確認腦區 ／ ${allCnt} 個總腦區</div>
             <div style="font-size:11px;color:var(--gray-500);margin-top:4px;line-height:1.5">
               ${consistencyPct >= 80 ? '多模組高度吻合，建議優先訓練高信心腦區'
               : consistencyPct >= 50 ? '部分模組吻合，高信心腦區優先'
