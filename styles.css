@@ -690,6 +690,169 @@ body {
   color: #fff;
 }
 
+/* ===== DAILY GENERATOR — ZONES ===== */
+.rx-gen-zone { margin-bottom: 20px; }
+
+.rx-gen-section-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--gray-600);
+  letter-spacing: .4px;
+  margin-bottom: 14px;
+  padding-left: 2px;
+}
+
+/* Module summary cards grid */
+.rx-module-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+@media (max-width: 900px) {
+  .rx-module-cards { grid-template-columns: 1fr; }
+}
+
+/* Individual module card */
+.rx-module-card {
+  background: #fff;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.rx-module-card-empty {
+  opacity: .85;
+}
+
+.rx-module-card-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 11px 14px;
+  background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+  color: #fff;
+  position: relative;
+}
+
+.rx-module-card-icon { font-size: 16px; line-height: 1; }
+
+.rx-module-card-title {
+  font-size: 12px;
+  font-weight: 700;
+  flex: 1;
+  letter-spacing: .2px;
+}
+
+.rx-module-abn-badge {
+  background: #dc2626;
+  color: #fff;
+  border-radius: 50%;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  box-shadow: 0 0 0 2px rgba(255,255,255,.35);
+}
+
+.rx-module-card-date {
+  padding: 5px 14px;
+  font-size: 10px;
+  color: var(--gray-400);
+  background: var(--gray-50);
+  border-bottom: 1px solid var(--gray-100);
+}
+
+.rx-module-card-body { padding: 13px 14px; flex: 1; }
+
+.rx-module-row {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 9px;
+  align-items: flex-start;
+}
+
+.rx-module-row:last-child { margin-bottom: 0; }
+
+.rx-module-label {
+  flex: 0 0 72px;
+  font-size: 10px;
+  color: var(--gray-400);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: .3px;
+  padding-top: 2px;
+}
+
+.rx-module-value {
+  flex: 1;
+  font-size: 12px;
+  color: var(--gray-700);
+  line-height: 1.6;
+}
+
+.rx-module-empty-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 36px 20px;
+  color: var(--gray-300);
+  text-align: center;
+  flex: 1;
+}
+
+/* ===== PRESCRIPTION SUB-TABS ===== */
+.rx-subtabs {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 20px;
+  border-bottom: 2px solid var(--gray-100);
+  padding-bottom: 0;
+}
+
+.rx-subtab {
+  padding: 10px 22px;
+  border: none;
+  background: none;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--gray-400);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  border-radius: 6px 6px 0 0;
+  transition: color .15s, border-color .15s;
+}
+
+.rx-subtab:hover { color: var(--primary); }
+
+.rx-subtab.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+  background: var(--primary-light);
+}
+
+.rx-placeholder-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 300px;
+  background: #fff;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  padding: 60px 40px;
+  text-align: center;
+}
+
 /* ===== PRESCRIPTION GRID ===== */
 .rx-grid {
   display: grid;
@@ -2174,4 +2337,120 @@ body {
   .bcf-gaze-grid { grid-template-columns: repeat(3, 1fr); gap: 5px; }
   .bcf-gaze-cell { padding: 7px 4px; min-height: 80px; }
   .bcf-tongue-diagram { flex-wrap: wrap; }
+}
+
+/* ===== ZONE 4 — STRATEGY CARDS ===== */
+.rx-strategy-cards {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+  margin: 0 0 4px;
+}
+@media (max-width: 900px) {
+  .rx-strategy-cards { grid-template-columns: 1fr; }
+}
+.rx-strategy-card {
+  border: 2px solid var(--gray-200);
+  border-radius: 12px;
+  padding: 20px;
+  cursor: pointer;
+  transition: border-color .2s, box-shadow .2s, background .2s;
+  background: #fff;
+  position: relative;
+  user-select: none;
+}
+.rx-strategy-card:hover {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(79,70,229,.08);
+}
+.rx-strategy-card.selected {
+  border-color: var(--primary);
+  background: #eef2ff;
+  box-shadow: 0 0 0 4px rgba(79,70,229,.12);
+}
+.rx-strategy-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+.rx-strategy-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--gray-200);
+  color: var(--gray-600);
+  font-size: 13px;
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: background .2s, color .2s;
+}
+.rx-strategy-card.selected .rx-strategy-num {
+  background: var(--primary);
+  color: #fff;
+}
+.rx-strategy-icon { font-size: 22px; }
+.rx-strategy-title {
+  font-size: 15px;
+  font-weight: 800;
+  color: var(--gray-900);
+  margin-bottom: 4px;
+}
+.rx-strategy-sub {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--primary);
+  margin-bottom: 8px;
+  letter-spacing: .2px;
+}
+.rx-strategy-desc {
+  font-size: 12px;
+  color: var(--gray-500);
+  line-height: 1.6;
+  margin-bottom: 12px;
+}
+.rx-strategy-count {
+  font-size: 12px;
+  color: var(--gray-600);
+  border-top: 1px solid var(--gray-100);
+  padding-top: 10px;
+  margin-top: auto;
+}
+.rx-strategy-count-num {
+  font-size: 20px;
+  font-weight: 900;
+  color: var(--primary);
+  margin-right: 2px;
+}
+.rx-strategy-count-label { color: var(--gray-500); }
+
+/* ===== PRINT CSS ===== */
+@media print {
+  .sidebar,
+  .topbar,
+  .rx-subtabs,
+  .rx-gen-zone,
+  #rxGen-zone3,
+  #rxGen-zone4,
+  .rx-gen-section-title:not(#rxGen-zone5 .rx-gen-section-title),
+  .page-actions,
+  .toast,
+  #loginScreen,
+  button:not(.print-show) {
+    display: none !important;
+  }
+  body, html { background: #fff !important; }
+  .main-content { margin-left: 0 !important; padding: 0 !important; }
+  .page { padding: 0 !important; display: block !important; }
+  #rxGen-zone5 { display: block !important; }
+  #rxGen-zone5-card {
+    box-shadow: none !important;
+    border: 1px solid #ddd !important;
+    border-radius: 0 !important;
+  }
+  .data-table th, .data-table td { font-size: 10px !important; padding: 5px 6px !important; }
+  @page { margin: 12mm; size: A4 landscape; }
 }

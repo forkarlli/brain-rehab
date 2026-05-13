@@ -34,6 +34,8 @@ const DB = {
     { id: 'S005', patientId: 'P005', date: '2026-04-20', start: '11:00', end: '12:00', items: '上下肢運動、吞嚥訓練', cooperation: 4, notes: '', status: 'scheduled', therapist: '李芳如' },
     { id: 'S006', patientId: 'P001', date: '2026-04-20', start: '14:30', end: '15:30', items: '認知訓練、職能作業', cooperation: 0, notes: '', status: 'scheduled', therapist: '王小明' },
   ],
+
+  integratedPrescriptions: [],
 };
 
 // ===== LOCAL STORAGE PERSISTENCE =====
@@ -42,9 +44,10 @@ const STORAGE_KEY = 'brain_rehab_db';
 function saveToStorage() {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({
-      assessments:   DB.assessments,
-      prescriptions: DB.prescriptions,
-      sessions:      DB.sessions,
+      assessments:             DB.assessments,
+      prescriptions:           DB.prescriptions,
+      sessions:                DB.sessions,
+      integratedPrescriptions: DB.integratedPrescriptions,
     }));
   } catch(e) {
     showToast('⚠️ 自動儲存失敗（儲存空間不足）', 'error');
@@ -56,9 +59,10 @@ function loadFromStorage() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) { saveToStorage(); return; }
     const saved = JSON.parse(raw);
-    if (Array.isArray(saved.assessments))   DB.assessments   = saved.assessments;
-    if (Array.isArray(saved.prescriptions)) DB.prescriptions = saved.prescriptions;
-    if (Array.isArray(saved.sessions))      DB.sessions      = saved.sessions;
+    if (Array.isArray(saved.assessments))             DB.assessments             = saved.assessments;
+    if (Array.isArray(saved.prescriptions))           DB.prescriptions           = saved.prescriptions;
+    if (Array.isArray(saved.sessions))                DB.sessions                = saved.sessions;
+    if (Array.isArray(saved.integratedPrescriptions)) DB.integratedPrescriptions = saved.integratedPrescriptions;
   } catch(e) {
     console.warn('localStorage 讀取失敗，使用預設資料', e);
   }
@@ -352,7 +356,7 @@ function navigateTo(page) {
   // Render page content
   if (page === 'patients') renderPatients();
   if (page === 'assessments') { renderAssessments(); populatePatientSelects(); }
-  if (page === 'prescriptions') { renderPrescriptions(); populatePatientSelects(); }
+  if (page === 'prescriptions') { switchRxTab('generator'); populatePatientSelects(); }
   if (page === 'sessions') { renderSessions(); populatePatientSelects(); }
   if (page === 'reports') populatePatientSelects();
 }
@@ -1303,6 +1307,32 @@ const CONV_M_MAP = [
   { sub: 'conv-dn-rbk',  mCode: 'M9',  desc: '下方Convergence＋頭右後' },
   { sub: 'conv-dn-lbk',  mCode: 'M10', desc: '下方Convergence＋頭左後' },
 ];
+const BRAIN_REGION_ALIASES = {
+  'Left CB':           ['左側小腦',    'Left Cerebellum',    '左CB', 'Left Cb', 'Left CB Vermis'],
+  'Right CB':          ['右側小腦',    'Right Cerebellum',   '右CB', 'Right Cb', 'Right CB Vermis'],
+  'CB Vermis':         ['小腦蚓部',    'Vermis',             '蚓部', 'Bilateral CB Vermis'],
+  'CB Flocculus':      ['小腦絨球',    'Flocculus',          'Vestibulocerebellum'],
+  'Left FEF':          ['左額葉眼動區','Left Frontal Eye Field'],
+  'Right FEF':         ['右額葉眼動區','Right Frontal Eye Field'],
+  'Left PPRF':         ['左側PPRF',   '左側腦橋旁正中網狀結構'],
+  'Right PPRF':        ['右側PPRF',   '右側腦橋旁正中網狀結構', 'Bilateral Pons'],
+  'riMLF':             ['內側縱束嘴側間質核','垂直眼動中樞', 'Bilateral Midbrain', 'Bilateral riMLF'],
+  'Left Vestibular':   ['左側前庭核', 'Left Vest'],
+  'Right Vestibular':  ['右側前庭核', 'Right Vest'],
+  'Left Parietal':     ['Left Parietal Cortex',  'Left Parietal Lobe',  '左頂葉', 'Left Temporal Lobe'],
+  'Right Parietal':    ['Right Parietal Cortex', 'Right Parietal Lobe', '右頂葉', 'Right Temporal Lobe'],
+  'Left Mes':          ['左中腦', 'Left Mesencephalon'],
+  'Right Mes':         ['右中腦', 'Right Mesencephalon'],
+};
+
+function normalizeBrainRegion(name) {
+  if (!name) return name;
+  for (const [canonical, aliases] of Object.entries(BRAIN_REGION_ALIASES)) {
+    if (name === canonical || aliases.includes(name)) return canonical;
+  }
+  return name;
+}
+
 const BRAIN_REGION_RX = {
   '左額葉眼動區':          { electrode: 'F3',     freq: 40, mode: '認知刺激模式',   rx: '左額葉眼動區 γ波刺激 — 右向掃視強化訓練' },
   '右額葉眼動區':          { electrode: 'F4',     freq: 40, mode: '認知刺激模式',   rx: '右額葉眼動區 γ波刺激 — 左向掃視強化訓練' },
@@ -2321,6 +2351,25 @@ function computeRombergRx(input) {
     sway_velocity: input.btracks_sway_velocity || null,
   };
 
+  // Build weakRegions for integrated analysis
+  const canalStr = diagEntry.canal || '';
+  const rombergWeakRegions = [];
+  if (mode === 'FAILURE' && canalStr) {
+    const hasRight    = canalStr.includes('Right');
+    const hasLeft     = canalStr.includes('Left');
+    const hasBilateral = canalStr.includes('Bilateral');
+    const rqFmt = parseFloat(rq.toFixed(2));
+    const ev = `RQ=${rqFmt}，${canalStr}`;
+    if (hasBilateral || (hasRight && hasLeft)) {
+      rombergWeakRegions.push({ name: 'Left Vestibular',  evidence: ev });
+      rombergWeakRegions.push({ name: 'Right Vestibular', evidence: ev });
+    } else if (hasRight) {
+      rombergWeakRegions.push({ name: 'Right Vestibular', evidence: ev });
+    } else if (hasLeft) {
+      rombergWeakRegions.push({ name: 'Left Vestibular',  evidence: ev });
+    }
+  }
+
   return {
     rq:             parseFloat(rq.toFixed(3)),
     mode,
@@ -2333,10 +2382,62 @@ function computeRombergRx(input) {
       confidence: parseFloat(Math.max(0, confidence).toFixed(2)),
       alerts,
     },
-    training_plan:   trainingPlan,
-    btracks_data:    btracksData,
+    training_plan:    trainingPlan,
+    btracks_data:     btracksData,
     prescription_key: prescriptionKey,
+    weakRegions:      rombergWeakRegions,
+    abnormalCount:    mode === 'FAILURE' ? Math.max(1, rombergWeakRegions.length) : 0,
   };
+}
+
+// computeMuscleRx — 從已儲存的肌肉張力測試記錄產生 weakRegions + abnormalCount
+function computeMuscleRx(muscleRec) {
+  if (!muscleRec) return { weakRegions: [], abnormalCount: 0 };
+
+  let abnormalCount = 0;
+  if (muscleRec.eyeItems)       Object.values(muscleRec.eyeItems).forEach(v      => { if (v !== 'none') abnormalCount++; });
+  if (muscleRec.cervicalItems)  Object.values(muscleRec.cervicalItems).forEach(v => { if (v !== 'none') abnormalCount++; });
+  if (muscleRec.stanceItems)    Object.values(muscleRec.stanceItems).forEach(v   => { if (v !== 'none') abnormalCount++; });
+  if (muscleRec.convergenceItems) abnormalCount += Object.keys(muscleRec.convergenceItems).length;
+  if (muscleRec.visualStimItems)  abnormalCount += (muscleRec.visualStimItems || []).length;
+
+  // Build region → evidence mapping by re-running the BCF brain maps
+  const regionEv = {};
+  const addReg = (brain, ev) => {
+    if (!regionEv[brain]) regionEv[brain] = [];
+    regionEv[brain].push(ev);
+  };
+
+  if (muscleRec.eyeItems && typeof EYE_BRAIN_MAP !== 'undefined') {
+    (BCF_EYE_MOVEMENTS || []).forEach(e => {
+      const val = muscleRec.eyeItems[e.id];
+      if (!val || val === 'none') return;
+      const brains = EYE_BRAIN_MAP[e.id]?.(val)?.brain || [];
+      brains.forEach(b => addReg(b, `${e.id}(${ARM_LABELS[val] || val})`));
+    });
+  }
+  if (muscleRec.cervicalItems && typeof CERVICAL_BRAIN_MAP !== 'undefined') {
+    (BCF_CERVICAL || []).forEach(v => {
+      const val = muscleRec.cervicalItems[v.id];
+      if (!val || val === 'none') return;
+      const brains = CERVICAL_BRAIN_MAP[v.id]?.(val)?.brain || [];
+      brains.forEach(b => addReg(b, `${v.id}(${ARM_LABELS[val] || val})`));
+    });
+  }
+  if (muscleRec.stanceItems) {
+    (BCF_STANCE || []).forEach(s => {
+      const val = muscleRec.stanceItems[s.id];
+      if (!val || val === 'none') return;
+      addReg(val === 'left-long' ? 'Left CB' : 'Right CB', `${s.id}(站立測試)`);
+    });
+  }
+
+  // Fallback: use stored brainRegions if maps unavailable
+  const weakRegions = Object.keys(regionEv).length > 0
+    ? Object.entries(regionEv).map(([name, ev]) => ({ name, evidence: ev.join('、') }))
+    : (muscleRec.brainRegions || []).map(name => ({ name, evidence: '肌肉張力測試' }));
+
+  return { weakRegions, abnormalCount };
 }
 
 function computeEyeMachineRx(affectedBrainRegions, affectedItems, convMCodes) {
@@ -3372,7 +3473,25 @@ function computeRightEyeRx(data) {
     .map(([p, modes]) => (PRIORITY_NAMES[p] || '其他') + '：' + [...modes].join('、'));
 
   const hasAbnormal = indicators.some(ind => isAbn(ind.status));
-  return { indicators, brainRegions, rx, priorityLines, hasAbnormal, ST_ICON, ST_LABEL, velocityAbn };
+
+  // Build weakRegions for integrated analysis
+  const reRegionEv = {};
+  indicators.filter(i => isAbn(i.status)).forEach(ind => {
+    (ind.brain || []).forEach(b => {
+      if (!reRegionEv[b]) reRegionEv[b] = [];
+      reRegionEv[b].push(`${ind.label} ${ind.value}`);
+    });
+  });
+  const reWeakRegions = Object.entries(reRegionEv).map(([name, ev]) => ({
+    name, evidence: ev.join('；'),
+  }));
+  const reAbnormalCount = indicators.filter(i => isAbn(i.status)).length;
+
+  return {
+    indicators, brainRegions, rx, priorityLines, hasAbnormal, ST_ICON, ST_LABEL, velocityAbn,
+    weakRegions:   reWeakRegions,
+    abnormalCount: reAbnormalCount,
+  };
 }
 
 function renderRightEyeSection({ indicators, brainRegions, rx, priorityLines, ST_ICON, ST_LABEL }, standalone = false) {
@@ -6459,20 +6578,925 @@ async function saveAssessment() {
 }
 
 // ===== PRESCRIPTIONS =====
+let _rxStrategy = 2;
+let _rxCurrentPatientId = null;
+let _rxCurrentAnalysis  = null;
+let _rxCurrentItems     = null;
+
+function switchRxTab(tab) {
+  document.querySelectorAll('.rx-subtab').forEach(btn => btn.classList.remove('active'));
+  document.getElementById('rxTab-' + tab)?.classList.add('active');
+  document.getElementById('rxPanel-generator').style.display = tab === 'generator' ? '' : 'none';
+  document.getElementById('rxPanel-history').style.display   = tab === 'history'   ? '' : 'none';
+  if (tab === 'generator') initDailyGenerator();
+  if (tab === 'history')   renderPrescriptions();
+}
+
+// ===== DAILY PRESCRIPTION GENERATOR =====
+
+function initDailyGenerator() {
+  const sel = document.getElementById('rxGen-patient');
+  if (!sel) return;
+  const prev = sel.value;
+  sel.innerHTML = '<option value="">請選擇病人…</option>' +
+    DB.patients.map(p =>
+      `<option value="${p.id}">${p.name}（${p.id}）</option>`
+    ).join('');
+  if (prev) sel.value = prev;
+  if (sel.value) renderModuleCards(sel.value);
+}
+
+function renderModuleCards(patientId) {
+  const infoEl = document.getElementById('rxGen-patient-info');
+  const zone2  = document.getElementById('rxGen-zone2');
+  const zone3  = document.getElementById('rxGen-zone3');
+  const zone4  = document.getElementById('rxGen-zone4');
+
+  const zone5  = document.getElementById('rxGen-zone5');
+
+  if (!patientId) {
+    if (infoEl) infoEl.innerHTML = '';
+    if (zone2)  zone2.style.display = 'none';
+    if (zone3)  { zone3.style.display = 'none'; zone3.innerHTML = ''; }
+    if (zone4)  { zone4.style.display = 'none'; zone4.innerHTML = ''; }
+    if (zone5)  { zone5.style.display = 'none'; zone5.innerHTML = ''; }
+    _rxCurrentItems = null; _rxCurrentAnalysis = null;
+    return;
+  }
+
+  const pt = getPatient(patientId);
+  if (infoEl && pt) {
+    const age = pt.dob ? Math.floor((Date.now() - new Date(pt.dob)) / (365.25 * 86400000)) : '—';
+    infoEl.innerHTML = `
+      <span style="font-weight:700;color:var(--gray-800)">${pt.name}</span>
+      <span style="margin:0 8px;color:var(--gray-200)">|</span>
+      <span>${age} 歲 ${pt.gender === 'M' ? '男' : '女'}</span>
+      <span style="margin:0 8px;color:var(--gray-200)">|</span>
+      <span style="color:var(--primary)">${pt.diagnosis}</span>`;
+  }
+
+  if (zone2) zone2.style.display = '';
+  if (zone3) { zone3.style.display = 'none'; zone3.innerHTML = ''; }
+  if (zone4) { zone4.style.display = 'none'; zone4.innerHTML = ''; }
+  if (zone5) { zone5.style.display = 'none'; zone5.innerHTML = ''; }
+  _rxCurrentItems = null; _rxCurrentAnalysis = null;
+
+  const getLatest = type => [...DB.assessments]
+    .filter(a => a.patientId === patientId && a.type === type)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null;
+
+  document.getElementById('rxGen-card-balance').innerHTML  = _renderBalanceCard(getLatest('Romberg 測試（BTrackS）'));
+  document.getElementById('rxGen-card-muscle').innerHTML   = _renderMuscleCard(getLatest('肌肉張力測試'));
+  document.getElementById('rxGen-card-righteye').innerHTML = _renderRightEyeCard(getLatest('RightEye眼動評估'));
+
+  // Zone 3: run integrated analysis
+  const result = runIntegratedAnalysis(patientId);
+  renderZone3(result);
+}
+
+function runIntegratedAnalysis(patientId) {
+  const getLatest = type => [...DB.assessments]
+    .filter(a => a.patientId === patientId && a.type === type)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null;
+
+  const balanceRec = getLatest('Romberg 測試（BTrackS）');
+  const muscleRec  = getLatest('肌肉張力測試');
+  const reRec      = getLatest('RightEye眼動評估');
+
+  let balanceOut = null, muscleOut = null, reOut = null;
+
+  if (balanceRec && balanceRec.sway_direction) {
+    balanceOut = computeRombergRx({
+      source_type:           balanceRec.btracks_data ? 'btracks_html' : 'manual',
+      sway_direction:        balanceRec.sway_direction,
+      rq_override:           balanceRec.rq ?? null,
+      path_eyes_open:        balanceRec.path_eo ?? 1,
+      path_eyes_closed:      balanceRec.path_ec ?? 1,
+      jerk_index:            null,
+      righteye_pursuit_vertical: null,
+      btracks_cop_x:         balanceRec.btracks_data?.cop_ml_ves ?? null,
+      btracks_cop_y:         balanceRec.btracks_data?.cop_ap_ves ?? null,
+      btracks_sway_velocity: null,
+    });
+  }
+  if (muscleRec)  muscleOut = computeMuscleRx(muscleRec);
+  if (reRec) {
+    reOut = computeRightEyeRx({
+      spH: reRec.spH, spV: reRec.spV, spC: reRec.spC, eso: reRec.eso,
+      svH: reRec.svH, svV: reRec.svV, syncH: reRec.syncH, syncV: reRec.syncV,
+      intrusion: reRec.intrusion || 'none', intrusionAmp: reRec.intrusionAmp || 'none',
+      vpLateralDrift: reRec.vpLateralDrift ?? null, vsLateralDrift: reRec.vsLateralDrift ?? null,
+      hTotal: reRec.hTotal, hOverR: reRec.hOverR, hUnderR: reRec.hUnderR, hMissedR: reRec.hMissedR,
+      hOverL: reRec.hOverL, hUnderL: reRec.hUnderL, hMissedL: reRec.hMissedL,
+      vTotal: reRec.vTotal, vOverR: reRec.vOverR, vUnderR: reRec.vUnderR, vMissedR: reRec.vMissedR,
+      vOverL: reRec.vOverL, vUnderL: reRec.vUnderL, vMissedL: reRec.vMissedL,
+      pldRight: reRec.pldRight ?? null, pldLeft: reRec.pldLeft ?? null,
+      orthRight: reRec.orthRight ?? null, orthLeft: reRec.orthLeft ?? null,
+      svRight: reRec.svRight ?? null, svLeft: reRec.svLeft ?? null,
+      svUp: reRec.svUp ?? null, svDown: reRec.svDown ?? null,
+      hOverRGrade: null, hUnderRGrade: null, hOverLGrade: null, hUnderLGrade: null,
+    });
+  }
+
+  const moduleOutputs = { balance: balanceOut, muscle: muscleOut, rightEye: reOut };
+
+  // Compute weights from abnormal counts
+  let totalAbnormal = 0;
+  const abnormalCounts = {};
+  for (const [mod, out] of Object.entries(moduleOutputs)) {
+    abnormalCounts[mod] = out?.abnormalCount ?? 0;
+    totalAbnormal += abnormalCounts[mod];
+  }
+  const weights = {};
+  for (const mod of Object.keys(moduleOutputs)) {
+    weights[mod] = totalAbnormal > 0 ? abnormalCounts[mod] / totalAbnormal : 1 / 3;
+  }
+
+  // Merge brain regions across modules
+  const brainRegionMap = {};
+  for (const [mod, out] of Object.entries(moduleOutputs)) {
+    if (!out) continue;
+    for (const region of (out.weakRegions ?? [])) {
+      const canonical = normalizeBrainRegion(region.name);
+      if (!brainRegionMap[canonical]) {
+        brainRegionMap[canonical] = { sources: [], confidence: 0, evidence: [] };
+      }
+      brainRegionMap[canonical].sources.push(mod);
+      brainRegionMap[canonical].confidence += weights[mod];
+      brainRegionMap[canonical].evidence.push(region.evidence ?? '');
+    }
+  }
+
+  const allRegions    = Object.keys(brainRegionMap).length;
+  const highConf      = Object.values(brainRegionMap).filter(v => v.confidence >= 0.4).length;
+  const consistencyPct = allRegions > 0 ? Math.round(highConf / allRegions * 100) : 0;
+
+  return { weights, abnormalCounts, brainRegionMap, consistencyPct, hasData: allRegions > 0 };
+}
+
+function renderZone3(result) {
+  const zone3 = document.getElementById('rxGen-zone3');
+  const zone4 = document.getElementById('rxGen-zone4');
+  if (!zone3) return;
+
+  if (!result || !result.hasData) {
+    zone3.style.display = 'none';
+    if (zone4) { zone4.style.display = 'none'; zone4.innerHTML = ''; }
+    const zone5 = document.getElementById('rxGen-zone5');
+    if (zone5) { zone5.style.display = 'none'; zone5.innerHTML = ''; }
+    return;
+  }
+
+  zone3.style.display = '';
+
+  const { weights, brainRegionMap, consistencyPct } = result;
+  const MOD_LABELS = { balance: '平衡測試', muscle: '肌肉張力', rightEye: 'RightEye' };
+  const MOD_COLORS = { balance: '#2563eb', muscle: '#16a34a', rightEye: '#9333ea' };
+  const MOD_BADGE  = {
+    balance:  '<span style="background:#dbeafe;color:#1e40af;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">平衡</span>',
+    muscle:   '<span style="background:#dcfce7;color:#15803d;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">肌肉</span>',
+    rightEye: '<span style="background:#f3e8ff;color:#7e22ce;padding:1px 5px;border-radius:3px;font-size:9px;font-weight:700">眼動</span>',
+  };
+
+  // Weight bars
+  const weightBars = Object.entries(weights).map(([mod, w]) => {
+    const pct = Math.round(w * 100);
+    const clr = MOD_COLORS[mod];
+    return `
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px">
+        <span style="min-width:70px;font-size:12px;color:var(--gray-600)">${MOD_LABELS[mod]}</span>
+        <div style="flex:1;background:var(--gray-100);border-radius:4px;height:14px;overflow:hidden">
+          <div style="width:${pct}%;background:${clr};height:100%;border-radius:4px;transition:width .5s ease"></div>
+        </div>
+        <span style="min-width:36px;text-align:right;font-size:12px;font-weight:800;color:${clr}">${pct}%</span>
+      </div>`;
+  }).join('');
+
+  // Brain region table
+  const sorted = Object.entries(brainRegionMap)
+    .sort(([, a], [, b]) => b.confidence - a.confidence);
+
+  const tableRows = sorted.map(([region, info]) => {
+    const isHigh   = info.confidence >= 0.4;
+    const status   = isHigh ? '🔴 高信心' : '🟡 待確認';
+    const statusClr = isHigh ? '#dc2626' : '#d97706';
+    const confPct  = Math.round(info.confidence * 100);
+    const uniqSrc  = [...new Set(info.sources)];
+    const srcBadges = uniqSrc.map(s => MOD_BADGE[s] || s).join(' ');
+    return `
+      <tr>
+        <td><span class="bcf-brain-region-tag" style="font-size:11px">🧠 ${region}</span></td>
+        <td style="white-space:nowrap">${srcBadges}</td>
+        <td style="text-align:center;font-weight:700;color:var(--gray-700)">${info.sources.length}</td>
+        <td style="min-width:120px">
+          <div style="display:flex;align-items:center;gap:6px">
+            <div style="flex:1;background:var(--gray-100);border-radius:3px;height:8px;overflow:hidden">
+              <div style="width:${confPct}%;background:${statusClr};height:100%;border-radius:3px"></div>
+            </div>
+            <span style="font-size:11px;font-weight:700;color:${statusClr};min-width:30px">${confPct}%</span>
+          </div>
+        </td>
+        <td><span style="color:${statusClr};font-size:12px;font-weight:600">${status}</span></td>
+      </tr>`;
+  }).join('');
+
+  // Consistency indicator
+  const consClr = consistencyPct >= 80 ? '#16a34a' : consistencyPct >= 50 ? '#d97706' : '#dc2626';
+  const consBg  = consistencyPct >= 80 ? '#f0fdf4'  : consistencyPct >= 50 ? '#fffbeb' : '#fef2f2';
+  const consLbl = consistencyPct >= 80 ? '高度一致'  : consistencyPct >= 50 ? '部分一致' : '需進一步評估';
+  const highCnt = Object.values(brainRegionMap).filter(v => v.confidence >= 0.4).length;
+  const allCnt  = Object.keys(brainRegionMap).length;
+
+  zone3.innerHTML = `
+    <div class="rx-gen-section-title">第三區：整合分析結果</div>
+    <div class="card" style="padding:20px;margin-bottom:20px">
+
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;flex-wrap:wrap">
+
+        <!-- Weight bars -->
+        <div>
+          <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:12px;display:flex;align-items:center;gap:6px">
+            📊 各模組異常權重
+          </div>
+          ${weightBars}
+        </div>
+
+        <!-- Consistency -->
+        <div style="display:flex;align-items:center;padding:16px;background:${consBg};border-radius:10px;border:1px solid ${consClr}25;gap:20px">
+          <div style="text-align:center;min-width:72px">
+            <div style="font-size:44px;font-weight:900;color:${consClr};line-height:1">${consistencyPct}%</div>
+            <div style="font-size:10px;color:${consClr};font-weight:700;margin-top:3px">${consLbl}</div>
+          </div>
+          <div>
+            <div style="font-size:13px;font-weight:700;color:var(--gray-800);margin-bottom:5px">🔗 跨系統診斷一致性</div>
+            <div style="font-size:11px;color:var(--gray-500)">高信心 ${highCnt} 個 ／ 總弱化腦區 ${allCnt} 個</div>
+            <div style="font-size:11px;color:var(--gray-500);margin-top:4px;line-height:1.5">
+              ${consistencyPct >= 80 ? '多模組高度吻合，建議優先訓練高信心腦區'
+              : consistencyPct >= 50 ? '部分模組吻合，高信心腦區優先'
+              : '一致性偏低，建議完成更多評估模組'}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Brain region table -->
+      <div style="margin-top:20px">
+        <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:8px">🧠 腦區弱化彙整</div>
+        <div style="overflow-x:auto">
+          <table class="data-table" style="margin:0;font-size:12px">
+            <thead>
+              <tr>
+                <th>腦區</th>
+                <th>來源模組</th>
+                <th style="text-align:center">信號數</th>
+                <th>加權信心度</th>
+                <th>狀態</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${tableRows || '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--gray-300)">尚無跨模組腦區數據</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Completion banner -->
+      <div style="margin-top:16px;padding:10px 16px;background:#f0fdf4;border-left:3px solid #16a34a;border-radius:6px;display:flex;align-items:center;gap:10px">
+        <span style="font-size:16px">✅</span>
+        <span style="font-size:13px;font-weight:600;color:#15803d">整合分析完成，請選擇訓練策略</span>
+      </div>
+    </div>`;
+
+  if (zone4) renderZone4(result);
+}
+
+// ===== ZONE 4: STRATEGY SELECTION =====
+
+function renderZone4(analysisResult) {
+  const zone4 = document.getElementById('rxGen-zone4');
+  if (!zone4) return;
+  _rxCurrentAnalysis = analysisResult;
+
+  const highCount = Object.values(analysisResult.brainRegionMap).filter(v => v.confidence >= 0.4).length;
+  const pendCount = Object.values(analysisResult.brainRegionMap).filter(v => v.confidence < 0.4).length;
+  const stdCount = highCount + Math.min(2, pendCount);
+
+  const cards = [
+    {
+      num: 1, icon: '🛡️', title: '保守模式',
+      sub: '僅高信心腦區',
+      desc: '只針對信心度 ≥ 40% 的 🔴 高信心腦區生成處方，適合症狀急性期或首次評估。',
+      count: highCount, countLabel: '個高信心腦區',
+    },
+    {
+      num: 2, icon: '⚡', title: '標準模式',
+      sub: '高信心 + Top 2 待確認',
+      desc: '所有 🔴 高信心腦區加上信心度最高的 2 個 🟡 待確認腦區，平衡訓練廣度與精準度。',
+      count: stdCount, countLabel: '個目標腦區',
+    },
+    {
+      num: 3, icon: '🔄', title: '核心迴路模式',
+      sub: 'RightEye 速度分析導向',
+      desc: '依 RightEye 眼跳速度分析決定訓練迴路：慢速→腦幹、過衝→小腦、欠衝→皮質。',
+      count: null, countLabel: '依 RightEye 動態決定',
+    },
+  ];
+
+  zone4.style.display = '';
+  zone4.innerHTML = `
+    <div class="rx-gen-section-title">第四區：訓練策略選擇</div>
+    <div class="rx-strategy-cards">
+      ${cards.map(c => `
+        <div class="rx-strategy-card${_rxStrategy === c.num ? ' selected' : ''}" onclick="selectRxStrategy(${c.num})">
+          <div class="rx-strategy-header">
+            <span class="rx-strategy-num">${c.num}</span>
+            <span class="rx-strategy-icon">${c.icon}</span>
+          </div>
+          <div class="rx-strategy-title">${c.title}</div>
+          <div class="rx-strategy-sub">${c.sub}</div>
+          <div class="rx-strategy-desc">${c.desc}</div>
+          <div class="rx-strategy-count">
+            ${c.count !== null
+              ? `<strong class="rx-strategy-count-num">${c.count}</strong><span class="rx-strategy-count-label"> ${c.countLabel}</span>`
+              : `<span class="rx-strategy-count-label">${c.countLabel}</span>`}
+          </div>
+        </div>`).join('')}
+    </div>
+    <div style="text-align:center;margin-top:24px">
+      <button class="btn btn-primary" style="padding:12px 40px;font-size:15px;letter-spacing:.5px"
+        onclick="generateAndRenderPrescription()">
+        依策略生成處方 →
+      </button>
+    </div>`;
+}
+
+function selectRxStrategy(n) {
+  _rxStrategy = n;
+  document.querySelectorAll('.rx-strategy-card').forEach((el, i) => {
+    el.classList.toggle('selected', i + 1 === n);
+  });
+}
+
+// ===== ZONE 5: PRESCRIPTION GENERATION =====
+
+function generateAndRenderPrescription() {
+  const patientId = document.getElementById('rxGen-patient')?.value;
+  if (!patientId || !_rxCurrentAnalysis) {
+    showToast('請先選擇病人並完成分析', 'error'); return;
+  }
+  if (!_rxCurrentAnalysis.hasData) {
+    showToast('分析結果不足，無法生成處方', 'error'); return;
+  }
+  const rxItems = generateIntegratedPrescription(patientId, _rxStrategy, _rxCurrentAnalysis);
+  _rxCurrentItems     = rxItems;
+  _rxCurrentPatientId = patientId;
+  renderZone5(rxItems, patientId, _rxStrategy, _rxCurrentAnalysis);
+}
+
+function _reconstructAffectedItems(muscleRec) {
+  const affectedItems = [];
+  const convMCodes    = [];
+  if (!muscleRec) return { affectedItems, convMCodes };
+
+  if (muscleRec.eyeItems) {
+    (BCF_EYE_MOVEMENTS || []).forEach(e => {
+      const val = muscleRec.eyeItems[e.id];
+      if (!val || val === 'none') return;
+      const mapped = typeof EYE_BRAIN_MAP !== 'undefined' ? EYE_BRAIN_MAP[e.id]?.(val) : null;
+      affectedItems.push({
+        code: e.id, type: '眼球作動',
+        name: e.icon + ' ' + e.dir,
+        armResponse: ARM_LABELS[val] || val,
+        brain:    mapped?.brain    || [],
+        training: mapped?.training || '',
+      });
+    });
+  }
+
+  if (muscleRec.cervicalItems) {
+    (BCF_CERVICAL || []).forEach(v => {
+      const val = muscleRec.cervicalItems[v.id];
+      if (!val || val === 'none') return;
+      const mapped = typeof CERVICAL_BRAIN_MAP !== 'undefined' ? CERVICAL_BRAIN_MAP[v.id]?.(val) : null;
+      affectedItems.push({
+        code: v.id, type: '頸椎作動',
+        name: v.icon + ' ' + v.dir,
+        armResponse: ARM_LABELS[val] || val,
+        canal: v.canal,
+        brain:    mapped?.brain    || [],
+        training: mapped?.training || '',
+      });
+    });
+  }
+
+  if (muscleRec.visualStimItems?.length) {
+    muscleRec.visualStimItems.forEach(code => {
+      const def = (BCF_VISUAL_STIM || []).find(c => c.id === code);
+      if (def) affectedItems.push({ code, type: '視覺/聽覺', name: `${def.dir}（${def.type}）`, brain: [] });
+    });
+  }
+
+  if (muscleRec.stanceItems) {
+    (BCF_STANCE || []).forEach(s => {
+      const val = muscleRec.stanceItems[s.id];
+      if (!val || val === 'none') return;
+      const brain = val === 'left-long' ? ['Left CB'] : ['Right CB'];
+      affectedItems.push({
+        code: s.id, type: '站立測試', name: s.label,
+        armResponse: ARM_LABELS[val] || val,
+        brain, training: val === 'left-long' ? '訓練Left CB' : '訓練Right CB',
+      });
+    });
+  }
+
+  if (muscleRec.convergenceItems) {
+    (BCF_CONVERGENCE || []).forEach(c => {
+      if (muscleRec.convergenceItems[c.id]) {
+        affectedItems.push({ code: 'CONV', type: 'Convergence', name: c.label, brain: [c.brain] });
+      }
+    });
+    if (muscleRec.convSubItems) {
+      (CONV_M_MAP || []).forEach(m => {
+        if (muscleRec.convSubItems[m.sub]) convMCodes.push(m);
+      });
+    }
+  }
+
+  return { affectedItems, convMCodes };
+}
+
+function applyCircuitStrategy(sorted, reRec) {
+  const circuits = [];
+  if (reRec) {
+    if (reRec.svH === 'slow' || reRec.svV === 'slow') circuits.push('brainstem');
+    const hTotal = reRec.hTotal || 1, vTotal = reRec.vTotal || 1;
+    const overPct = (((reRec.hOverR || 0) + (reRec.hOverL || 0)) / hTotal +
+                     ((reRec.vOverR || 0) + (reRec.vOverL || 0)) / vTotal) / 2 * 100;
+    if (overPct >= 10) circuits.push('cerebellum');
+    const underPct = (((reRec.hUnderR || 0) + (reRec.hUnderL || 0)) / hTotal +
+                      ((reRec.vUnderR || 0) + (reRec.vUnderL || 0)) / vTotal) / 2 * 100;
+    if (underPct >= 20) circuits.push('cortex');
+  }
+  const CIRCUIT_REGIONS = {
+    brainstem:  ['Left PPRF', 'Right PPRF', 'riMLF', 'Left Mes', 'Right Mes'],
+    cerebellum: ['CB Vermis', 'CB Flocculus', 'Left CB', 'Right CB'],
+    cortex:     ['Left FEF', 'Right FEF', 'Left Parietal', 'Right Parietal'],
+  };
+  if (circuits.length === 0) {
+    const high = sorted.filter(([, v]) => v.confidence >= 0.4);
+    const pend = sorted.filter(([, v]) => v.confidence < 0.4).slice(0, 2);
+    return [...high, ...pend];
+  }
+  const prioritySet = new Set(circuits.flatMap(c => CIRCUIT_REGIONS[c] || []));
+  const priority    = sorted.filter(([r])    => prioritySet.has(r));
+  const highOthers  = sorted.filter(([r, v]) => !prioritySet.has(r) && v.confidence >= 0.4);
+  return [...priority, ...highOthers];
+}
+
+function generateIntegratedPrescription(patientId, strategy, analysisResult) {
+  const { brainRegionMap } = analysisResult;
+  const sorted = Object.entries(brainRegionMap)
+    .sort(([, a], [, b]) => b.confidence - a.confidence);
+
+  const getLatest = type => [...DB.assessments]
+    .filter(a => a.patientId === patientId && a.type === type)
+    .sort((a, b) => new Date(b.date) - new Date(a.date))[0] || null;
+
+  const muscleRec = getLatest('肌肉張力測試');
+  const reRec     = getLatest('RightEye眼動評估');
+  const pt        = getPatient(patientId);
+
+  let filteredEntries;
+  if (strategy === 1) {
+    filteredEntries = sorted.filter(([, v]) => v.confidence >= 0.4);
+  } else if (strategy === 2) {
+    const high = sorted.filter(([, v]) => v.confidence >= 0.4);
+    const pend = sorted.filter(([, v]) => v.confidence < 0.4).slice(0, 2);
+    filteredEntries = [...high, ...pend];
+  } else {
+    filteredEntries = applyCircuitStrategy(sorted, reRec);
+  }
+  if (filteredEntries.length === 0) filteredEntries = sorted;
+
+  const affectedBrainRegions = new Set(filteredEntries.map(([r]) => r));
+  const { affectedItems, convMCodes } = _reconstructAffectedItems(muscleRec);
+
+  // Expand canonical names to aliases computeEyeMachineRx actually checks
+  const EYERX_ALIASES = {
+    'riMLF':        ['Bilateral Midbrain'],
+    'CB Vermis':    ['Right CB', 'Left CB'],
+    'CB Flocculus': ['Right CB', 'Left CB'],
+  };
+  for (const [canon, extra] of Object.entries(EYERX_ALIASES)) {
+    if (affectedBrainRegions.has(canon)) extra.forEach(a => affectedBrainRegions.add(a));
+  }
+
+  const { rec: eyeRec } = computeEyeMachineRx(affectedBrainRegions, affectedItems, convMCodes);
+  const flyData = affectedItems.some(i => i.type === '頸椎作動')
+    ? _computeFlyingChairData(affectedItems, pt)
+    : null;
+
+  // Determine which modes fire from high-conf regions alone (for isHighConf per-item)
+  const highConfSet = new Set(sorted.filter(([, v]) => v.confidence >= 0.4).map(([r]) => r));
+  for (const [canon, extra] of Object.entries(EYERX_ALIASES)) {
+    if (highConfSet.has(canon)) extra.forEach(a => highConfSet.add(a));
+  }
+  const { rec: highRec } = computeEyeMachineRx(highConfSet, affectedItems, convMCodes);
+  const highModes = new Set(highRec.map(i => i.mode));
+
+  // Build evidence string from actual clinical findings
+  const rawEvidence = [...new Set(
+    filteredEntries.flatMap(([, v]) => v.evidence).filter(e => e && e.trim()),
+  )];
+  const evidenceStr = rawEvidence.length > 0
+    ? rawEvidence.slice(0, 3).join('；')
+    : [...new Set(filteredEntries.flatMap(([, v]) => v.sources))]
+        .map(s => ({ balance: '平衡測試', muscle: '肌肉張力', rightEye: 'RightEye' }[s] || s)).join('、');
+
+  const regionNames = filteredEntries.map(([r]) => r);
+
+  const rxItems = [];
+
+  eyeRec.forEach(item => {
+    rxItems.push({
+      tool: '眼動機',
+      mode: item.mode,
+      name: item.name,
+      angle: item.angle,
+      speed: item.speed,
+      dist:  item.dist,
+      reps:  item.reps,
+      target: item.target,
+      bg:    item.bg,
+      brainRegions: regionNames,
+      evidence:     evidenceStr,
+      isHighConf:   highModes.has(item.mode),
+      notes: Array.isArray(item.notes) ? item.notes : (item.notes ? [item.notes] : []),
+    });
+  });
+
+  if (flyData) {
+    const vestHigh = filteredEntries.some(([r, v]) =>
+      (r.includes('Vestibular') || r.includes('CB')) && v.confidence >= 0.4);
+    flyData.canalTargets.forEach(canal => {
+      rxItems.push({
+        tool: '飛行椅',
+        mode: '—',
+        name: `半規管復健`,
+        angle: `${canal.posture}，${canal.axis}軸`,
+        speed: `${flyData.params.swingMin}–${flyData.params.swingMax} 次/段`,
+        dist:  `${flyData.params.segments} 段（${flyData.severityLabel}）`,
+        reps:  `步進 ${flyData.params.step}°`,
+        target: canal.canal,
+        bg: '—',
+        brainRegions: regionNames,
+        evidence:     evidenceStr,
+        isHighConf:   vestHigh,
+        notes: flyData.notes.slice(0, 2),
+      });
+    });
+  }
+
+  return rxItems;
+}
+
+function renderZone5(rxItems, patientId, strategy, analysisResult) {
+  const zone5 = document.getElementById('rxGen-zone5');
+  if (!zone5) return;
+
+  const pt = getPatient(patientId);
+  const today = new Date().toISOString().slice(0, 10);
+  const STRATEGY_NAMES = ['保守模式', '標準模式', '核心迴路模式'];
+  const strategyName = STRATEGY_NAMES[strategy - 1] || '';
+  const estMin = rxItems.length * 3;
+
+  const LEVEL_MAP = [
+    { kw: ['腦外傷', 'mTBI', '腦震盪'], label: '急性期',  clr: '#dc2626', bg: '#fef2f2' },
+    { kw: ['腦中風', '中風', '出血'],   label: '亞急性期', clr: '#d97706', bg: '#fffbeb' },
+    { kw: ['帕金森', '多發性硬化'],     label: '慢性期',   clr: '#16a34a', bg: '#f0fdf4' },
+  ];
+  const lvl = LEVEL_MAP.find(e => e.kw.some(k => pt?.diagnosis?.includes(k)))
+    || { label: '一般期', clr: '#4f46e5', bg: '#eef2ff' };
+
+  const colHeaders = [
+    '優先序', '工具', '模式', '訓練類型', '板面角度 / 軸向',
+    '速度', '距離 / 強度', '次數', '目標物', '窗板',
+    '對應腦區（含側性）', '評估依據',
+  ];
+
+  const rows = rxItems.map((item, i) => {
+    const rowStyle = item.isHighConf ? '' : 'background:#fffbeb';
+    const regionHtml = item.brainRegions.slice(0, 4).map(r =>
+      `<span class="bcf-brain-region-tag" style="font-size:10px;margin:1px 2px 1px 0;display:inline-block">🧠 ${r}</span>`
+    ).join('') + (item.brainRegions.length > 4
+      ? `<span style="font-size:10px;color:var(--gray-400)"> +${item.brainRegions.length - 4}</span>` : '');
+    const toolBg  = item.tool === '眼動機' ? '#dbeafe' : '#fef9c3';
+    const toolClr = item.tool === '眼動機' ? '#1e40af' : '#854d0e';
+    return `
+      <tr style="${rowStyle}">
+        <td style="text-align:center;font-weight:700;font-size:13px">${i + 1}</td>
+        <td style="text-align:center">
+          <span style="background:${toolBg};color:${toolClr};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;white-space:nowrap">${item.tool}</span>
+        </td>
+        <td style="text-align:center;font-weight:800;font-size:14px;color:#7c3aed">${item.mode}</td>
+        <td style="font-weight:600;white-space:nowrap">${item.name}</td>
+        <td style="font-size:11px">${item.angle}</td>
+        <td style="text-align:center;font-weight:700;color:#1d4ed8">${item.speed}</td>
+        <td style="text-align:center;font-size:12px">${item.dist}</td>
+        <td style="text-align:center;font-weight:700">${item.reps}</td>
+        <td style="text-align:center;font-size:12px">${item.target}</td>
+        <td style="font-size:11px">${item.bg}</td>
+        <td>${regionHtml}</td>
+        <td style="font-size:11px;color:var(--gray-500);white-space:nowrap">${item.evidence}</td>
+      </tr>`;
+  }).join('');
+
+  zone5.style.display = '';
+  zone5.innerHTML = `
+    <div class="rx-gen-section-title">第五區：今日訓練處方</div>
+    <div class="card" id="rxGen-zone5-card" style="padding:20px">
+
+      <div style="display:flex;align-items:flex-start;gap:16px;margin-bottom:16px;flex-wrap:wrap">
+        <div style="flex:1;min-width:200px">
+          <div style="font-size:17px;font-weight:800;color:var(--gray-900)">${pt?.name || patientId} 的訓練處方</div>
+          <div style="font-size:12px;color:var(--gray-500);margin-top:3px">${today} ・ 策略：${strategyName} ・ 跨模組一致性 ${analysisResult.consistencyPct}%</div>
+        </div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+          <span style="background:${lvl.bg};color:${lvl.clr};padding:4px 12px;border-radius:8px;font-size:12px;font-weight:700;border:1px solid ${lvl.clr}30">病等：${lvl.label}</span>
+          <span style="background:var(--gray-100);color:var(--gray-700);padding:4px 10px;border-radius:8px;font-size:12px">共 ${rxItems.length} 項</span>
+          <span style="background:var(--gray-100);color:var(--gray-700);padding:4px 10px;border-radius:8px;font-size:12px">預計 ${estMin} 分鐘</span>
+        </div>
+      </div>
+
+      <div style="display:flex;gap:20px;margin-bottom:12px;font-size:11px;color:var(--gray-500)">
+        <span><span style="display:inline-block;width:14px;height:14px;background:#fff;border:1px solid #e5e7eb;vertical-align:middle;border-radius:2px;margin-right:4px"></span>高信心腦區處方</span>
+        <span><span style="display:inline-block;width:14px;height:14px;background:#fffbeb;border:1px solid #fde68a;vertical-align:middle;border-radius:2px;margin-right:4px"></span>待確認腦區處方</span>
+      </div>
+
+      <div style="overflow-x:auto">
+        <table class="data-table" style="margin:0;font-size:12px;min-width:960px">
+          <thead>
+            <tr>${colHeaders.map(h => `<th style="white-space:nowrap;font-size:11px">${h}</th>`).join('')}</tr>
+          </thead>
+          <tbody>
+            ${rows || '<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--gray-300)">無法生成處方，請確認評估資料</td></tr>'}
+          </tbody>
+        </table>
+      </div>
+
+      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-100);display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap">
+        <button class="btn btn-secondary" onclick="printRxPrescription()" style="font-size:13px">🖨️ 列印</button>
+        <button class="btn btn-secondary" onclick="exportRxPDF('${patientId}')" style="font-size:13px">📄 匯出 PDF</button>
+        <button class="btn btn-primary" onclick="saveIntegratedPrescription('${patientId}', ${strategy})" style="font-size:13px">💾 儲存為今日處方</button>
+      </div>
+    </div>`;
+
+  setTimeout(() => zone5.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 80);
+}
+
+function saveIntegratedPrescription(patientId, strategy) {
+  if (!_rxCurrentItems || !_rxCurrentAnalysis) {
+    showToast('無處方數據可儲存', 'error'); return;
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  const STRATEGY_NAMES = ['保守模式', '標準模式', '核心迴路模式'];
+  if (!DB.integratedPrescriptions) DB.integratedPrescriptions = [];
+  DB.integratedPrescriptions.unshift({
+    id:              genId('IP'),
+    patientId,
+    date:            today,
+    strategy,
+    strategyName:    STRATEGY_NAMES[strategy - 1] || '',
+    consistencyPct:  _rxCurrentAnalysis.consistencyPct,
+    itemCount:       _rxCurrentItems.length,
+    items:           _rxCurrentItems,
+    savedAt:         new Date().toISOString(),
+  });
+  saveToStorage();
+  showToast('今日處方已儲存', 'success');
+}
+
+function printRxPrescription() {
+  window.print();
+}
+
+async function exportRxPDF(patientId) {
+  const el = document.getElementById('rxGen-zone5-card');
+  if (!el) { showToast('找不到處方區塊', 'error'); return; }
+  if (typeof html2canvas === 'undefined' || typeof window.jspdf === 'undefined') {
+    showToast('PDF 匯出庫尚未載入，請稍候再試', 'error'); return;
+  }
+  showToast('正在產生 PDF…', 'info');
+  try {
+    const canvas  = await html2canvas(el, { scale: 2, useCORS: true, backgroundColor: '#ffffff' });
+    const { jsPDF } = window.jspdf;
+    const pdf     = new jsPDF({ orientation: 'landscape', unit: 'mm', format: 'a4' });
+    const pdfW    = pdf.internal.pageSize.getWidth();
+    const pdfH    = canvas.height * pdfW / canvas.width;
+    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, pdfW, pdfH);
+    pdf.save(`${patientId}_訓練處方_${new Date().toISOString().slice(0,10)}.pdf`);
+    showToast('PDF 已下載', 'success');
+  } catch (e) {
+    showToast('PDF 匯出失敗：' + e.message, 'error');
+  }
+}
+
+function _rxNoDataCard(icon, title) {
+  return `
+    <div class="rx-module-card rx-module-card-empty">
+      <div class="rx-module-card-header">
+        <span class="rx-module-card-icon">${icon}</span>
+        <span class="rx-module-card-title">${title}</span>
+      </div>
+      <div class="rx-module-card-date">—</div>
+      <div class="rx-module-empty-body">
+        <div style="font-size:28px;margin-bottom:8px">📋</div>
+        <div style="font-size:12px">尚無評估數據</div>
+        <div style="font-size:10px;margin-top:4px">請至「檢測記錄」頁面完成評估後再回來</div>
+      </div>
+    </div>`;
+}
+
+function _renderBalanceCard(rec) {
+  if (!rec || !rec.sway_direction) return _rxNoDataCard('⚖️', '平衡測試');
+
+  const result = computeRombergRx({
+    source_type:            rec.btracks_data ? 'btracks_html' : 'manual',
+    sway_direction:         rec.sway_direction,
+    rq_override:            rec.rq ?? null,
+    path_eyes_open:         rec.path_eo ?? 1,
+    path_eyes_closed:       rec.path_ec ?? 1,
+    jerk_index:             null,
+    righteye_pursuit_vertical: null,
+    btracks_cop_x:          rec.btracks_data?.cop_ml_ves ?? null,
+    btracks_cop_y:          rec.btracks_data?.cop_ap_ves ?? null,
+    btracks_sway_velocity:  null,
+  });
+
+  if (result.error) return _rxNoDataCard('⚖️', '平衡測試');
+
+  const isFailure  = result.mode === 'FAILURE';
+  const modeLabel  = isFailure ? '失效模式' : '代償模式';
+  const modeClr    = isFailure ? '#dc2626' : '#d97706';
+  const abnCount   = isFailure ? 1 : 0;
+
+  const DIR_MAP = {
+    RF: '右前', RB: '右後', PR: '正右', PL: '正左',
+    LF: '左前', LB: '左後', PF: '正前', PBk: '正後',
+  };
+  const dirLabel = DIR_MAP[rec.sway_direction] || rec.sway_direction;
+  const sysType  = result.diagnosis.label.includes('Vestibulo') ? '前庭系統'
+                 : result.diagnosis.label.includes('Proprioceptive') ? '本體感覺' : '小腦系統';
+  const canal    = result.diagnosis.canal || result.diagnosis.cerebellum || '—';
+
+  return `
+    <div class="rx-module-card">
+      <div class="rx-module-card-header">
+        <span class="rx-module-card-icon">⚖️</span>
+        <span class="rx-module-card-title">平衡測試（BTrackS/Romberg）</span>
+        ${abnCount > 0 ? `<span class="rx-module-abn-badge">${abnCount}</span>` : ''}
+      </div>
+      <div class="rx-module-card-date">評估日期：${rec.date}</div>
+      <div class="rx-module-card-body">
+        <div class="rx-module-row">
+          <span class="rx-module-label">RQ 值</span>
+          <span class="rx-module-value">
+            <strong style="font-size:18px;color:${modeClr}">${result.rq}</strong>
+            <span style="margin-left:8px;background:${modeClr};color:#fff;padding:2px 7px;border-radius:4px;font-size:10px;font-weight:700">${modeLabel}</span>
+          </span>
+        </div>
+        <div class="rx-module-row">
+          <span class="rx-module-label">偏移方向</span>
+          <span class="rx-module-value" style="font-weight:600">${dirLabel}</span>
+        </div>
+        <div class="rx-module-row">
+          <span class="rx-module-label">弱化系統</span>
+          <span class="rx-module-value" style="color:#7c3aed;font-weight:600">${sysType}</span>
+        </div>
+        <div class="rx-module-row">
+          <span class="rx-module-label">診斷腦區</span>
+          <span class="rx-module-value" style="font-size:11px;color:#dc2626">${canal}</span>
+        </div>
+      </div>
+    </div>`;
+}
+
+function _renderMuscleCard(rec) {
+  if (!rec) return _rxNoDataCard('💪', '肌肉張力測試');
+
+  let abnCount = 0;
+  if (rec.eyeItems)        Object.values(rec.eyeItems).forEach(v       => { if (v !== 'none') abnCount++; });
+  if (rec.cervicalItems)   Object.values(rec.cervicalItems).forEach(v  => { if (v !== 'none') abnCount++; });
+  if (rec.stanceItems)     Object.values(rec.stanceItems).forEach(v    => { if (v !== 'none') abnCount++; });
+  if (rec.convergenceItems) abnCount += Object.keys(rec.convergenceItems).length;
+  if (rec.visualStimItems)  abnCount += (rec.visualStimItems || []).length;
+
+  const regions = rec.brainRegions || [];
+  const trainSide = rec.decision?.trainSide;
+
+  return `
+    <div class="rx-module-card">
+      <div class="rx-module-card-header">
+        <span class="rx-module-card-icon">💪</span>
+        <span class="rx-module-card-title">肌肉張力測試</span>
+        ${abnCount > 0 ? `<span class="rx-module-abn-badge">${abnCount}</span>` : ''}
+      </div>
+      <div class="rx-module-card-date">評估日期：${rec.date}</div>
+      <div class="rx-module-card-body">
+        <div class="rx-module-row">
+          <span class="rx-module-label">異常項目</span>
+          <span class="rx-module-value">
+            <strong style="font-size:16px;color:${abnCount > 0 ? '#dc2626' : 'var(--gray-400)'}">${abnCount}</strong>
+            <span style="font-size:11px;color:var(--gray-400);margin-left:4px">項</span>
+          </span>
+        </div>
+        <div class="rx-module-row">
+          <span class="rx-module-label">弱化腦區</span>
+          <span class="rx-module-value">
+            ${regions.length === 0
+              ? '<span style="color:var(--gray-300);font-size:11px">無</span>'
+              : regions.slice(0, 4).map(r =>
+                  `<span class="bcf-brain-region-tag" style="font-size:10px;margin:1px">🧠 ${r}</span>`
+                ).join('') + (regions.length > 4 ? `<span style="font-size:10px;color:var(--gray-400)"> +${regions.length - 4}</span>` : '')
+            }
+          </span>
+        </div>
+        ${trainSide ? `
+        <div class="rx-module-row">
+          <span class="rx-module-label">訓練側性</span>
+          <span class="rx-module-value" style="font-size:11px;color:#1d4ed8;font-weight:600">${trainSide}</span>
+        </div>` : ''}
+      </div>
+    </div>`;
+}
+
+function _renderRightEyeCard(rec) {
+  if (!rec) return _rxNoDataCard('👁', 'RightEye 報告');
+
+  const isAbn = s => s === 'mild' || s === 'moderate' || s === 'severe';
+  const ST_ICON = { mild: '🟡', moderate: '🟠', severe: '🔴' };
+
+  const indicators = rec.indicators || [];
+  const abnInd  = indicators.filter(i => isAbn(i.status));
+  const abnCount = abnInd.length;
+  const regions  = rec.brainRegions || [];
+
+  return `
+    <div class="rx-module-card">
+      <div class="rx-module-card-header">
+        <span class="rx-module-card-icon">👁</span>
+        <span class="rx-module-card-title">RightEye 報告</span>
+        ${abnCount > 0 ? `<span class="rx-module-abn-badge">${abnCount}</span>` : ''}
+      </div>
+      <div class="rx-module-card-date">評估日期：${rec.date}</div>
+      <div class="rx-module-card-body">
+        <div class="rx-module-row">
+          <span class="rx-module-label">主要異常</span>
+          <span class="rx-module-value">
+            ${abnInd.length === 0
+              ? '<span style="color:var(--gray-300);font-size:11px">無異常</span>'
+              : abnInd.slice(0, 3).map(i =>
+                  `<div style="font-size:11px;line-height:1.8">${ST_ICON[i.status] || '🟡'} ${i.label}：<strong>${i.value}</strong></div>`
+                ).join('') +
+                (abnInd.length > 3 ? `<div style="font-size:10px;color:var(--gray-400)">…共 ${abnInd.length} 項</div>` : '')
+            }
+          </span>
+        </div>
+        <div class="rx-module-row">
+          <span class="rx-module-label">弱化腦區</span>
+          <span class="rx-module-value">
+            ${regions.length === 0
+              ? '<span style="color:var(--gray-300);font-size:11px">無</span>'
+              : regions.slice(0, 4).map(r =>
+                  `<span class="bcf-brain-region-tag" style="font-size:10px;margin:1px">🧠 ${r}</span>`
+                ).join('') + (regions.length > 4 ? `<span style="font-size:10px;color:var(--gray-400)"> +${regions.length - 4}</span>` : '')
+            }
+          </span>
+        </div>
+      </div>
+    </div>`;
+}
+
 function renderPrescriptions() {
   const grid = document.getElementById('prescriptionsGrid');
   if (!grid) return;
 
   const filter = document.getElementById('rxPatientFilter')?.value || '';
-  let data = DB.prescriptions;
-  if (filter) data = data.filter(rx => rx.patientId === filter);
 
-  if (data.length === 0) {
+  // Classic prescriptions
+  let classic = DB.prescriptions;
+  if (filter) classic = classic.filter(rx => rx.patientId === filter);
+
+  // Integrated prescriptions
+  let integrated = DB.integratedPrescriptions || [];
+  if (filter) integrated = integrated.filter(rx => rx.patientId === filter);
+
+  if (classic.length === 0 && integrated.length === 0) {
     grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:60px;color:var(--gray-400)"><div style="font-size:48px">💊</div><p style="margin-top:8px">尚無訓練處方</p></div>';
     return;
   }
 
-  grid.innerHTML = data.map(rx => {
+  const classicCards = classic.map(rx => {
     const pt = getPatient(rx.patientId);
     return `
       <div class="rx-card">
@@ -6502,6 +7526,38 @@ function renderPrescriptions() {
         </div>
       </div>`;
   }).join('');
+
+  const integratedCards = integrated.map(rx => {
+    const pt = getPatient(rx.patientId);
+    const STRAT_ICON = { '保守模式': '🛡️', '標準模式': '⚡', '核心迴路模式': '🔄' };
+    const icon = STRAT_ICON[rx.strategyName] || '⚡';
+    const consClr = rx.consistencyPct >= 80 ? '#16a34a' : rx.consistencyPct >= 50 ? '#d97706' : '#dc2626';
+    return `
+      <div class="rx-card" style="border-top:3px solid var(--primary)">
+        <div class="rx-card-header">
+          <div style="display:flex;align-items:center;gap:8px;flex:1">
+            <div class="rx-patient-name">${pt ? pt.name : rx.patientId}</div>
+            <span style="background:var(--primary-light);color:var(--primary);padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700">${icon} 整合處方</span>
+          </div>
+          <div style="font-size:11px;color:var(--gray-400)">${rx.strategyName}</div>
+        </div>
+        <div class="rx-card-body">
+          <div class="rx-meta">
+            <div class="rx-meta-item"><span class="rx-meta-label">處方日期</span><span class="rx-meta-value">${formatDate(rx.date)}</span></div>
+            <div class="rx-meta-item"><span class="rx-meta-label">訓練項目</span><span class="rx-meta-value">${rx.itemCount} 項</span></div>
+            <div class="rx-meta-item"><span class="rx-meta-label">一致性</span><span class="rx-meta-value" style="color:${consClr};font-weight:700">${rx.consistencyPct}%</span></div>
+          </div>
+          <div style="font-size:11px;color:var(--gray-400);margin-top:8px">儲存時間：${new Date(rx.savedAt).toLocaleString('zh-TW')}</div>
+        </div>
+        <div class="rx-card-footer">
+          <span style="font-size:11px;color:var(--gray-400)">${rx.id}</span>
+          <button class="btn btn-sm btn-primary" onclick="showToast('整合處方詳情待開發', 'info')">查看詳情</button>
+        </div>
+      </div>`;
+  }).join('');
+
+  // Sort by date: newest integrated first, then classic
+  grid.innerHTML = integratedCards + classicCards;
 }
 
 function addExerciseItem() {

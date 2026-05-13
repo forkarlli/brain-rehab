@@ -430,16 +430,69 @@
 
       <!-- ========== PRESCRIPTIONS PAGE ========== -->
       <section class="page" id="page-prescriptions">
-        <div class="page-actions">
-          <div class="search-filter">
-            <select class="select" id="rxPatientFilter">
-              <option value="">選擇病人</option>
-            </select>
-          </div>
-          <button class="btn btn-primary" onclick="openModal('addRxModal')">+ 新增處方</button>
+
+        <!-- Sub-tab bar -->
+        <div class="rx-subtabs">
+          <button class="rx-subtab active" id="rxTab-generator" onclick="switchRxTab('generator')">
+            ⚡ 當日處方產生器
+          </button>
+          <button class="rx-subtab" id="rxTab-history" onclick="switchRxTab('history')">
+            📋 歷史處方記錄
+          </button>
         </div>
 
-        <div class="rx-grid" id="prescriptionsGrid"></div>
+        <!-- Panel: 當日處方產生器 -->
+        <div id="rxPanel-generator">
+
+          <!-- Zone 1: 選擇病人 -->
+          <div class="card rx-gen-zone">
+            <div class="card-header" style="padding:12px 20px">
+              <h3 style="font-size:14px;letter-spacing:.3px">第一區：選擇病人</h3>
+            </div>
+            <div style="padding:16px 20px;display:flex;align-items:flex-start;gap:24px;flex-wrap:wrap">
+              <div style="flex:0 0 280px">
+                <label style="font-size:11px;color:var(--gray-400);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:block">病人</label>
+                <select id="rxGen-patient" class="select" onchange="renderModuleCards(this.value)" style="width:100%">
+                  <option value="">請選擇病人…</option>
+                </select>
+              </div>
+              <div id="rxGen-patient-info" style="flex:1;padding-top:22px;font-size:13px;color:var(--gray-500)"></div>
+            </div>
+          </div>
+
+          <!-- Zone 2: 評估模組摘要卡片 -->
+          <div id="rxGen-zone2" style="display:none">
+            <div class="rx-gen-section-title">第二區：三大評估模組數據摘要</div>
+            <div class="rx-module-cards">
+              <div id="rxGen-card-balance"></div>
+              <div id="rxGen-card-muscle"></div>
+              <div id="rxGen-card-righteye"></div>
+            </div>
+          </div>
+
+          <!-- Zone 3: 整合分析結果（自動計算） -->
+          <div id="rxGen-zone3" style="display:none"></div>
+
+          <!-- Zone 4: 訓練策略選擇（分析完成後解鎖） -->
+          <div id="rxGen-zone4" style="display:none"></div>
+
+          <!-- Zone 5: 今日訓練處方 -->
+          <div id="rxGen-zone5" style="display:none"></div>
+
+        </div>
+
+        <!-- Panel: 歷史處方記錄 -->
+        <div id="rxPanel-history" style="display:none">
+          <div class="page-actions" style="margin-top:0;padding-top:0">
+            <div class="search-filter">
+              <select class="select" id="rxPatientFilter">
+                <option value="">選擇病人</option>
+              </select>
+            </div>
+            <button class="btn btn-primary" onclick="openModal('addRxModal')">+ 新增處方</button>
+          </div>
+          <div class="rx-grid" id="prescriptionsGrid"></div>
+        </div>
 
         <!-- Add Prescription Modal -->
         <div class="modal" id="addRxModal">
@@ -803,6 +856,8 @@
   <!-- Toast Notification -->
   <div class="toast" id="toast"></div>
 
-  <script src="app.js?v=20260509l"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <script src="app.js?v=20260513c"></script>
 </body>
 </html>
