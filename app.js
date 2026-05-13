@@ -6694,18 +6694,23 @@ function computeConsistency(moduleOutputs) {
     let leftCount = 0, rightCount = 0, bilateralCount = 0;
     for (const r of (weakRegions ?? [])) {
       const name = normalizeBrainRegion(r.name);
-      if (/^Left\b/.test(name)) leftCount++;
-      else if (/^Right\b/.test(name)) rightCount++;
+      if (name.startsWith('Left ') || name.includes(' Left ')) leftCount++;
+      else if (name.startsWith('Right ') || name.includes(' Right ')) rightCount++;
       else bilateralCount++;
     }
-    const total = leftCount + rightCount + bilateralCount || 1;
-    const leftPct  = Math.round(leftCount  / total * 100);
-    const rightPct = Math.round(rightCount / total * 100);
+    // 側性比例：分母只含有明確側性的腦區，雙側不稀釋
+    const lateralTotal = leftCount + rightCount || 1;
+    const leftPct  = Math.round(leftCount  / lateralTotal * 100);
+    const rightPct = Math.round(rightCount / lateralTotal * 100);
     let dominantSide;
-    if (leftPct >= 60)       dominantSide = 'left';
-    else if (rightPct >= 60) dominantSide = 'right';
+    if (leftPct >= 55)       dominantSide = 'left';
+    else if (rightPct >= 55) dominantSide = 'right';
     else                     dominantSide = 'bilateral';
-    return { dominantSide, leftPct, rightPct, leftCount, rightCount, bilateralCount };
+    // UI 橫條用含雙側的比例（讓 bar 加總不超過100%）
+    const totalAll    = leftCount + rightCount + bilateralCount || 1;
+    const leftPctAll  = Math.round(leftCount  / totalAll * 100);
+    const rightPctAll = Math.round(rightCount / totalAll * 100);
+    return { dominantSide, leftPct, rightPct, leftPctAll, rightPctAll, leftCount, rightCount, bilateralCount };
   }
 
   // === Layer 1: Laterality ===
@@ -6975,11 +6980,11 @@ function renderZone3(result) {
         <span style="font-size:10px;color:var(--gray-600);min-width:54px">${MOD_LABELS[mod] ?? mod}</span>
         <span style="font-size:9px;font-weight:700;color:${sideClr};min-width:46px">${LAT_SIDE_LABELS[info.dominantSide] ?? info.dominantSide}</span>
         <div style="flex:1;display:flex;height:8px;border-radius:3px;overflow:hidden;background:var(--gray-100)">
-          <div style="width:${info.leftPct}%;background:#3b82f6;height:100%;transition:width .5s" title="左${info.leftPct}%"></div>
-          <div style="width:${info.rightPct}%;background:#ef4444;height:100%;transition:width .5s" title="右${info.rightPct}%"></div>
+          <div style="width:${info.leftPctAll}%;background:#3b82f6;height:100%;transition:width .5s" title="左${info.leftPctAll}%"></div>
+          <div style="width:${info.rightPctAll}%;background:#ef4444;height:100%;transition:width .5s" title="右${info.rightPctAll}%"></div>
         </div>
-        <span style="font-size:9px;color:#3b82f6;white-space:nowrap">左${info.leftPct}%</span>
-        <span style="font-size:9px;color:#ef4444;white-space:nowrap">右${info.rightPct}%</span>
+        <span style="font-size:9px;color:#3b82f6;white-space:nowrap">左${info.leftPctAll}%</span>
+        <span style="font-size:9px;color:#ef4444;white-space:nowrap">右${info.rightPctAll}%</span>
       </div>`;
   }).join('');
 
