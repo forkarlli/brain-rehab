@@ -6952,26 +6952,11 @@ function renderZone3(result) {
       </tr>`;
   }).join('');
 
-  // Consistency — 3-layer display
+  // ===== 臨床整合摘要 =====
   const modCount = effectiveModuleCount ?? Object.keys(weights).length;
+  const lat = consistencyLat ?? { pct: 0, status: 'insufficient', detail: '無資料', perModule: {} };
 
-  const lat  = consistencyLat  ?? { pct: 0, status: 'insufficient', detail: '無資料', perModule: {} };
-  const grp  = consistencyGroup ?? { pct: 0, sharedGroups: [], totalGroups: [] };
-  const jacc = consistencyJaccard ?? { pct: 0, pairs: [] };
-
-  function _rowClr(p) { return p >= 60 ? '#16a34a' : p >= 30 ? '#d97706' : '#dc2626'; }
-  function _bar(pct, clr) {
-    return `<div style="flex:1;background:var(--gray-100);border-radius:3px;height:8px;overflow:hidden">
-      <div style="width:${pct}%;background:${clr};height:100%;border-radius:3px;transition:width .5s"></div>
-    </div>`;
-  }
-
-  const combinedPct = consistencyPct ?? Math.round(lat.pct * 0.5 + grp.pct * 0.5);
-  const consClr = _rowClr(combinedPct);
-  const consBg  = combinedPct >= 60 ? '#f0fdf4' : combinedPct >= 30 ? '#fffbeb' : '#fef2f2';
-  const consLbl = combinedPct >= 60 ? '高度一致' : combinedPct >= 30 ? '部分一致' : '需進一步評估';
-
-  // Per-module laterality bars
+  // --- Area 1: Laterality bars ---
   const LAT_SIDE_LABELS = { left: '左側傾向', right: '右側傾向', bilateral: '雙側' };
   const perModLatRows = Object.entries(lat.perModule ?? {}).map(([mod, info]) => {
     const sideClr = info.dominantSide === 'left' ? '#2563eb' : info.dominantSide === 'right' ? '#dc2626' : '#7c3aed';
@@ -6988,23 +6973,49 @@ function renderZone3(result) {
       </div>`;
   }).join('');
 
-  // Laterality status colours
-  const latIsGood    = lat.status === 'consistent-left' || lat.status === 'consistent-right';
+  const latIsGood     = lat.status === 'consistent-left' || lat.status === 'consistent-right';
   const latIsConflict = lat.status === 'conflict';
   const latStatusClr  = latIsGood ? '#15803d' : latIsConflict ? '#dc2626' : '#d97706';
   const latStatusBg   = latIsGood ? '#f0fdf4'  : latIsConflict ? '#fef2f2'  : '#fffbeb';
-
-  const conflictMods = latIsConflict
+  const conflictMods  = latIsConflict
     ? Object.entries(lat.perModule ?? {})
-        .map(([mod, info]) => `${MOD_LABELS[mod] ?? mod}→${info.dominantSide === 'left' ? '左側' : info.dominantSide === 'right' ? '右側' : '雙側'}`)
+        .map(([m, i]) => `${MOD_LABELS[m] ?? m}→${i.dominantSide === 'left' ? '左側' : i.dominantSide === 'right' ? '右側' : '雙側'}`)
         .join(' vs ')
     : '';
 
-  const sharedGrpLabels = (grp.sharedGroups ?? []).filter(g => g !== '其他').join('、');
-  const grpDetail = sharedGrpLabels ? `共同指向：${sharedGrpLabels}` : '無共同含側性群組';
+  // --- Area 2: Multi-module confirmed (sources >= 2) ---
+  const confirmedEntries = Object.entries(brainRegionMap)
+    .filter(([, v]) => v.sources.length >= 2)
+    .sort(([, a], [, b]) => b.confidence - a.confidence);
+  const confirmedRows = confirmedEntries.length > 0
+    ? confirmedEntries.map(([region, info]) => {
+        const srcNames = [...new Set(info.sources)].map(s => MOD_LABELS[s] ?? s).join(' + ');
+        return `<div style="display:flex;align-items:center;gap:6px;margin-bottom:5px">
+          <span style="color:#16a34a;font-size:13px;flex-shrink:0">✅</span>
+          <span class="bcf-brain-region-tag" style="font-size:10px;padding:1px 6px">🧠 ${region}</span>
+          <span style="font-size:10px;color:var(--gray-500)">${srcNames} 均確認</span>
+        </div>`;
+      }).join('')
+    : `<div style="font-size:11px;color:var(--gray-400);padding:2px 0">目前無跨模組確認腦區，建議完成平衡測試</div>`;
 
-  const jaccDetail = jacc.pairs.length > 0
-    ? jacc.pairs.map(p => `${MOD_LABELS[p.modA]}↔${MOD_LABELS[p.modB]}: ${p.jaccard}%`).join('  ') : '';
+  // --- Area 3: Single-module hints (sources === 1), grouped by mod ---
+  const singleEntries = Object.entries(brainRegionMap).filter(([, v]) => v.sources.length === 1);
+  const byMod = {};
+  for (const [region, info] of singleEntries) {
+    const mod = info.sources[0];
+    if (!byMod[mod]) byMod[mod] = [];
+    byMod[mod].push(region);
+  }
+  const singleRows = Object.entries(byMod).map(([mod, regions]) => {
+    const tags = regions.map(r =>
+      `<span style="display:inline-block;background:#fff7ed;color:#c2410c;border-radius:4px;padding:1px 6px;font-size:10px;margin:2px 2px 2px 0">⚠️ ${r}</span>`
+    ).join('');
+    return `<div style="margin-bottom:7px">
+      <div style="font-size:10px;color:var(--gray-500);margin-bottom:3px">${MOD_LABELS[mod] ?? mod} 提示：</div>
+      <div style="line-height:1.8">${tags}</div>
+    </div>`;
+  }).join('');
+  const singleContent = singleRows || `<div style="font-size:11px;color:var(--gray-400)">無單一模組提示腦區</div>`;
 
   const noBalanceBanner = (activeModules && !activeModules.includes('balance'))
     ? `<div style="margin-bottom:16px;padding:10px 16px;background:#fff7ed;border-left:4px solid #f97316;border-radius:6px;display:flex;align-items:flex-start;gap:10px">
@@ -7028,49 +7039,47 @@ function renderZone3(result) {
           ${weightBars}
         </div>
 
-        <!-- Consistency (3-layer) -->
-        <div style="padding:16px;background:${consBg};border-radius:10px;border:1px solid ${consClr}25">
-          <!-- Big combined score -->
-          <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px">
-            <div style="text-align:center;min-width:64px">
-              <div style="font-size:40px;font-weight:900;color:${consClr};line-height:1">${combinedPct}%</div>
-              <div style="font-size:10px;color:${consClr};font-weight:700;margin-top:3px">${consLbl}</div>
-            </div>
-            <div>
-              <div style="font-size:13px;font-weight:700;color:var(--gray-800);margin-bottom:2px">🔗 綜合診斷一致性</div>
-              <div style="font-size:10px;color:var(--gray-400)">側性(50%) + 神經系統(50%) ／ ${modCount} 個模組</div>
-            </div>
+        <!-- Clinical Summary -->
+        <div style="border:1px solid var(--gray-200);border-radius:10px;overflow:hidden">
+          <!-- Header -->
+          <div style="padding:8px 14px;background:var(--gray-50);border-bottom:1px solid var(--gray-200);font-size:11px;color:var(--gray-500)">
+            📋 臨床整合摘要｜基於 ${modCount} 個有效模組
           </div>
-          <!-- Layer 1: Laterality -->
-          <div style="margin-bottom:12px">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:7px">
-              <span style="font-size:11px;font-weight:700;color:var(--gray-700);min-width:88px">側性一致性</span>
-              ${_bar(lat.pct, _rowClr(lat.pct))}
-              <span style="font-size:12px;font-weight:800;color:${_rowClr(lat.pct)};min-width:34px;text-align:right">${lat.pct}%</span>
-            </div>
+
+          <!-- Area 1: Laterality -->
+          <div style="padding:12px 14px;border-bottom:1px solid var(--gray-100)">
+            <div style="background:#eff6ff;border-radius:5px;padding:4px 10px;margin-bottom:8px;font-size:11px;font-weight:700;color:#1d4ed8">🧭 側性判斷</div>
             ${perModLatRows}
-            <div style="margin-top:5px;padding:5px 8px;background:${latStatusBg};border-radius:5px;font-size:11px;color:${latStatusClr};font-weight:600;line-height:1.5">
+            <div style="margin-top:4px;padding:5px 8px;background:${latStatusBg};border-radius:5px;font-size:11px;color:${latStatusClr};font-weight:600;line-height:1.5">
               ${lat.detail}${conflictMods ? '<br><span style="font-size:10px;font-weight:400">' + conflictMods + '</span>' : ''}
               ${latIsConflict ? '<br><span style="font-size:10px;font-weight:400">建議重新評估確認側性</span>' : ''}
             </div>
           </div>
-          <!-- Layer 2: Neural Group -->
-          <div style="margin-bottom:10px">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
-              <span style="font-size:11px;font-weight:700;color:var(--gray-700);min-width:88px">神經系統一致性</span>
-              ${_bar(grp.pct, _rowClr(grp.pct))}
-              <span style="font-size:12px;font-weight:800;color:${_rowClr(grp.pct)};min-width:34px;text-align:right">${grp.pct}%</span>
-            </div>
-            <div style="font-size:10px;color:var(--gray-500);margin-left:96px">${grpDetail}</div>
+
+          <!-- Area 2: Multi-module confirmed -->
+          <div style="padding:12px 14px;border-bottom:1px solid var(--gray-100)">
+            <div style="background:#f0fdf4;border-radius:5px;padding:4px 10px;margin-bottom:8px;font-size:11px;font-weight:700;color:#15803d">✅ 高可信發現（≥2個模組確認）</div>
+            ${confirmedRows}
           </div>
-          <!-- Layer 3: Jaccard reference -->
-          <div>
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
-              <span style="font-size:11px;color:var(--gray-400);min-width:88px">精確腦區吻合</span>
-              ${_bar(jacc.pct, '#94a3b8')}
-              <span style="font-size:12px;font-weight:800;color:#64748b;min-width:34px;text-align:right">${jacc.pct}%</span>
+
+          <!-- Area 3: Single-module hints -->
+          <div style="padding:12px 14px;border-bottom:1px solid var(--gray-100)">
+            <div style="background:#fff7ed;border-radius:5px;padding:4px 10px;margin-bottom:8px;font-size:11px;font-weight:700;color:#c2410c">⚠️ 待確認發現（單一模組提示）</div>
+            ${singleContent}
+          </div>
+
+          <!-- Area 4: Conflict detection -->
+          <div style="padding:12px 14px">
+            <div style="background:${latIsConflict ? '#fef2f2' : '#f8fafc'};border-radius:5px;padding:4px 10px;margin-bottom:8px;font-size:11px;font-weight:700;color:${latIsConflict ? '#b91c1c' : '#475569'}">
+              ${latIsConflict ? '❌' : '✅'} 模組間矛盾檢查
             </div>
-            <div style="font-size:10px;color:var(--gray-400);margin-left:96px">Jaccard，受命名差異影響，僅供參考${jaccDetail ? '（' + jaccDetail + '）' : ''}</div>
+            ${latIsConflict
+              ? `<div style="padding:6px 8px;background:#fef2f2;border-radius:5px;font-size:11px;color:#b91c1c;line-height:1.6">
+                  側性矛盾：${conflictMods}<br>
+                  <span style="font-size:10px">建議重新評估確認側性</span>
+                </div>`
+              : `<div style="font-size:11px;color:#15803d">✅ 無模組間矛盾，評估結果方向一致</div>`
+            }
           </div>
         </div>
       </div>
