@@ -2351,15 +2351,17 @@ function computeRombergRx(input) {
     sway_velocity: input.btracks_sway_velocity || null,
   };
 
-  // Build weakRegions for integrated analysis
-  const canalStr = diagEntry.canal || '';
+  // Build weakRegions for integrated analysis (both FAILURE and COMPENSATORY)
+  const canalStr   = diagEntry.canal   || '';
+  const spindleStr = diagEntry.spindle || '';
+  const regionInfo = canalStr || spindleStr;
   const rombergWeakRegions = [];
-  if (mode === 'FAILURE' && canalStr) {
-    const hasRight    = canalStr.includes('Right');
-    const hasLeft     = canalStr.includes('Left');
-    const hasBilateral = canalStr.includes('Bilateral');
+  if (input.sway_direction && regionInfo) {
+    const hasRight     = regionInfo.includes('Right');
+    const hasLeft      = regionInfo.includes('Left');
+    const hasBilateral = regionInfo.includes('Bilateral');
     const rqFmt = parseFloat(rq.toFixed(2));
-    const ev = `RQ=${rqFmt}，${canalStr}`;
+    const ev = `RQ=${rqFmt}，${regionInfo}`;
     if (hasBilateral || (hasRight && hasLeft)) {
       rombergWeakRegions.push({ name: 'Left Vestibular',  evidence: ev });
       rombergWeakRegions.push({ name: 'Right Vestibular', evidence: ev });
@@ -2369,6 +2371,12 @@ function computeRombergRx(input) {
       rombergWeakRegions.push({ name: 'Left Vestibular',  evidence: ev });
     }
   }
+
+  // abnormalCount: RQ>=2.0 +1, 有偏移方向 +1, 每條 alert +1
+  let rombergAbnCount = 0;
+  if (rq >= ROMBERG_CONFIG.rq_threshold) rombergAbnCount += 1;
+  if (input.sway_direction && input.sway_direction !== '') rombergAbnCount += 1;
+  rombergAbnCount += alerts.length;
 
   return {
     rq:             parseFloat(rq.toFixed(3)),
@@ -2386,7 +2394,7 @@ function computeRombergRx(input) {
     btracks_data:     btracksData,
     prescription_key: prescriptionKey,
     weakRegions:      rombergWeakRegions,
-    abnormalCount:    mode === 'FAILURE' ? Math.max(1, rombergWeakRegions.length) : 0,
+    abnormalCount:    rombergAbnCount,
   };
 }
 
@@ -6728,7 +6736,7 @@ function runIntegratedAnalysis(patientId) {
   }
 
   const allRegions    = Object.keys(brainRegionMap).length;
-  const highConf      = Object.values(brainRegionMap).filter(v => v.confidence >= 0.4).length;
+  const highConf      = Object.values(brainRegionMap).filter(v => v.sources.length >= 2).length;
   const consistencyPct = allRegions > 0 ? Math.round(highConf / allRegions * 100) : 0;
 
   return { weights, abnormalCounts, brainRegionMap, consistencyPct, hasData: allRegions > 0 };
@@ -6777,8 +6785,8 @@ function renderZone3(result) {
     .sort(([, a], [, b]) => b.confidence - a.confidence);
 
   const tableRows = sorted.map(([region, info]) => {
-    const isHigh   = info.confidence >= 0.4;
-    const status   = isHigh ? '🔴 高信心' : '🟡 待確認';
+    const isHigh    = info.sources.length >= 2;   // 跨模組確認 = 高信心
+    const status    = isHigh ? '🔴 跨模組確認' : '🟡 單模組';
     const statusClr = isHigh ? '#dc2626' : '#d97706';
     const confPct  = Math.round(info.confidence * 100);
     const uniqSrc  = [...new Set(info.sources)];
@@ -6804,7 +6812,7 @@ function renderZone3(result) {
   const consClr = consistencyPct >= 80 ? '#16a34a' : consistencyPct >= 50 ? '#d97706' : '#dc2626';
   const consBg  = consistencyPct >= 80 ? '#f0fdf4'  : consistencyPct >= 50 ? '#fffbeb' : '#fef2f2';
   const consLbl = consistencyPct >= 80 ? '高度一致'  : consistencyPct >= 50 ? '部分一致' : '需進一步評估';
-  const highCnt = Object.values(brainRegionMap).filter(v => v.confidence >= 0.4).length;
+  const highCnt = Object.values(brainRegionMap).filter(v => v.sources.length >= 2).length;
   const allCnt  = Object.keys(brainRegionMap).length;
 
   zone3.innerHTML = `
@@ -6877,21 +6885,21 @@ function renderZone4(analysisResult) {
   if (!zone4) return;
   _rxCurrentAnalysis = analysisResult;
 
-  const highCount = Object.values(analysisResult.brainRegionMap).filter(v => v.confidence >= 0.4).length;
-  const pendCount = Object.values(analysisResult.brainRegionMap).filter(v => v.confidence < 0.4).length;
-  const stdCount = highCount + Math.min(2, pendCount);
+  const multiCount  = Object.values(analysisResult.brainRegionMap).filter(v => v.sources.length >= 2).length;
+  const singleCount = Object.values(analysisResult.brainRegionMap).filter(v => v.sources.length === 1).length;
+  const stdCount    = multiCount + Math.min(3, singleCount);
 
   const cards = [
     {
       num: 1, icon: '🛡️', title: '保守模式',
-      sub: '僅高信心腦區',
-      desc: '只針對信心度 ≥ 40% 的 🔴 高信心腦區生成處方，適合症狀急性期或首次評估。',
-      count: highCount, countLabel: '個高信心腦區',
+      sub: '跨模組確認腦區（≥2模組）',
+      desc: '只針對至少兩個評估模組同時指向的 🔴 跨模組確認腦區，排除單一模組來源，適合急性期或首次評估。',
+      count: multiCount, countLabel: '個跨模組確認腦區',
     },
     {
       num: 2, icon: '⚡', title: '標準模式',
-      sub: '高信心 + Top 2 待確認',
-      desc: '所有 🔴 高信心腦區加上信心度最高的 2 個 🟡 待確認腦區，平衡訓練廣度與精準度。',
+      sub: '跨模組確認 + Top 3 單模組',
+      desc: '所有 🔴 跨模組確認腦區加上信心度最高的 3 個 🟡 單模組腦區，平衡訓練廣度與精準度。',
       count: stdCount, countLabel: '個目標腦區',
     },
     {
@@ -7068,12 +7076,17 @@ function generateIntegratedPrescription(patientId, strategy, analysisResult) {
 
   let filteredEntries;
   if (strategy === 1) {
-    filteredEntries = sorted.filter(([, v]) => v.confidence >= 0.4);
+    // 保守：只取跨模組確認（≥2個模組同時指向）
+    filteredEntries = sorted.filter(([, v]) => v.sources.length >= 2);
+    if (filteredEntries.length === 0) filteredEntries = sorted.slice(0, 3);
   } else if (strategy === 2) {
-    const high = sorted.filter(([, v]) => v.confidence >= 0.4);
-    const pend = sorted.filter(([, v]) => v.confidence < 0.4).slice(0, 2);
-    filteredEntries = [...high, ...pend];
+    // 標準：跨模組確認全納入 + 單模組前3項
+    const multi  = sorted.filter(([, v]) => v.sources.length >= 2);
+    const single = sorted.filter(([, v]) => v.sources.length === 1).slice(0, 3);
+    filteredEntries = [...multi, ...single];
+    if (filteredEntries.length === 0) filteredEntries = sorted;
   } else {
+    // 核心迴路：依 RightEye 速度分析決定迴路
     filteredEntries = applyCircuitStrategy(sorted, reRec);
   }
   if (filteredEntries.length === 0) filteredEntries = sorted;
@@ -7096,8 +7109,8 @@ function generateIntegratedPrescription(patientId, strategy, analysisResult) {
     ? _computeFlyingChairData(affectedItems, pt)
     : null;
 
-  // Determine which modes fire from high-conf regions alone (for isHighConf per-item)
-  const highConfSet = new Set(sorted.filter(([, v]) => v.confidence >= 0.4).map(([r]) => r));
+  // isHighConf = 跨模組確認（sources.length >= 2）的腦區所觸發的處方模式
+  const highConfSet = new Set(sorted.filter(([, v]) => v.sources.length >= 2).map(([r]) => r));
   for (const [canon, extra] of Object.entries(EYERX_ALIASES)) {
     if (highConfSet.has(canon)) extra.forEach(a => highConfSet.add(a));
   }
