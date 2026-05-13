@@ -6669,36 +6669,102 @@ function renderModuleCards(patientId) {
 }
 
 function computeConsistency(moduleOutputs) {
+  const REGION_GROUPS = {
+    cerebellum: ['Left CB', 'Right CB', 'CB Vermis', 'CB Flocculus'],
+    brainstem:  ['riMLF', 'Left PPRF', 'Right PPRF', 'Bilateral Midbrain',
+                 'Superior Colliculus', 'CN III', 'Left Mes', 'Right Mes'],
+    cortex:     ['Left FEF', 'Right FEF', 'Left Parietal', 'Right Parietal',
+                 'Left Temporal Lobe', 'Right Temporal Lobe'],
+    vestibular: ['Left Vestibular', 'Right Vestibular'],
+  };
+
+  function getGroup(canonical) {
+    for (const [grp, list] of Object.entries(REGION_GROUPS)) {
+      if (list.includes(canonical)) return grp;
+    }
+    return 'other';
+  }
+
+  function extractLaterality(weakRegions) {
+    let left = 0, right = 0;
+    for (const r of (weakRegions ?? [])) {
+      const n = normalizeBrainRegion(r.name);
+      if (/^Left\b/.test(n)) left++;
+      else if (/^Right\b/.test(n)) right++;
+    }
+    if (left === 0 && right === 0) return null;
+    if (left > right) return 'left';
+    if (right > left) return 'right';
+    return 'bilateral';
+  }
+
+  // === Layer 1: Laterality ===
+  const latDecisions = {};
+  for (const [mod, out] of Object.entries(moduleOutputs)) {
+    if (!out || (out.weakRegions?.length ?? 0) === 0) continue;
+    const lat = extractLaterality(out.weakRegions);
+    if (lat !== null) latDecisions[mod] = lat;
+  }
+  const latMods = Object.keys(latDecisions);
+  let latMatchCount = 0, majorityLat = null;
+  if (latMods.length > 0) {
+    const tally = {};
+    for (const v of Object.values(latDecisions)) tally[v] = (tally[v] ?? 0) + 1;
+    latMatchCount = Math.max(...Object.values(tally));
+    majorityLat = Object.entries(tally).sort(([,a],[,b]) => b - a)[0][0];
+  }
+  const latPct = latMods.length > 0 ? Math.round(latMatchCount / latMods.length * 100) : 0;
+
+  // === Layer 2: Neural System Group ===
+  const moduleGroupSets = {};
+  for (const [mod, out] of Object.entries(moduleOutputs)) {
+    if (!out || (out.weakRegions?.length ?? 0) === 0) continue;
+    const s = new Set();
+    for (const r of out.weakRegions) s.add(getGroup(normalizeBrainRegion(r.name)));
+    moduleGroupSets[mod] = s;
+  }
+  const groupMods = Object.keys(moduleGroupSets);
+  const allGroupsSet = new Set(groupMods.flatMap(m => [...moduleGroupSets[m]]));
+  const sharedGroups = [...allGroupsSet].filter(g =>
+    groupMods.filter(m => moduleGroupSets[m].has(g)).length >= 2
+  );
+  const groupPct = allGroupsSet.size > 0 ? Math.round(sharedGroups.length / allGroupsSet.size * 100) : 0;
+
+  // === Layer 3: Jaccard (reference) ===
   const moduleSets = {};
   for (const [mod, out] of Object.entries(moduleOutputs)) {
     if (out && (out.abnormalCount ?? 0) > 0 && (out.weakRegions?.length ?? 0) > 0) {
-      moduleSets[mod] = new Set(
-        (out.weakRegions ?? []).map(r => normalizeBrainRegion(r.name))
-      );
+      moduleSets[mod] = new Set((out.weakRegions ?? []).map(r => normalizeBrainRegion(r.name)));
     }
   }
-  const validMods = Object.keys(moduleSets);
-  if (validMods.length < 2) return { pct: 0, pairs: [], validMods };
-
-  const pairScores = [];
-  for (let i = 0; i < validMods.length; i++) {
-    for (let j = i + 1; j < validMods.length; j++) {
-      const a = moduleSets[validMods[i]];
-      const b = moduleSets[validMods[j]];
-      const intersection = new Set([...a].filter(x => b.has(x)));
+  const jMods = Object.keys(moduleSets);
+  const jaccPairs = [];
+  for (let i = 0; i < jMods.length; i++) {
+    for (let j = i + 1; j < jMods.length; j++) {
+      const a = moduleSets[jMods[i]], b = moduleSets[jMods[j]];
+      const inter = new Set([...a].filter(x => b.has(x)));
       const union = new Set([...a, ...b]);
-      const jaccard = union.size > 0 ? Math.round((intersection.size / union.size) * 100) : 0;
-      pairScores.push({
-        modA: validMods[i], modB: validMods[j],
-        intersection: [...intersection],
-        intersectionCount: intersection.size,
+      jaccPairs.push({
+        modA: jMods[i], modB: jMods[j],
+        intersection: [...inter], intersectionCount: inter.size,
         unionCount: union.size,
-        jaccard,
+        jaccard: union.size > 0 ? Math.round(inter.size / union.size * 100) : 0,
       });
     }
   }
-  const avgJaccard = Math.round(pairScores.reduce((s, p) => s + p.jaccard, 0) / pairScores.length);
-  return { pct: avgJaccard, pairs: pairScores, validMods };
+  const avgJaccard = jaccPairs.length > 0
+    ? Math.round(jaccPairs.reduce((s, p) => s + p.jaccard, 0) / jaccPairs.length) : 0;
+
+  const combinedPct = Math.round(latPct * 0.5 + groupPct * 0.5);
+  const validMods = [...new Set([...latMods, ...groupMods])];
+
+  return {
+    pct: combinedPct,
+    laterality: { pct: latPct, decisions: latDecisions, majorityLat, matchCount: latMatchCount, totalCount: latMods.length },
+    neuralGroup: { pct: groupPct, sharedGroups, totalGroups: [...allGroupsSet], moduleGroupSets: Object.fromEntries(groupMods.map(m => [m, [...moduleGroupSets[m]]])) },
+    jaccard: { pct: avgJaccard, pairs: jaccPairs },
+    validMods,
+  };
 }
 
 function runIntegratedAnalysis(patientId) {
@@ -6790,8 +6856,9 @@ function runIntegratedAnalysis(patientId) {
   return {
     weights, abnormalCounts, brainRegionMap,
     consistencyPct: consistency.pct,
-    consistencyPairs: consistency.pairs,
-    consistencyValidMods: consistency.validMods,
+    consistencyLat:     consistency.laterality,
+    consistencyGroup:   consistency.neuralGroup,
+    consistencyJaccard: consistency.jaccard,
     hasData: allRegions > 0,
     activeModules, effectiveModuleCount,
     confirmedCount: highConf, totalRegionCount: allRegions,
@@ -6813,7 +6880,7 @@ function renderZone3(result) {
 
   zone3.style.display = '';
 
-  const { weights, brainRegionMap, consistencyPct, consistencyPairs, activeModules, effectiveModuleCount, confirmedCount, totalRegionCount } = result;
+  const { weights, brainRegionMap, consistencyPct, consistencyLat, consistencyGroup, consistencyJaccard, activeModules, effectiveModuleCount, confirmedCount, totalRegionCount } = result;
   const MOD_LABELS = { balance: '平衡測試', muscle: '肌肉張力', rightEye: 'RightEye' };
   const MOD_COLORS = { balance: '#2563eb', muscle: '#16a34a', rightEye: '#9333ea' };
   const MOD_BADGE  = {
@@ -6864,34 +6931,37 @@ function renderZone3(result) {
       </tr>`;
   }).join('');
 
-  // Consistency indicator (Jaccard-based)
-  const consClr = consistencyPct >= 60 ? '#16a34a' : consistencyPct >= 30 ? '#d97706' : '#dc2626';
-  const consBg  = consistencyPct >= 60 ? '#f0fdf4'  : consistencyPct >= 30 ? '#fffbeb' : '#fef2f2';
-  const consLbl = consistencyPct >= 60 ? '高度一致'  : consistencyPct >= 30 ? '部分一致' : '需進一步評估';
+  // Consistency — 3-layer display
+  const GROUP_LABELS_Z3 = { cerebellum: '小腦系統', brainstem: '腦幹系統', cortex: '皮質系統', vestibular: '前庭系統', other: '其他' };
+  const LAT_LABELS_Z3   = { left: '左側', right: '右側', bilateral: '雙側' };
   const modCount = effectiveModuleCount ?? Object.keys(weights).length;
 
-  const pairs = consistencyPairs ?? [];
-  const pairRows = pairs.map(p => {
-    const pClr = p.jaccard >= 60 ? '#16a34a' : p.jaccard >= 30 ? '#d97706' : '#dc2626';
-    const sharedTags = p.intersection.map(r =>
-      `<span style="display:inline-block;background:#e0e7ff;color:#3730a3;border-radius:4px;padding:0 5px;font-size:9px;margin:1px">${r}</span>`
-    ).join('');
-    return `
-      <div style="margin-top:8px;padding:6px 8px;background:rgba(0,0,0,.03);border-radius:6px">
-        <div style="display:flex;justify-content:space-between;align-items:center">
-          <span style="font-size:11px;color:var(--gray-600)">${MOD_LABELS[p.modA]} ↔ ${MOD_LABELS[p.modB]}</span>
-          <span style="font-size:12px;font-weight:800;color:${pClr}">${p.jaccard}%</span>
-        </div>
-        <div style="font-size:10px;color:var(--gray-400);margin-top:2px">
-          共同 ${p.intersectionCount} 個 ／ 聯集 ${p.unionCount} 個
-          ${sharedTags ? '<br>' + sharedTags : ''}
-        </div>
-      </div>`;
-  }).join('');
+  const lat  = consistencyLat  ?? { pct: 0, decisions: {}, matchCount: 0, totalCount: 0, majorityLat: null };
+  const grp  = consistencyGroup ?? { pct: 0, sharedGroups: [], totalGroups: [] };
+  const jacc = consistencyJaccard ?? { pct: 0, pairs: [] };
 
-  const avgLabel = pairs.length > 1
-    ? `<div style="margin-top:6px;font-size:10px;color:var(--gray-400)">整體平均（${pairs.length} 對）：<b style="color:${consClr}">${consistencyPct}%</b></div>`
-    : '';
+  function _rowClr(p) { return p >= 60 ? '#16a34a' : p >= 30 ? '#d97706' : '#dc2626'; }
+  function _bar(pct, clr) {
+    return `<div style="flex:1;background:var(--gray-100);border-radius:3px;height:8px;overflow:hidden">
+      <div style="width:${pct}%;background:${clr};height:100%;border-radius:3px;transition:width .5s"></div>
+    </div>`;
+  }
+
+  const combinedPct = consistencyPct ?? Math.round(lat.pct * 0.5 + grp.pct * 0.5);
+  const consClr = _rowClr(combinedPct);
+  const consBg  = combinedPct >= 60 ? '#f0fdf4' : combinedPct >= 30 ? '#fffbeb' : '#fef2f2';
+  const consLbl = combinedPct >= 60 ? '高度一致' : combinedPct >= 30 ? '部分一致' : '需進一步評估';
+
+  const latMajLabel = lat.majorityLat ? (LAT_LABELS_Z3[lat.majorityLat] ?? lat.majorityLat) : '—';
+  const latDetail = lat.totalCount > 0
+    ? `${lat.matchCount}/${lat.totalCount} 個模組同${latMajLabel}`
+    : '無有效側性資料';
+
+  const sharedGrpLabels = (grp.sharedGroups ?? []).map(g => GROUP_LABELS_Z3[g] ?? g).join('、');
+  const grpDetail = sharedGrpLabels ? `共同指向：${sharedGrpLabels}` : '無共同神經系統';
+
+  const jaccDetail = jacc.pairs.length > 0
+    ? jacc.pairs.map(p => `${MOD_LABELS[p.modA]}↔${MOD_LABELS[p.modB]}: ${p.jaccard}%`).join('  ') : '';
 
   const noBalanceBanner = (activeModules && !activeModules.includes('balance'))
     ? `<div style="margin-bottom:16px;padding:10px 16px;background:#fff7ed;border-left:4px solid #f97316;border-radius:6px;display:flex;align-items:flex-start;gap:10px">
@@ -6915,20 +6985,46 @@ function renderZone3(result) {
           ${weightBars}
         </div>
 
-        <!-- Consistency (Jaccard) -->
+        <!-- Consistency (3-layer) -->
         <div style="padding:16px;background:${consBg};border-radius:10px;border:1px solid ${consClr}25">
-          <div style="display:flex;align-items:center;gap:16px;margin-bottom:4px">
+          <!-- Big combined score -->
+          <div style="display:flex;align-items:center;gap:16px;margin-bottom:14px">
             <div style="text-align:center;min-width:64px">
-              <div style="font-size:40px;font-weight:900;color:${consClr};line-height:1">${consistencyPct}%</div>
+              <div style="font-size:40px;font-weight:900;color:${consClr};line-height:1">${combinedPct}%</div>
               <div style="font-size:10px;color:${consClr};font-weight:700;margin-top:3px">${consLbl}</div>
             </div>
             <div>
-              <div style="font-size:13px;font-weight:700;color:var(--gray-800);margin-bottom:3px">🔗 跨系統診斷一致性</div>
-              <div style="font-size:10px;color:var(--gray-400)">Jaccard 相似度 ／ ${modCount} 個有效模組</div>
+              <div style="font-size:13px;font-weight:700;color:var(--gray-800);margin-bottom:2px">🔗 綜合診斷一致性</div>
+              <div style="font-size:10px;color:var(--gray-400)">側性(50%) + 神經系統(50%) ／ ${modCount} 個模組</div>
             </div>
           </div>
-          ${pairRows}
-          ${avgLabel}
+          <!-- Layer 1: Laterality -->
+          <div style="margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+              <span style="font-size:11px;color:var(--gray-600);min-width:88px">側性一致性</span>
+              ${_bar(lat.pct, _rowClr(lat.pct))}
+              <span style="font-size:12px;font-weight:800;color:${_rowClr(lat.pct)};min-width:34px;text-align:right">${lat.pct}%</span>
+            </div>
+            <div style="font-size:10px;color:var(--gray-400);margin-left:96px">${latDetail}</div>
+          </div>
+          <!-- Layer 2: Neural Group -->
+          <div style="margin-bottom:10px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+              <span style="font-size:11px;color:var(--gray-600);min-width:88px">神經系統一致性</span>
+              ${_bar(grp.pct, _rowClr(grp.pct))}
+              <span style="font-size:12px;font-weight:800;color:${_rowClr(grp.pct)};min-width:34px;text-align:right">${grp.pct}%</span>
+            </div>
+            <div style="font-size:10px;color:var(--gray-400);margin-left:96px">${grpDetail}</div>
+          </div>
+          <!-- Layer 3: Jaccard reference -->
+          <div>
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px">
+              <span style="font-size:11px;color:var(--gray-400);min-width:88px">精確腦區吻合</span>
+              ${_bar(jacc.pct, '#94a3b8')}
+              <span style="font-size:12px;font-weight:800;color:#64748b;min-width:34px;text-align:right">${jacc.pct}%</span>
+            </div>
+            <div style="font-size:10px;color:var(--gray-400);margin-left:96px">Jaccard，受命名差異影響，僅供參考${jaccDetail ? '（' + jaccDetail + '）' : ''}</div>
+          </div>
         </div>
       </div>
 
