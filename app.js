@@ -7191,80 +7191,116 @@ function renderZone5(rxItems, patientId, strategy, analysisResult) {
   const lvl = LEVEL_MAP.find(e => e.kw.some(k => pt?.diagnosis?.includes(k)))
     || { label: '一般期', clr: '#4f46e5', bg: '#eef2ff' };
 
-  const colHeaders = [
-    '優先序', '工具', '模式', '訓練類型', '板面角度 / 軸向',
-    '速度', '距離 / 強度', '次數', '目標物', '窗板',
-    '對應腦區（含側性）', '評估依據',
-  ];
+  const highCount = rxItems.filter(i => i.isHighConf).length;
+  const pendCount = rxItems.filter(i => !i.isHighConf).length;
 
-  const rows = rxItems.map((item, i) => {
-    const rowStyle = item.isHighConf ? '' : 'background:#fffbeb';
-    const regionHtml = item.brainRegions.slice(0, 4).map(r =>
-      `<span class="bcf-brain-region-tag" style="font-size:10px;margin:1px 2px 1px 0;display:inline-block">🧠 ${r}</span>`
-    ).join('') + (item.brainRegions.length > 4
-      ? `<span style="font-size:10px;color:var(--gray-400)"> +${item.brainRegions.length - 4}</span>` : '');
-    const toolBg  = item.tool === '眼動機' ? '#dbeafe' : '#fef9c3';
-    const toolClr = item.tool === '眼動機' ? '#1e40af' : '#854d0e';
+  const cards = rxItems.map((item, i) => {
+    const isEye     = item.tool === '眼動機';
+    const headCls   = isEye ? 'rx5-head-eye' : 'rx5-head-fly';
+    const cardCls   = item.isHighConf ? 'rx5-card-high' : 'rx5-card-pend';
+    const confBadge = item.isHighConf
+      ? '<span class="rx5-conf-badge rx5-conf-high">🔴 跨模組確認</span>'
+      : '<span class="rx5-conf-badge rx5-conf-pend">🟡 待確認</span>';
+    const regionHtml = item.brainRegions.map(r =>
+      `<span class="bcf-brain-region-tag" style="font-size:10px;margin:1px 2px 1px 0">🧠 ${r}</span>`
+    ).join('');
+    const evId = `rx5ev${i}`;
+    const evRow = item.evidence ? `
+      <div class="rx5-ev-row">
+        <button class="rx5-ev-btn" onclick="toggleRx5Evidence('${evId}')">▼ 展開依據</button>
+        <div class="rx5-ev-body" id="${evId}" style="display:none">${item.evidence}</div>
+      </div>` : '';
+
     return `
-      <tr style="${rowStyle}">
-        <td style="text-align:center;font-weight:700;font-size:13px">${i + 1}</td>
-        <td style="text-align:center">
-          <span style="background:${toolBg};color:${toolClr};padding:2px 8px;border-radius:4px;font-size:11px;font-weight:700;white-space:nowrap">${item.tool}</span>
-        </td>
-        <td style="text-align:center;font-weight:800;font-size:14px;color:#7c3aed">${item.mode}</td>
-        <td style="font-weight:600;white-space:nowrap">${item.name}</td>
-        <td style="font-size:11px">${item.angle}</td>
-        <td style="text-align:center;font-weight:700;color:#1d4ed8">${item.speed}</td>
-        <td style="text-align:center;font-size:12px">${item.dist}</td>
-        <td style="text-align:center;font-weight:700">${item.reps}</td>
-        <td style="text-align:center;font-size:12px">${item.target}</td>
-        <td style="font-size:11px">${item.bg}</td>
-        <td>${regionHtml}</td>
-        <td style="font-size:11px;color:var(--gray-500);white-space:nowrap">${item.evidence}</td>
-      </tr>`;
+      <div class="rx5-card ${cardCls}" data-conf="${item.isHighConf ? 'high' : 'pend'}">
+        <div class="rx5-head ${headCls}">
+          <span class="rx5-seq">${i + 1}</span>
+          <span class="rx5-tool-badge ${isEye ? '' : 'rx5-tool-fly'}">${item.tool}</span>
+          <span class="rx5-mode">${item.mode}</span>
+          <span class="rx5-name">${item.name}</span>
+          <span style="flex:1"></span>
+          ${confBadge}
+        </div>
+        <div class="rx5-params">
+          <span class="rx5-param"><span class="rx5-plabel">板面</span>${item.angle}</span>
+          <span class="rx5-param"><span class="rx5-plabel">速度</span>${item.speed}</span>
+          <span class="rx5-param"><span class="rx5-plabel">距離</span>${item.dist}</span>
+          <span class="rx5-param"><span class="rx5-plabel">次數</span>${item.reps}</span>
+          <span class="rx5-param"><span class="rx5-plabel">目標物</span>${item.target}</span>
+          <span class="rx5-param"><span class="rx5-plabel">窗板</span>${item.bg}</span>
+        </div>
+        <div class="rx5-regions">${regionHtml || '<span style="color:var(--gray-300);font-size:11px">—</span>'}</div>
+        ${evRow}
+      </div>`;
   }).join('');
 
   zone5.style.display = '';
   zone5.innerHTML = `
     <div class="rx-gen-section-title">第五區：今日訓練處方</div>
-    <div class="card" id="rxGen-zone5-card" style="padding:20px">
+    <div id="rxGen-zone5-card">
 
-      <div style="display:flex;align-items:flex-start;gap:16px;margin-bottom:16px;flex-wrap:wrap">
+      <div class="rx5-header">
         <div style="flex:1;min-width:200px">
-          <div style="font-size:17px;font-weight:800;color:var(--gray-900)">${pt?.name || patientId} 的訓練處方</div>
-          <div style="font-size:12px;color:var(--gray-500);margin-top:3px">${today} ・ 策略：${strategyName} ・ 跨模組一致性 ${analysisResult.consistencyPct}%</div>
+          <div class="rx5-title">${pt?.name || patientId} 的訓練處方</div>
+          <div class="rx5-subtitle">${today} ・ 策略：${strategyName} ・ 跨模組一致性 ${analysisResult.consistencyPct}%</div>
         </div>
-        <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
-          <span style="background:${lvl.bg};color:${lvl.clr};padding:4px 12px;border-radius:8px;font-size:12px;font-weight:700;border:1px solid ${lvl.clr}30">病等：${lvl.label}</span>
-          <span style="background:var(--gray-100);color:var(--gray-700);padding:4px 10px;border-radius:8px;font-size:12px">共 ${rxItems.length} 項</span>
-          <span style="background:var(--gray-100);color:var(--gray-700);padding:4px 10px;border-radius:8px;font-size:12px">預計 ${estMin} 分鐘</span>
+        <div class="rx5-meta-tags">
+          <span class="rx5-tag" style="background:${lvl.bg};color:${lvl.clr};border:1px solid ${lvl.clr}30">病等：${lvl.label}</span>
+          <span class="rx5-tag">共 ${rxItems.length} 項</span>
+          <span class="rx5-tag">預計 ${estMin} 分鐘</span>
         </div>
       </div>
 
-      <div style="display:flex;gap:20px;margin-bottom:12px;font-size:11px;color:var(--gray-500)">
-        <span><span style="display:inline-block;width:14px;height:14px;background:#fff;border:1px solid #e5e7eb;vertical-align:middle;border-radius:2px;margin-right:4px"></span>高信心腦區處方</span>
-        <span><span style="display:inline-block;width:14px;height:14px;background:#fffbeb;border:1px solid #fde68a;vertical-align:middle;border-radius:2px;margin-right:4px"></span>待確認腦區處方</span>
+      <div class="rx5-toggle-bar">
+        <button class="rx5-toggle active" id="rx5t-high" onclick="toggleRx5Filter('high')">
+          🔴 跨模組確認 <span class="rx5-toggle-cnt">${highCount}</span>
+        </button>
+        <button class="rx5-toggle active" id="rx5t-pend" onclick="toggleRx5Filter('pend')">
+          🟡 待確認 <span class="rx5-toggle-cnt">${pendCount}</span>
+        </button>
       </div>
 
-      <div style="overflow-x:auto">
-        <table class="data-table" style="margin:0;font-size:12px;min-width:960px">
-          <thead>
-            <tr>${colHeaders.map(h => `<th style="white-space:nowrap;font-size:11px">${h}</th>`).join('')}</tr>
-          </thead>
-          <tbody>
-            ${rows || '<tr><td colspan="12" style="text-align:center;padding:24px;color:var(--gray-300)">無法生成處方，請確認評估資料</td></tr>'}
-          </tbody>
-        </table>
+      <div class="rx5-cards" id="rx5-cards-list">
+        ${cards || '<div style="text-align:center;padding:40px;color:var(--gray-300)">無法生成處方，請確認評估資料</div>'}
       </div>
 
-      <div style="margin-top:20px;padding-top:16px;border-top:1px solid var(--gray-100);display:flex;align-items:center;justify-content:flex-end;gap:10px;flex-wrap:wrap">
-        <button class="btn btn-secondary" onclick="printRxPrescription()" style="font-size:13px">🖨️ 列印</button>
-        <button class="btn btn-secondary" onclick="exportRxPDF('${patientId}')" style="font-size:13px">📄 匯出 PDF</button>
-        <button class="btn btn-primary" onclick="saveIntegratedPrescription('${patientId}', ${strategy})" style="font-size:13px">💾 儲存為今日處方</button>
+      <div class="rx5-sticky-bar">
+        <span style="font-size:12px;color:var(--gray-400)">
+          <span id="rx5-visible-count">${rxItems.length}</span> 項顯示中
+        </span>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary" onclick="printRxPrescription()" style="font-size:13px">🖨️ 列印</button>
+          <button class="btn btn-secondary" onclick="exportRxPDF('${patientId}')" style="font-size:13px">📄 匯出 PDF</button>
+          <button class="btn btn-primary" onclick="saveIntegratedPrescription('${patientId}', ${strategy})" style="font-size:13px">💾 儲存為今日處方</button>
+        </div>
       </div>
     </div>`;
 
   setTimeout(() => zone5.scrollIntoView({ behavior: 'smooth', block: 'nearest' }), 80);
+}
+
+function toggleRx5Evidence(id) {
+  const body = document.getElementById(id);
+  const btn  = body?.previousElementSibling;
+  if (!body) return;
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  if (btn) btn.textContent = open ? '▼ 展開依據' : '▲ 收合依據';
+}
+
+const _rx5Filter = { high: true, pend: true };
+function toggleRx5Filter(type) {
+  _rx5Filter[type] = !_rx5Filter[type];
+  document.getElementById(`rx5t-${type}`)?.classList.toggle('active', _rx5Filter[type]);
+  let visible = 0;
+  document.querySelectorAll('#rx5-cards-list .rx5-card').forEach(card => {
+    const show = (card.dataset.conf === 'high' && _rx5Filter.high)
+              || (card.dataset.conf === 'pend' && _rx5Filter.pend);
+    card.style.display = show ? '' : 'none';
+    if (show) visible++;
+  });
+  const el = document.getElementById('rx5-visible-count');
+  if (el) el.textContent = visible;
 }
 
 function saveIntegratedPrescription(patientId, strategy) {
