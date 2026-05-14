@@ -6343,6 +6343,30 @@ function _btracksMLAPDirection(ml, ap) {
   return '';
 }
 
+function _getRombergChairSettings(canalStr) {
+  if (!canalStr) return null;
+  const c = canalStr.toLowerCase();
+  const hasAnt  = /ant\.|anterior/.test(c);
+  const hasPost = /post\.|posterior/.test(c);
+  const hasLat  = /lat\.|lateral|horizontal/.test(c);
+  if (hasLat || (hasAnt && hasPost)) {
+    const dir = c.includes('right') ? '右轉' : c.includes('left') ? '左轉' : '側轉';
+    return { posture: '坐姿', axis: 'Z軸', direction: dir,
+             note: '依患側方向旋轉，確認頭部固定中線' };
+  }
+  if (hasAnt) {
+    const dir = c.includes('bilateral') ? '往前倒（正中）' : c.includes('right') ? '往前倒（偏右）' : '往前倒（偏左）';
+    return { posture: '趴臥', axis: 'Y軸', direction: dir,
+             note: '前額置於支撐架，確認呼吸道暢通' };
+  }
+  if (hasPost) {
+    const dir = c.includes('bilateral') ? '往後倒（正中）' : c.includes('right') ? '往後倒（偏右）' : '往後倒（偏左）';
+    return { posture: '仰臥', axis: 'Y軸', direction: dir,
+             note: '枕部支撐到位，頸部自然延伸，避免頸椎過伸' };
+  }
+  return null;
+}
+
 function _renderRombergResultHTML(result) {
   const modeColor = result.mode === 'FAILURE' ? '#C05621' : '#065F46';
   const modeBg    = result.mode === 'FAILURE' ? '#FCE4D6' : '#D1FAE5';
@@ -6370,6 +6394,27 @@ function _renderRombergResultHTML(result) {
       </div>
     </div>` : '';
 
+  const chair = _getRombergChairSettings(diagLabel);
+  const chairHTML = chair ? `
+    <div style="margin-top:14px;padding:12px 14px;background:#fdf4ff;border:1px solid #e9d5ff;border-radius:8px;">
+      <div style="font-size:13px;font-weight:700;color:#7c3aed;margin-bottom:10px;">🪑 飛行椅設定（半規管復健）</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:13px;margin-bottom:8px;">
+        <div style="text-align:center;padding:8px 4px;background:#fff;border-radius:6px;border:1px solid #e9d5ff;">
+          <div style="font-size:10px;color:#9ca3af;margin-bottom:3px;">姿勢</div>
+          <div style="font-weight:700;color:#7c3aed;">${chair.posture}</div>
+        </div>
+        <div style="text-align:center;padding:8px 4px;background:#fff;border-radius:6px;border:1px solid #e9d5ff;">
+          <div style="font-size:10px;color:#9ca3af;margin-bottom:3px;">軸向</div>
+          <div style="font-weight:700;color:#7c3aed;">${chair.axis}</div>
+        </div>
+        <div style="text-align:center;padding:8px 4px;background:#fff;border-radius:6px;border:1px solid #e9d5ff;">
+          <div style="font-size:10px;color:#9ca3af;margin-bottom:3px;">方向</div>
+          <div style="font-weight:700;color:#7c3aed;">${chair.direction}</div>
+        </div>
+      </div>
+      <div style="font-size:11px;color:#6b7280;">⚠️ ${chair.note}　｜　確認病人已固定安全帶，全程監控頭暈症狀</div>
+    </div>` : '';
+
   return `
     <div style="background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:18px;">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
@@ -6382,6 +6427,7 @@ function _renderRombergResultHTML(result) {
       <div style="margin-bottom:6px;"><strong>信心分數：</strong>${(result.diagnosis.confidence * 100).toFixed(0)}%</div>
       ${result.btracks_data?.sway_velocity ? `<div style="margin-bottom:6px;"><strong>EC Sway Velocity：</strong>${result.btracks_data.sway_velocity.toFixed(2)} cm/s</div>` : ''}
       ${alertsHTML}
+      ${chairHTML}
       ${trainingHTML}
       <div style="margin-top:12px;font-size:11px;color:#9ca3af;">Prescription Key: ${result.prescription_key}</div>
     </div>`;
