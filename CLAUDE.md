@@ -114,3 +114,50 @@
 - Intrusion 振幅過濾器：小振幅 → Flocculus/SC + M1固視穩定處方；大振幅 → Cross-Cord Pathway + M7複合處方
 - 當日處方產生器（Zone1-5）：三模組整合分析、策略選擇、處方表、PDF匯出、儲存至歷史
 - RightEye 截圖 AI 自動讀取（已完成，呼叫 Railway /api/analyze-righteye）
+- BCF 飛行椅處方自動化（`_computeBCFChairRx`）：8半規管矩陣、Step-Jitter 步進計劃、雙側非對稱補償算法
+
+---
+
+## BCF 飛行椅處方算法（`_computeBCFChairRx`）
+
+### 輸入變量
+| 變量 | 來源 | 說明 |
+|------|------|------|
+| canalStr | entry.failure.canal | 失效半規管字串（無論 FAILURE/COMPENSATORY 模式均取 failure canal）|
+| apSway | btracksData.cop_y_mean | AP 方向重心偏移（cm）|
+| mlSway | btracksData.cop_x_mean | ML 方向重心偏移（cm）|
+| pathLength | input.path_eyes_closed | VES 條件路徑長度（cm）|
+
+### 8半規管臨床矩陣（canalCode → 飛行椅基礎參數）
+| Code | 對應Canal | 姿勢 | 初始Yaw | 方向 | 平面 |
+|------|----------|------|---------|------|------|
+| RAC | Right Ant. Canal | 趴臥 | +45° | 往前倒 | RALH |
+| LPC | Left Post. Canal | 坐姿 | +45° | 往後倒 | RALH |
+| LAC | Left Ant. Canal | 趴臥 | -45° | 往前倒 | LARP |
+| RPC | Right Post. Canal | 坐姿 | -45° | 往後倒 | LARP |
+| HRC | Right Lateral Canal | 坐姿 | 0° | 右滾轉 | Horizontal |
+| HLC | Left Lateral Canal | 坐姿 | 0° | 左滾轉 | Horizontal |
+| BAC | Bilateral Ant. Canal | 趴臥 | 0° | 往前倒 | Pure Sagittal |
+| BPC | Bilateral Post. Canal | 坐姿 | 0° | 往後倒 | Pure Sagittal |
+
+**Canal string → Code 映射邏輯：**
+- "Right Ant. + Post. Canal" (PR方向) → HRC（水平半規管）
+- "Left Ant. + Post. Canal" (PL方向) → HLC
+
+### Step-Jitter 步進計劃
+- 步進：5°→45°，每步 5°（9步）
+- Jitter 振幅：≤20° → ±1°；>20° → ±2°
+- 步進節律（依 VES Path Length）：
+  - < 40 cm（輕度）→ 每 2 秒一步
+  - 40–70 cm（中度）→ 每 3 秒一步
+  - > 70 cm（重度）→ 每 5 秒一步
+- 閉環回饋：Path 改善 >10% → 增加步進角度；退步 → 退至 2° 步進
+
+### 雙側非對稱補償算法（僅 BAC/BPC）
+- Vector Angle = arctan(|ML| / |AP|)
+- Case A：AP > ML × 1.5 → Yaw 補償 = arctan(ML/AP)°，加入初始 Yaw
+- Case B：ML > AP → Roll 補償 = arctan(ML/AP)°（顯示提示，不調整 Yaw）
+
+### Horizontal Canal 向量分析（HRC/HLC）
+- |Vector Angle| ≤ 15° → 純 Yaw 旋轉
+- |Vector Angle| > 15° → 考慮加入 Roll 分量

@@ -2326,6 +2326,125 @@ const ROMBERG_MATRIX_B = {
 };
 
 // ============================================================
+// _computeBCFChairRx: BCF flying chair prescription algorithm
+// Inputs: canalStr from failure.canal, apSway=COP_y (cm),
+//         mlSway=COP_x (cm), pathLength=VES path (cm)
+// ============================================================
+function _computeBCFChairRx(canalStr, apSway, mlSway, pathLength) {
+  if (!canalStr) return null;
+  const c = canalStr.toLowerCase();
+
+  const hasAnt      = /ant\.|anterior/.test(c);
+  const hasPost     = /post\.|posterior/.test(c);
+  const hasLat      = /lat\.|lateral|horizontal/.test(c);
+  const isBilateral = /bilateral/.test(c);
+  const isRight     = /right/.test(c);
+  const isLeft      = /left/.test(c);
+
+  // Classify to 8-canal code
+  let canalCode = '';
+  if      (hasLat && isRight)                   canalCode = 'HRC';
+  else if (hasLat && isLeft)                    canalCode = 'HLC';
+  else if (hasLat)                              canalCode = 'HRC';
+  else if (hasAnt && hasPost && isRight)        canalCode = 'HRC';  // PR: Right Lateral
+  else if (hasAnt && hasPost && isLeft)         canalCode = 'HLC';  // PL: Left Lateral
+  else if (isBilateral && hasAnt && !hasPost)   canalCode = 'BAC';
+  else if (isBilateral && hasPost && !hasAnt)   canalCode = 'BPC';
+  else if (hasAnt && isRight)                   canalCode = 'RAC';
+  else if (hasAnt && isLeft)                    canalCode = 'LAC';
+  else if (hasPost && isRight)                  canalCode = 'RPC';
+  else if (hasPost && isLeft)                   canalCode = 'LPC';
+  else return null;
+
+  // Base parameters per canal (posture, pitch direction, Yaw initial, semicircular plane)
+  const CANAL_BASE = {
+    RAC: { posture: '趴臥', pitchDir: '往前倒', yawBase:  45, plane: 'RALH',          axis: 'Y軸' },
+    LPC: { posture: '坐姿', pitchDir: '往後倒', yawBase:  45, plane: 'RALH',          axis: 'Y軸' },
+    LAC: { posture: '趴臥', pitchDir: '往前倒', yawBase: -45, plane: 'LARP',          axis: 'Y軸' },
+    RPC: { posture: '坐姿', pitchDir: '往後倒', yawBase: -45, plane: 'LARP',          axis: 'Y軸' },
+    HRC: { posture: '坐姿', pitchDir: '右滾轉', yawBase:   0, plane: 'Horizontal',    axis: 'Z軸' },
+    HLC: { posture: '坐姿', pitchDir: '左滾轉', yawBase:   0, plane: 'Horizontal',    axis: 'Z軸' },
+    BAC: { posture: '趴臥', pitchDir: '往前倒', yawBase:   0, plane: 'Pure Sagittal', axis: 'Y軸' },
+    BPC: { posture: '坐姿', pitchDir: '往後倒', yawBase:   0, plane: 'Pure Sagittal', axis: 'Y軸' },
+  };
+  const base = CANAL_BASE[canalCode];
+  if (!base) return null;
+
+  // Step-Jitter frequency based on VES path length
+  const path = pathLength || 0;
+  let jitterFreq, jitterNote;
+  if (path > 0 && path < 40)     { jitterFreq = '每 2 秒一步'; jitterNote = `Path ${path.toFixed(0)} cm（輕度）`; }
+  else if (path >= 40 && path < 70) { jitterFreq = '每 3 秒一步'; jitterNote = `Path ${path.toFixed(0)} cm（中度）`; }
+  else if (path >= 70)           { jitterFreq = '每 5 秒一步'; jitterNote = `Path ${path.toFixed(0)} cm（重度）`; }
+  else                           { jitterFreq = '每 3 秒一步'; jitterNote = '未提供 Path 數據'; }
+
+  // Asymmetry offset for Bilateral canals only
+  const ap = Math.abs(apSway || 0);
+  const ml = Math.abs(mlSway || 0);
+  let offsetDeg  = 0;
+  let offsetNote = '';
+  let asymCase   = '';
+
+  if ((canalCode === 'BAC' || canalCode === 'BPC') && (ap > 0 || ml > 0)) {
+    if (ap > ml * 1.5) {
+      offsetDeg  = Math.round(Math.atan2(ml, ap) * 180 / Math.PI);
+      asymCase   = 'A';
+      offsetNote = `Case A: AP ${ap.toFixed(1)} cm > ML ${ml.toFixed(1)} cm × 1.5 → Yaw 補償 +${offsetDeg}°`;
+    } else if (ml > ap) {
+      offsetDeg  = Math.round(Math.atan2(ml, ap) * 180 / Math.PI);
+      asymCase   = 'B';
+      offsetNote = `Case B: ML ${ml.toFixed(1)} cm > AP ${ap.toFixed(1)} cm → Roll 補償 ${offsetDeg}°`;
+    }
+  }
+
+  // Horizontal Canal: vector angle analysis
+  let hcYawNote = '';
+  if (canalCode === 'HRC' || canalCode === 'HLC') {
+    if (ap > 0 || ml > 0) {
+      const vecAngle = Math.abs(Math.atan2(ml, ap) * 180 / Math.PI);
+      hcYawNote = vecAngle <= 15
+        ? `向量角 ${vecAngle.toFixed(1)}° ≤ ±15° → 純 Yaw 旋轉`
+        : `向量角 ${vecAngle.toFixed(1)}° > ±15° → 考慮加入 Roll 分量`;
+    }
+  }
+
+  // Yaw initial (base + asymmetry offset for Case A)
+  const yawInitial = base.yawBase + (asymCase === 'A' ? offsetDeg : 0);
+
+  // Step-Jitter plan: 5°→45° in 5° increments, ±1° for ≤20°, ±2° for >20°
+  const steps = [];
+  for (let deg = 5; deg <= 45; deg += 5) {
+    steps.push({ step: deg, jitter: deg <= 20 ? '±1°' : '±2°' });
+  }
+
+  // Safety notes
+  const safetyNotes = [];
+  if (base.posture === '趴臥')      safetyNotes.push('前額置於支撐架，確認呼吸道暢通');
+  else if (base.posture === '仰臥') safetyNotes.push('枕部支撐到位，頸部自然延伸，避免過伸');
+  else                              safetyNotes.push('確認頭部固定中線，安全帶已繫好');
+  safetyNotes.push('首次從 5° 開始，全程監控頭暈症狀');
+  safetyNotes.push('Path 改善 >10% → 增加步進；退步 → 退至 2° 步進');
+
+  return {
+    canalCode,
+    plane:      base.plane,
+    posture:    base.posture,
+    axis:       base.axis,
+    pitchDir:   base.pitchDir,
+    yawBase:    base.yawBase,
+    yawInitial,
+    offsetDeg,
+    offsetNote,
+    asymCase,
+    hcYawNote,
+    jitterFreq,
+    jitterNote,
+    steps,
+    safetyNotes,
+  };
+}
+
+// ============================================================
 // computeRombergRx(input)
 // ============================================================
 function computeRombergRx(input) {
@@ -2408,6 +2527,14 @@ function computeRombergRx(input) {
   if (input.sway_direction && input.sway_direction !== '') rombergAbnCount += 1;
   rombergAbnCount += alerts.length;
 
+  // BCF flying chair prescription — always based on failure canal regardless of mode
+  const bcfChair = _computeBCFChairRx(
+    entry.failure.canal || '',
+    btracksData.cop_y_mean,  // AP_Sway
+    btracksData.cop_x_mean,  // ML_Sway
+    input.path_eyes_closed   // VES path length
+  );
+
   return {
     rq:             parseFloat(rq.toFixed(3)),
     mode,
@@ -2425,6 +2552,7 @@ function computeRombergRx(input) {
     prescription_key: prescriptionKey,
     weakRegions:      rombergWeakRegions,
     abnormalCount:    rombergAbnCount,
+    bcfChair,
   };
 }
 
@@ -6394,25 +6522,39 @@ function _renderRombergResultHTML(result) {
       </div>
     </div>` : '';
 
-  const chair = _getRombergChairSettings(diagLabel);
-  const chairHTML = chair ? `
-    <div style="margin-top:14px;padding:12px 14px;background:#fdf4ff;border:1px solid #e9d5ff;border-radius:8px;">
-      <div style="font-size:13px;font-weight:700;color:#7c3aed;margin-bottom:10px;">🪑 飛行椅設定（半規管復健）</div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:13px;margin-bottom:8px;">
+  const bcfChair = result.bcfChair || null;
+  const chairHTML = bcfChair ? `
+    <div style="margin-top:14px;padding:14px;background:#fdf4ff;border:1px solid #e9d5ff;border-radius:8px;">
+      <div style="font-size:13px;font-weight:700;color:#7c3aed;margin-bottom:10px;">🪑 BCF 飛行椅處方（${bcfChair.canalCode} — ${bcfChair.plane}）</div>
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;font-size:13px;margin-bottom:10px;">
         <div style="text-align:center;padding:8px 4px;background:#fff;border-radius:6px;border:1px solid #e9d5ff;">
           <div style="font-size:10px;color:#9ca3af;margin-bottom:3px;">姿勢</div>
-          <div style="font-weight:700;color:#7c3aed;">${chair.posture}</div>
+          <div style="font-weight:700;color:#7c3aed;">${bcfChair.posture}</div>
         </div>
         <div style="text-align:center;padding:8px 4px;background:#fff;border-radius:6px;border:1px solid #e9d5ff;">
           <div style="font-size:10px;color:#9ca3af;margin-bottom:3px;">軸向</div>
-          <div style="font-weight:700;color:#7c3aed;">${chair.axis}</div>
+          <div style="font-weight:700;color:#7c3aed;">${bcfChair.axis}</div>
         </div>
         <div style="text-align:center;padding:8px 4px;background:#fff;border-radius:6px;border:1px solid #e9d5ff;">
           <div style="font-size:10px;color:#9ca3af;margin-bottom:3px;">方向</div>
-          <div style="font-weight:700;color:#7c3aed;">${chair.direction}</div>
+          <div style="font-weight:700;color:#7c3aed;">${bcfChair.pitchDir}</div>
         </div>
       </div>
-      <div style="font-size:11px;color:#6b7280;">⚠️ ${chair.note}　｜　確認病人已固定安全帶，全程監控頭暈症狀</div>
+      <div style="font-size:12px;color:#4b5563;margin-bottom:6px;padding:6px 10px;background:#f5f3ff;border-radius:6px;display:flex;flex-wrap:wrap;gap:12px;">
+        <span><span style="font-weight:600;color:#7c3aed;">初始 Yaw：</span>${bcfChair.yawInitial}°${bcfChair.asymCase === 'A' && bcfChair.offsetDeg ? ` <span style="color:#6b7280;font-size:11px;">（基礎 ${bcfChair.yawBase}° + 偏移 ${bcfChair.offsetDeg}°）</span>` : ''}</span>
+        <span><span style="font-weight:600;color:#7c3aed;">步進節律：</span>${bcfChair.jitterFreq} <span style="color:#6b7280;font-size:11px;">(${bcfChair.jitterNote})</span></span>
+      </div>
+      ${bcfChair.offsetNote ? `<div style="font-size:11px;color:#92400e;background:#fffbeb;padding:5px 10px;border-radius:5px;margin-bottom:6px;">📐 ${bcfChair.offsetNote}</div>` : ''}
+      ${bcfChair.hcYawNote  ? `<div style="font-size:11px;color:#1e40af;background:#eff6ff;padding:5px 10px;border-radius:5px;margin-bottom:6px;">🔄 ${bcfChair.hcYawNote}</div>` : ''}
+      <div style="font-size:11px;font-weight:600;color:#7c3aed;margin-bottom:5px;">步進計劃（Step-Jitter 5°→45°）</div>
+      <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;">
+        ${bcfChair.steps.map(s => `
+          <div style="text-align:center;padding:5px 7px;background:#fff;border:1px solid #e9d5ff;border-radius:5px;min-width:38px;">
+            <div style="font-weight:700;color:#7c3aed;font-size:12px;">${s.step}°</div>
+            <div style="color:#9ca3af;font-size:10px;">${s.jitter}</div>
+          </div>`).join('')}
+      </div>
+      <div style="font-size:11px;color:#6b7280;line-height:1.6;">${bcfChair.safetyNotes.map(n => `⚠️ ${n}`).join('<br>')}</div>
     </div>` : '';
 
   return `
