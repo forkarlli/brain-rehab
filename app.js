@@ -160,6 +160,26 @@ function saveAssessmentToServer(assessment) {
 
 const SAMPLE_ASSESSMENT_IDS = new Set(['A001','A002','A003','A004','A005','A006']);
 
+function populateAssessDateDropdown(patientId) {
+  const sel = document.getElementById('assess-date');
+  if (!sel || sel.tagName !== 'SELECT') return;
+  const today = new Date().toISOString().slice(0, 10);
+  const prevVal = sel.value;
+  const dates = [...new Set(
+    DB.assessments
+      .filter(a => patientId ? a.patientId === patientId : true)
+      .map(a => a.date)
+      .filter(Boolean)
+  )].sort((a, b) => b.localeCompare(a));
+  const allDates = dates.includes(today) ? dates : [today, ...dates];
+  sel.innerHTML = '<option value="">— 請選擇日期 —</option>' +
+    allDates.map(d =>
+      `<option value="${d}">${d}${d === today ? '（今日）' : ''}</option>`
+    ).join('');
+  if (prevVal && allDates.includes(prevVal)) sel.value = prevVal;
+  else sel.value = today;
+}
+
 async function loadAssessmentsFromServer() {
   try {
     const resp = await fetch('https://brain-rehab-production.up.railway.app/api/assessments');
@@ -193,6 +213,8 @@ async function loadAssessmentsFromServer() {
       saveToStorage();
       renderDashboard();
       renderAssessments(); // always re-render regardless of current page
+      const _aPatSel = document.getElementById('assess-patient-select');
+      if (_aPatSel) populateAssessDateDropdown(_aPatSel.value);
       return;
     }
 
@@ -5877,6 +5899,28 @@ function renderRombergInterface() {
           <input type="number" class="input" id="romberg-path-ec" min="0" step="0.1" placeholder="例：54.8">
         </div>
 
+        <div style="border:1px solid #e5e7eb;border-radius:8px;padding:14px;margin-bottom:14px;background:#fafafa;">
+          <label class="form-label" style="margin-bottom:10px;display:block;color:#374151;font-weight:600;">Percentile 百分位數（越低＝越差，從報告輸入）</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div>
+              <label style="font-size:11px;color:#6b7280;font-weight:600;display:block;margin-bottom:4px;">STD Percentile</label>
+              <input type="number" class="input" id="romberg-pct-std" min="0" max="100" step="1" placeholder="例：55（基準）">
+            </div>
+            <div>
+              <label style="font-size:11px;color:#6b7280;font-weight:600;display:block;margin-bottom:4px;">PRO Percentile</label>
+              <input type="number" class="input" id="romberg-pct-pro" min="0" max="100" step="1" placeholder="例：30">
+            </div>
+            <div>
+              <label style="font-size:11px;color:#6b7280;font-weight:600;display:block;margin-bottom:4px;">VIS Percentile</label>
+              <input type="number" class="input" id="romberg-pct-vis" min="0" max="100" step="1" placeholder="例：20">
+            </div>
+            <div>
+              <label style="font-size:11px;color:#6b7280;font-weight:600;display:block;margin-bottom:4px;">VES Percentile</label>
+              <input type="number" class="input" id="romberg-pct-ves" min="0" max="100" step="1" placeholder="例：10">
+            </div>
+          </div>
+        </div>
+
         <div class="form-group" style="margin-bottom:14px;">
           <label class="form-label">RQ（自動計算）</label>
           <span id="romberg-rq-display" style="font-size:1.4em;font-weight:bold;vertical-align:middle;">—</span>
@@ -5897,7 +5941,8 @@ function renderRombergInterface() {
           </select>
         </div>
 
-        <button id="romberg-compute-btn" class="btn btn-primary" style="width:100%;">生成診斷與處方</button>
+        <button id="romberg-compute-btn" class="btn btn-primary" style="width:100%;margin-bottom:10px;">生成診斷與處方</button>
+        <button id="btracks-save-btn" class="btn btn-outline" style="width:100%;" onclick="saveBTracksAssessment()">💾 儲存平衡測試結果</button>
 
         <div id="romberg-result" style="display:none;margin-top:24px;"></div>
       </div>
@@ -5945,6 +5990,56 @@ function renderRombergInterface() {
   });
 }
 
+async function saveBTracksAssessment() {
+  const patientId = document.getElementById('assess-patient-select')?.value;
+  const date = document.getElementById('assess-date')?.value;
+  if (!patientId) { showToast('請先選擇病人', 'error'); return; }
+  if (!date) { showToast('請選擇評估日期', 'error'); return; }
+  const direction = document.getElementById('romberg-direction')?.value;
+  if (!direction) { showToast('請選擇偏移方向後再儲存', 'error'); return; }
+  const eo = parseFloat(document.getElementById('romberg-path-eo')?.value);
+  const ec = parseFloat(document.getElementById('romberg-path-ec')?.value);
+  if (!(eo > 0) || !(ec > 0)) { showToast('請輸入有效的路徑長度後再儲存', 'error'); return; }
+  const rq = parseFloat((ec / eo).toFixed(2));
+  const pro = parseFloat(document.getElementById('romberg-path-pro')?.value) || null;
+  const vis = parseFloat(document.getElementById('romberg-path-vis')?.value) || null;
+  const pctStd = parseFloat(document.getElementById('romberg-pct-std')?.value);
+  const pctPro = parseFloat(document.getElementById('romberg-pct-pro')?.value);
+  const pctVis = parseFloat(document.getElementById('romberg-pct-vis')?.value);
+  const pctVes = parseFloat(document.getElementById('romberg-pct-ves')?.value);
+  const prev = DB.assessments
+    .filter(a => a.patientId === patientId && a.type === 'Romberg 測試（BTrackS）')
+    .sort((a, b) => new Date(b.date) - new Date(a.date))[0]?.score || 0;
+  const therapist = document.getElementById('assess-therapist')?.value || '治療師';
+  const rec = {
+    id: genId('A'), patientId, date,
+    type: 'Romberg 測試（BTrackS）',
+    score: rq, maxScore: 10, prev, therapist,
+    rq, sway_direction: direction,
+    path_eo: eo, path_ec: ec,
+    path_pro: pro, path_vis: vis,
+    pct_std: isNaN(pctStd) ? null : pctStd,
+    pct_pro: isNaN(pctPro) ? null : pctPro,
+    pct_vis: isNaN(pctVis) ? null : pctVis,
+    pct_ves: isNaN(pctVes) ? null : pctVes,
+    btracks_data: _btracksData ? {
+      path_std: _btracksData.path_std, path_pro: _btracksData.path_pro,
+      path_vis: _btracksData.path_vis, path_ves: _btracksData.path_ves,
+      pct_std: _btracksData.pct_std ?? (isNaN(pctStd) ? null : pctStd),
+      pct_pro: _btracksData.pct_pro ?? (isNaN(pctPro) ? null : pctPro),
+      pct_vis: _btracksData.pct_vis ?? (isNaN(pctVis) ? null : pctVis),
+      pct_ves: _btracksData.pct_ves ?? (isNaN(pctVes) ? null : pctVes),
+      cop_ml_ves: _btracksData.cop_ml_ves, cop_ap_ves: _btracksData.cop_ap_ves,
+      cop_ang_ves: _btracksData.cop_ang_ves,
+    } : null,
+  };
+  DB.assessments.unshift(rec);
+  saveToStorage();
+  await saveAssessmentToServer(rec);
+  populateAssessDateDropdown(patientId);
+  showToast('平衡測試結果已儲存', 'success');
+}
+
 function _onRombergSourceChange() {
   const src      = document.getElementById('romberg-source').value;
   const imgZone  = document.getElementById('btracks-upload-zone');
@@ -5958,20 +6053,28 @@ function _buildBTracksSummaryHTML(parsed, dir, dirSource, title) {
   const fmt   = k => parsed[k] != null ? parsed[k] : '—';
   const rq    = parsed.path_std && parsed.path_ves ? (parsed.path_ves / parsed.path_std).toFixed(2) : '—';
   const angV  = parsed.cop_ang_ves != null ? parsed.cop_ang_ves : `<span style="color:#d97706;">—</span>`;
+  const hasPct = parsed.pct_std != null || parsed.pct_pro != null || parsed.pct_vis != null || parsed.pct_ves != null;
+  const fmtPct = k => {
+    const v = parsed[k];
+    if (v == null) return '—';
+    const clr = v < 25 ? '#dc2626' : v <= 50 ? '#d97706' : '#16a34a';
+    return `<span style="color:${clr};font-weight:600;">${v}%</span>`;
+  };
   return `
     <div style="font-weight:600;color:#1d4ed8;margin-bottom:8px;">📊 ${title}</div>
     <table style="width:100%;font-size:12px;border-collapse:collapse;">
       <tr style="background:#dbeafe;font-weight:600;">
         <td style="padding:4px 8px;">條件</td>
         <td style="padding:4px 8px;text-align:right;">Path (cm)</td>
+        ${hasPct ? '<td style="padding:4px 8px;text-align:right;">%ile</td>' : ''}
         <td style="padding:4px 8px;text-align:right;">ML</td>
         <td style="padding:4px 8px;text-align:right;">AP</td>
         <td style="padding:4px 8px;text-align:right;">Ang°</td>
       </tr>
-      <tr><td style="padding:3px 8px;">STD</td><td style="padding:3px 8px;text-align:right;">${fmt('path_std')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ml_std')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ap_std')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ang_std')}</td></tr>
-      <tr><td style="padding:3px 8px;">PRO</td><td style="padding:3px 8px;text-align:right;">${fmt('path_pro')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ml_pro')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ap_pro')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ang_pro')}</td></tr>
-      <tr><td style="padding:3px 8px;">VIS</td><td style="padding:3px 8px;text-align:right;">${fmt('path_vis')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ml_vis')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ap_vis')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ang_vis')}</td></tr>
-      <tr style="font-weight:600;background:#eff6ff;"><td style="padding:3px 8px;">VES</td><td style="padding:3px 8px;text-align:right;">${fmt('path_ves')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ml_ves')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ap_ves')}</td><td style="padding:3px 8px;text-align:right;">${angV}</td></tr>
+      <tr><td style="padding:3px 8px;">STD</td><td style="padding:3px 8px;text-align:right;">${fmt('path_std')}</td>${hasPct ? `<td style="padding:3px 8px;text-align:right;">${fmtPct('pct_std')}</td>` : ''}<td style="padding:3px 8px;text-align:right;">${fmt('cop_ml_std')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ap_std')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ang_std')}</td></tr>
+      <tr><td style="padding:3px 8px;">PRO</td><td style="padding:3px 8px;text-align:right;">${fmt('path_pro')}</td>${hasPct ? `<td style="padding:3px 8px;text-align:right;">${fmtPct('pct_pro')}</td>` : ''}<td style="padding:3px 8px;text-align:right;">${fmt('cop_ml_pro')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ap_pro')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ang_pro')}</td></tr>
+      <tr><td style="padding:3px 8px;">VIS</td><td style="padding:3px 8px;text-align:right;">${fmt('path_vis')}</td>${hasPct ? `<td style="padding:3px 8px;text-align:right;">${fmtPct('pct_vis')}</td>` : ''}<td style="padding:3px 8px;text-align:right;">${fmt('cop_ml_vis')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ap_vis')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ang_vis')}</td></tr>
+      <tr style="font-weight:600;background:#eff6ff;"><td style="padding:3px 8px;">VES</td><td style="padding:3px 8px;text-align:right;">${fmt('path_ves')}</td>${hasPct ? `<td style="padding:3px 8px;text-align:right;">${fmtPct('pct_ves')}</td>` : ''}<td style="padding:3px 8px;text-align:right;">${fmt('cop_ml_ves')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ap_ves')}</td><td style="padding:3px 8px;text-align:right;">${angV}</td></tr>
     </table>
     <div style="margin-top:10px;display:flex;gap:20px;flex-wrap:wrap;font-size:13px;font-weight:600;">
       <span>RQ = <strong style="color:#1d4ed8;">${rq}</strong></span>
@@ -5999,6 +6102,14 @@ function _handleBTrackSHtmlFile(file) {
     if (parsed.path_vis != null && visEl) visEl.value = parsed.path_vis;
     if (parsed.path_ves != null && ecEl)  ecEl.value  = parsed.path_ves;
     _rombergUpdateRq();
+    const pctStdEl = document.getElementById('romberg-pct-std');
+    const pctProEl = document.getElementById('romberg-pct-pro');
+    const pctVisEl = document.getElementById('romberg-pct-vis');
+    const pctVesEl = document.getElementById('romberg-pct-ves');
+    if (parsed.pct_std != null && pctStdEl) pctStdEl.value = parsed.pct_std;
+    if (parsed.pct_pro != null && pctProEl) pctProEl.value = parsed.pct_pro;
+    if (parsed.pct_vis != null && pctVisEl) pctVisEl.value = parsed.pct_vis;
+    if (parsed.pct_ves != null && pctVesEl) pctVesEl.value = parsed.pct_ves;
     const dirFromAng  = _btracksAngleDirection(parsed.cop_ap_ves, parsed.cop_ang_ves);
     const dirFromMLAP = _btracksMLAPDirection(parsed.cop_ml_ves, parsed.cop_ap_ves);
     const dir       = dirFromAng || dirFromMLAP;
@@ -6048,6 +6159,14 @@ function _handleBTrackSFiles(files) {
     if (parsed.path_vis != null && visEl) visEl.value = parsed.path_vis;
     if (parsed.path_ves != null && ecEl)  ecEl.value  = parsed.path_ves;
     _rombergUpdateRq();
+    const pctStdEl = document.getElementById('romberg-pct-std');
+    const pctProEl = document.getElementById('romberg-pct-pro');
+    const pctVisEl = document.getElementById('romberg-pct-vis');
+    const pctVesEl = document.getElementById('romberg-pct-ves');
+    if (parsed.pct_std != null && pctStdEl) pctStdEl.value = parsed.pct_std;
+    if (parsed.pct_pro != null && pctProEl) pctProEl.value = parsed.pct_pro;
+    if (parsed.pct_vis != null && pctVisEl) pctVisEl.value = parsed.pct_vis;
+    if (parsed.pct_ves != null && pctVesEl) pctVesEl.value = parsed.pct_ves;
 
     const dirFromAng  = _btracksAngleDirection(parsed.cop_ap_ves, parsed.cop_ang_ves);
     const dirFromMLAP = _btracksMLAPDirection(parsed.cop_ml_ves, parsed.cop_ap_ves);
@@ -6069,6 +6188,7 @@ function parseBTrackSReport(htmlText) {
   const doc = new DOMParser().parseFromString(htmlText, 'text/html');
   const result = {
     path_std: null, path_pro: null, path_vis: null, path_ves: null,
+    pct_std: null, pct_pro: null, pct_vis: null, pct_ves: null,
     cop_ml_std: null, cop_ap_std: null, cop_ang_std: null,
     cop_ml_pro: null, cop_ap_pro: null, cop_ang_pro: null,
     cop_ml_vis: null, cop_ap_vis: null, cop_ang_vis: null,
@@ -6106,11 +6226,12 @@ function parseBTrackSReport(htmlText) {
     const headerTexts = headerCells.map(c => norm(c.textContent));
 
     const colPath = headerTexts.findIndex(t => t.includes('path'));
+    const colPct  = headerTexts.findIndex(t => t === '%' || t === 'pct' || /\bpercentile\b/.test(t));
     const colML   = headerTexts.findIndex(t => /\bml\b/.test(t) || t.includes('medial'));
     const colAP   = headerTexts.findIndex(t => /\bap\b/.test(t) || t.includes('anterior'));
     const colAng  = headerTexts.findIndex(t => /\bang\b/.test(t) || t.includes('angle') || t.includes('deg'));
 
-    const isPathTable = colPath >= 0;
+    const isPathTable = colPath >= 0 || colPct >= 0;
     const isCopTable  = colML >= 0 || colAP >= 0 || colAng >= 0;
     if (!isPathTable && !isCopTable) continue;
 
@@ -6125,6 +6246,10 @@ function parseBTrackSReport(htmlText) {
       if (isPathTable && colPath >= 0 && cells.length > colPath) {
         const v = extractNum(cells[colPath]);
         if (v !== null) result[`path_${cond}`] = v;
+      }
+      if (isPathTable && colPct >= 0 && cells.length > colPct) {
+        const v = extractNum(cells[colPct]);
+        if (v !== null && v >= 0 && v <= 100) result[`pct_${cond}`] = v;
       }
       if (isCopTable) {
         if (colML  >= 0 && cells.length > colML)  { const v = extractNum(cells[colML]);  if (v !== null) result[`cop_ml_${cond}`]  = v; }
@@ -6257,6 +6382,58 @@ function _rombergUpdateRq() {
   }
 }
 
+const _PCT_TRAINING = {
+  ves: { name: 'Vestibular Training', icon: '🌀', methods: ['VOR 訓練（頭眼協調）', '頭部動作訓練（速度漸進）', '前庭刺激整合'] },
+  vis: { name: 'Visual Training',     icon: '👁',  methods: ['視覺遮蔽平衡訓練', '視覺追蹤協調訓練', '眼動-平衡整合'] },
+  pro: { name: 'Proprioception Training', icon: '🦶', methods: ['不穩定表面訓練', '本體感覺刺激（關節加壓）', '關節位置覺強化'] },
+};
+
+function computePercentileAnalysis(pctPro, pctVis, pctVes) {
+  const systems = [
+    { key: 'ves', pct: pctVes },
+    { key: 'vis', pct: pctVis },
+    { key: 'pro', pct: pctPro },
+  ].filter(s => s.pct != null && !isNaN(s.pct));
+  if (systems.length === 0) return null;
+  systems.sort((a, b) => a.pct - b.pct);
+  const weights = [50, 30, 20];
+  systems.forEach((s, i) => {
+    s.weight = weights[i] ?? 20;
+    s.colorHex = s.pct < 25 ? '#dc2626' : s.pct <= 50 ? '#d97706' : '#16a34a';
+    s.colorBg  = s.pct < 25 ? '#fef2f2' : s.pct <= 50 ? '#fffbeb' : '#f0fdf4';
+    s.level    = s.pct < 25 ? '異常' : s.pct <= 50 ? '偏低' : '正常';
+    s.priority = s.pct < 25;
+  });
+  return { systems, hasAbnormal: systems.some(s => s.priority) };
+}
+
+function _renderPercentileAnalysisHTML(analysis) {
+  if (!analysis) return '';
+  const { systems, hasAbnormal } = analysis;
+  const bars = systems.map(s => {
+    const t = _PCT_TRAINING[s.key] || {};
+    return `
+      <div style="margin-bottom:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+          <span style="font-size:12px;font-weight:600;color:${s.colorHex};">${t.icon || ''} ${t.name || s.key}</span>
+          <span style="font-size:11px;background:${s.colorBg};color:${s.colorHex};padding:2px 7px;border-radius:4px;font-weight:600;">${s.pct}th %ile・${s.level}</span>
+        </div>
+        <div style="background:#e5e7eb;border-radius:4px;height:18px;overflow:hidden;">
+          <div style="height:100%;width:${s.weight}%;background:${s.colorHex};display:flex;align-items:center;justify-content:center;color:#fff;font-size:10px;font-weight:700;min-width:32px;">${s.weight}%</div>
+        </div>
+        <div style="font-size:11px;color:#6b7280;margin-top:3px;">${(t.methods || []).join('、')}</div>
+      </div>`;
+  }).join('');
+  const priorities = systems.filter(s => s.priority).map(s => (_PCT_TRAINING[s.key]?.name || s.key)).join('、');
+  return `
+    <div style="background:#fff;border:1.5px solid #7c3aed;border-radius:10px;padding:16px;margin-top:16px;">
+      <div style="font-size:14px;font-weight:700;color:#7c3aed;margin-bottom:12px;">📊 感覺系統 Percentile 訓練分析</div>
+      ${hasAbnormal ? `<div style="background:#fef2f2;border:1px solid #fca5a5;border-radius:6px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:#dc2626;font-weight:600;">⚠️ 需優先處理：${priorities}（&lt;25th percentile）</div>` : ''}
+      ${bars}
+      <div style="font-size:11px;color:#9ca3af;margin-top:4px;padding-top:8px;border-top:1px solid #f3f4f6;">訓練比重依 Percentile 排序：最差 50%・次差 30%・最佳 20%</div>
+    </div>`;
+}
+
 function _rombergCompute() {
   const direction = document.getElementById('romberg-direction').value;
   const eo = parseFloat(document.getElementById('romberg-path-eo').value);
@@ -6286,6 +6463,16 @@ function _rombergCompute() {
   const resultEl = document.getElementById('romberg-result');
   resultEl.style.display = 'block';
   resultEl.innerHTML = _renderRombergResultHTML(result);
+
+  const pctPro = parseFloat(document.getElementById('romberg-pct-pro')?.value);
+  const pctVis = parseFloat(document.getElementById('romberg-pct-vis')?.value);
+  const pctVes = parseFloat(document.getElementById('romberg-pct-ves')?.value);
+  const pctAnalysis = computePercentileAnalysis(
+    isNaN(pctPro) ? null : pctPro,
+    isNaN(pctVis) ? null : pctVis,
+    isNaN(pctVes) ? null : pctVes,
+  );
+  if (pctAnalysis) resultEl.innerHTML += _renderPercentileAnalysisHTML(pctAnalysis);
 }
 
 // ===== MODAL ROMBERG HELPERS =====
@@ -6525,6 +6712,8 @@ function renderAssessments() {
   let data = DB.assessments;
   const selectedPatient = document.getElementById('assess-patient-select')?.value;
   if (selectedPatient) data = data.filter(a => a.patientId === selectedPatient);
+  const selectedDate = document.getElementById('assess-date')?.value;
+  if (selectedDate) data = data.filter(a => a.date === selectedDate);
   if (activeTab && tabTypeMap[activeTab]) data = data.filter(a => tabTypeMap[activeTab].some(t => a.type.includes(t)));
 
   if (data.length === 0) {
@@ -6806,13 +6995,130 @@ function initDailyGenerator() {
   if (sel.value) renderModuleCards(sel.value);
 }
 
+function populateRxDateDropdown(patientId) {
+  const wrap = document.getElementById('rxGen-date-wrap');
+  const sel  = document.getElementById('rxGen-date');
+  if (!wrap || !sel) return;
+  if (!patientId) { wrap.style.display = 'none'; return; }
+  const today = new Date().toISOString().slice(0, 10);
+  const prevVal = sel.value;
+  const dates = [...new Set(
+    (DB.integratedPrescriptions || [])
+      .filter(ip => ip.patientId === patientId)
+      .map(ip => ip.date)
+      .filter(Boolean)
+  )].sort((a, b) => b.localeCompare(a));
+  sel.innerHTML = `<option value="new">今日（${today}）新增處方</option>` +
+    dates.map(d => `<option value="${d}">${d} 歷史處方</option>`).join('');
+  if (prevVal && (prevVal === 'new' || dates.includes(prevVal))) sel.value = prevVal;
+  else sel.value = 'new';
+  wrap.style.display = '';
+}
+
+function onRxDateChange(value) {
+  const patientId = document.getElementById('rxGen-patient')?.value;
+  if (!patientId) return;
+  document.getElementById('rx-readonly-banner')?.remove();
+  if (!value || value === 'new') {
+    renderModuleCards(patientId);
+    return;
+  }
+  const rx = (DB.integratedPrescriptions || [])
+    .filter(ip => ip.patientId === patientId && ip.date === value)
+    .sort((a, b) => new Date(b.savedAt) - new Date(a.savedAt))[0];
+  if (!rx) { showToast('找不到該日期的處方記錄', 'error'); return; }
+  renderRxHistoryView(rx);
+}
+
+function renderRxHistoryView(rx) {
+  const zone2 = document.getElementById('rxGen-zone2');
+  const zone3 = document.getElementById('rxGen-zone3');
+  const zone4 = document.getElementById('rxGen-zone4');
+  const zone5 = document.getElementById('rxGen-zone5');
+
+  // Banner
+  document.getElementById('rx-readonly-banner')?.remove();
+  const banner = document.createElement('div');
+  banner.id = 'rx-readonly-banner';
+  banner.innerHTML = `<div style="background:#fef3c7;border:1px solid #fbbf24;border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+    <span style="font-size:18px">📋</span>
+    <div>
+      <span style="font-weight:700;color:#92400e;font-size:14px">歷史記錄（唯讀）</span>
+      <span style="color:#b45309;font-size:12px;margin-left:8px">${rx.date} ・ 策略：${rx.strategyName} ・ ${rx.itemCount} 項</span>
+    </div>
+  </div>`;
+  if (zone2) zone2.parentNode.insertBefore(banner, zone2);
+
+  if (zone3) { zone3.style.display = 'none'; zone3.innerHTML = ''; }
+  if (zone4) { zone4.style.display = 'none'; zone4.innerHTML = ''; }
+
+  if (!zone5) return;
+  const pt = getPatient(rx.patientId);
+  const cards = (rx.items || []).map((item, i) => {
+    const isEye   = item.tool === '眼動機';
+    const headCls = isEye ? 'rx5-head-eye' : 'rx5-head-fly';
+    const cardCls = item.isHighConf ? 'rx5-card-high' : 'rx5-card-pend';
+    const confBadge = item.isHighConf
+      ? '<span class="rx5-conf-badge rx5-conf-high">🔴 跨模組確認</span>'
+      : '<span class="rx5-conf-badge rx5-conf-pend">🟡 待確認</span>';
+    const regionHtml = (item.brainRegions || []).map(r =>
+      `<span class="bcf-brain-region-tag" style="font-size:10px;margin:1px 2px 1px 0">🧠 ${r}</span>`
+    ).join('');
+    return `<div class="rx5-card ${cardCls}" style="pointer-events:none;opacity:.9">
+      <div class="rx5-head ${headCls}">
+        <span class="rx5-seq">${i + 1}</span>
+        <span class="rx5-tool-badge ${isEye ? '' : 'rx5-tool-fly'}">${item.tool}</span>
+        <span class="rx5-mode">${item.mode}</span>
+        <span class="rx5-name">${item.name}</span>
+        <span style="flex:1"></span>${confBadge}
+      </div>
+      <div class="rx5-params">
+        <span class="rx5-param"><span class="rx5-plabel">板面</span>${item.angle}</span>
+        <span class="rx5-param"><span class="rx5-plabel">速度</span>${item.speed}</span>
+        <span class="rx5-param"><span class="rx5-plabel">距離</span>${item.dist}</span>
+        <span class="rx5-param"><span class="rx5-plabel">次數</span>${item.reps}</span>
+        <span class="rx5-param"><span class="rx5-plabel">目標物</span>${item.target}</span>
+        <span class="rx5-param"><span class="rx5-plabel">窗板</span>${item.bg}</span>
+      </div>
+      <div class="rx5-regions">${regionHtml || '<span style="color:var(--gray-300);font-size:11px">—</span>'}</div>
+    </div>`;
+  }).join('');
+
+  zone5.style.display = '';
+  zone5.innerHTML = `
+    <div class="rx-gen-section-title">第五區：今日訓練處方</div>
+    <div id="rxGen-zone5-card">
+      <div class="rx5-header">
+        <div style="flex:1;min-width:200px">
+          <div class="rx5-title">${pt?.name || rx.patientId} 的訓練處方</div>
+          <div class="rx5-subtitle">${rx.date} ・ 策略：${rx.strategyName} ・ 跨模組一致性 ${rx.consistencyPct}%</div>
+        </div>
+        <div class="rx5-meta-tags">
+          <span class="rx5-tag" style="background:#fef3c7;color:#92400e;border:1px solid #f59e0b30">歷史記錄</span>
+          <span class="rx5-tag">共 ${rx.itemCount} 項</span>
+        </div>
+      </div>
+      <div class="rx5-cards" id="rx5-cards-list">${cards || '<div style="text-align:center;padding:40px;color:var(--gray-300)">無處方項目</div>'}</div>
+      <div class="rx5-sticky-bar">
+        <span style="font-size:12px;color:var(--gray-400)">歷史記錄（唯讀）</span>
+        <div style="display:flex;gap:8px">
+          <button class="btn btn-secondary" onclick="printRxPrescription()" style="font-size:13px">🖨️ 列印</button>
+          <button class="btn btn-secondary" onclick="exportRxPDF('${rx.patientId}')" style="font-size:13px">📄 匯出 PDF</button>
+        </div>
+      </div>
+    </div>`;
+}
+
 function renderModuleCards(patientId) {
+  populateRxDateDropdown(patientId);
   const infoEl = document.getElementById('rxGen-patient-info');
   const zone2  = document.getElementById('rxGen-zone2');
   const zone3  = document.getElementById('rxGen-zone3');
   const zone4  = document.getElementById('rxGen-zone4');
 
   const zone5  = document.getElementById('rxGen-zone5');
+
+  document.getElementById('rx-readonly-banner')?.remove();
 
   if (!patientId) {
     if (infoEl) infoEl.innerHTML = '';
@@ -8027,6 +8333,29 @@ function _renderBalanceCard(rec) {
           <span class="rx-module-label">診斷腦區</span>
           <span class="rx-module-value" style="font-size:11px;color:#dc2626">${canal}</span>
         </div>
+        ${rec.btracks_data ? `
+        <div class="rx-module-row">
+          <span class="rx-module-label">路徑長度</span>
+          <span class="rx-module-value" style="font-size:11px;line-height:1.8">
+            STD ${rec.btracks_data.path_std ?? '—'} ｜
+            PRO ${rec.btracks_data.path_pro ?? '—'} ｜
+            VIS ${rec.btracks_data.path_vis ?? '—'} ｜
+            <span style="color:#1d4ed8;font-weight:600">VES ${rec.btracks_data.path_ves ?? '—'}</span>
+          </span>
+        </div>` : ''}
+        ${(() => {
+          const pPro = rec.pct_pro ?? rec.btracks_data?.pct_pro;
+          const pVis = rec.pct_vis ?? rec.btracks_data?.pct_vis;
+          const pVes = rec.pct_ves ?? rec.btracks_data?.pct_ves;
+          if (pPro == null && pVis == null && pVes == null) return '';
+          const chip = (label, v) => {
+            if (v == null) return '';
+            const clr = v < 25 ? '#dc2626' : v <= 50 ? '#d97706' : '#16a34a';
+            const bg  = v < 25 ? '#fef2f2' : v <= 50 ? '#fffbeb' : '#f0fdf4';
+            return `<span style="background:${bg};color:${clr};border-radius:4px;padding:1px 5px;font-weight:600;margin-right:4px;">${label} ${v}%</span>`;
+          };
+          return `<div class="rx-module-row"><span class="rx-module-label">Percentile</span><span class="rx-module-value" style="font-size:11px;">${chip('PRO', pPro)}${chip('VIS', pVis)}${chip('VES', pVes)}</span></div>`;
+        })()}
       </div>
     </div>`;
 }
@@ -8617,10 +8946,7 @@ function initApp() {
   loadPatientsFromServer();
   loadAssessmentsFromServer();
 
-  const assessDate = document.getElementById('assess-date');
-  if (assessDate && !assessDate.value) {
-    assessDate.value = new Date().toISOString().split('T')[0];
-  }
+  populateAssessDateDropdown('');
 
   // Sidebar navigation
   document.querySelectorAll('.nav-item').forEach(item => {
@@ -8652,10 +8978,15 @@ function initApp() {
 
   // Assessment patient filter
   document.getElementById('assess-patient-select')?.addEventListener('change', () => {
+    const pid = document.getElementById('assess-patient-select').value;
+    populateAssessDateDropdown(pid);
     renderAssessments();
     clearBCFForm();
     clearRightEyeForm();
   });
+
+  // Assessment date filter
+  document.getElementById('assess-date')?.addEventListener('change', renderAssessments);
 
   // Rx patient filter
   document.getElementById('rxPatientFilter')?.addEventListener('change', renderPrescriptions);

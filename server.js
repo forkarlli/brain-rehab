@@ -392,12 +392,14 @@ app.post('/api/parse-btracks-image', async (req, res) => {
   try {
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-5',
-      max_tokens: 512,
+      max_tokens: 768,
       system: `你是 BTrackS mCTSIB 平衡測試報告數值提取助理，只回傳 JSON，不附加任何說明或 markdown。
 
 圖片類型說明：
 1. Main Results 表格：深色標題列，欄位順序為 DATE | STD | % | PRO | % | VIS | % | VES | % | COMP | %。
    STD / PRO / VIS / VES 欄的數字是路徑長度（整數，單位 cm）。
+   每個條件後面的 % 欄是該條件的 Percentile 百分位數（0-100 整數，越低代表越差）。
+   例如欄位順序：日期 | STD路徑長度 | STD百分位 | PRO路徑長度 | PRO百分位 | VIS路徑長度 | VIS百分位 | VES路徑長度 | VES百分位 | ...
 
 2. COP Details 表格：深色標題列，欄位為 DATE | STD (ML,AP,ANG) | PRO (ML,AP,ANG) | VIS (ML,AP,ANG) | VEST (ML AP,ANG)。
    每個資料格內含三個數字，以逗號或空格分隔，依序為 ML（內外偏移）、AP（前後偏移）、ANG（角度，單位度，可為正數或負數）。
@@ -414,11 +416,16 @@ app.post('/api/parse-btracks-image', async (req, res) => {
   "path_pro": <Main Results 中 PRO 欄的路徑長度整數，number | null>,
   "path_vis": <Main Results 中 VIS 欄的路徑長度整數，number | null>,
   "path_ves": <Main Results 中 VES 欄的路徑長度整數，number | null>,
+  "pct_std": <Main Results 中 STD 後的 % 欄 Percentile 整數（0-100），number | null>,
+  "pct_pro": <Main Results 中 PRO 後的 % 欄 Percentile 整數（0-100），number | null>,
+  "pct_vis": <Main Results 中 VIS 後的 % 欄 Percentile 整數（0-100），number | null>,
+  "pct_ves": <Main Results 中 VES 後的 % 欄 Percentile 整數（0-100），number | null>,
   "cop_ml_ves": <COP Details 中 VEST 欄的第 1 個數字（ML），number | null>,
   "cop_ap_ves": <COP Details 中 VEST 欄的第 2 個數字（AP），number | null>,
   "cop_ang_ves": <COP Details 中 VEST 欄的第 3 個數字（ANG，角度，可為正或負），number | null>
 }
-重要：cop_ang_ves 是 VEST 格中逗號後的第三個數字，請務必提取，不可填 null 除非圖片中確實看不到任何數字。` },
+重要：cop_ang_ves 是 VEST 格中逗號後的第三個數字，請務必提取，不可填 null 除非圖片中確實看不到任何數字。
+pct_* 欄位是 Main Results 表格中緊接在各條件路徑長度右側的百分位數欄，範圍 0-100。` },
         ],
       }],
     });

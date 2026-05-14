@@ -341,7 +341,7 @@
             </div>
             <div class="form-group">
               <label>評估日期</label>
-              <input type="date" id="assess-date" class="input">
+              <select id="assess-date" class="select"><option value="">— 請選擇日期 —</option></select>
             </div>
             <div class="form-group">
               <label>評估者</label>
@@ -454,6 +454,12 @@
                 <label style="font-size:11px;color:var(--gray-400);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:block">病人</label>
                 <select id="rxGen-patient" class="select" onchange="renderModuleCards(this.value)" style="width:100%">
                   <option value="">請選擇病人…</option>
+                </select>
+              </div>
+              <div id="rxGen-date-wrap" style="flex:0 0 220px;display:none">
+                <label style="font-size:11px;color:var(--gray-400);font-weight:600;text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px;display:block">評估日期</label>
+                <select id="rxGen-date" class="select" style="width:100%" onchange="onRxDateChange(this.value)">
+                  <option value="">— 選擇日期 —</option>
                 </select>
               </div>
               <div id="rxGen-patient-info" style="flex:1;padding-top:22px;font-size:13px;color:var(--gray-500)"></div>
