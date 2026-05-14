@@ -5805,8 +5805,23 @@ function renderRombergInterface() {
           <label class="form-label">數據來源</label>
           <select class="select" id="romberg-source">
             <option value="manual">手動輸入</option>
+            <option value="btracks_html_file">BTrackS HTML 報告（直接解析）</option>
             <option value="btracks_html">BTrackS 截圖上傳（AI 辨識）</option>
           </select>
+        </div>
+
+        <div id="btracks-html-upload-zone" style="display:none;margin-bottom:14px;">
+          <label class="form-label">BTrackS HTML 報告檔案</label>
+          <div style="font-size:11px;color:#6b7280;margin-bottom:8px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:8px 10px;">
+            💡 上傳 BTrackS 匯出的 HTML 報告，自動解析 mCTSIB 四條件（STD / PRO / VIS / VES）數值，無需 AI，即時完成
+          </div>
+          <div id="btracks-html-dropzone" style="border:2px dashed #e5e7eb;border-radius:8px;padding:20px;text-align:center;cursor:pointer;background:#f9fafb;transition:border-color .15s;">
+            <div style="font-size:2em;margin-bottom:6px;">📄</div>
+            <div style="font-size:13px;color:#374151;font-weight:500;">拖曳或點擊上傳 BTrackS HTML 報告</div>
+            <div style="font-size:11px;color:#9ca3af;margin-top:3px;">支援 .html / .htm</div>
+            <input type="file" id="btracks-html-file-input" accept=".html,.htm" style="display:none;">
+          </div>
+          <div id="btracks-html-summary" style="display:none;margin-top:10px;padding:12px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe;font-size:13px;"></div>
         </div>
 
         <div id="btracks-upload-zone" style="display:none;margin-bottom:14px;">
@@ -5843,12 +5858,22 @@ function renderRombergInterface() {
         </div>
 
         <div class="form-group" style="margin-bottom:14px;">
-          <label class="form-label">張眼路徑長度 Path Length (EO) cm</label>
+          <label class="form-label">STD 路徑長度 Path Length (Standard / EO) cm</label>
           <input type="number" class="input" id="romberg-path-eo" min="0" step="0.1" placeholder="例：25.3">
         </div>
 
         <div class="form-group" style="margin-bottom:14px;">
-          <label class="form-label">閉眼路徑長度 Path Length (EC) cm</label>
+          <label class="form-label">PRO 路徑長度 Path Length (Proprioception) cm</label>
+          <input type="number" class="input" id="romberg-path-pro" min="0" step="0.1" placeholder="例：30.1">
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label">VIS 路徑長度 Path Length (Visual) cm</label>
+          <input type="number" class="input" id="romberg-path-vis" min="0" step="0.1" placeholder="例：35.7">
+        </div>
+
+        <div class="form-group" style="margin-bottom:14px;">
+          <label class="form-label">VEST 路徑長度 Path Length (Vestibular / EC) cm</label>
           <input type="number" class="input" id="romberg-path-ec" min="0" step="0.1" placeholder="例：54.8">
         </div>
 
@@ -5885,6 +5910,8 @@ function renderRombergInterface() {
 
   document.getElementById('romberg-compute-btn').addEventListener('click', _rombergCompute);
   document.getElementById('romberg-source').addEventListener('change', _onRombergSourceChange);
+
+  // Image upload zone
   const _btDropzone  = document.getElementById('btracks-dropzone');
   const _btFileInput = document.getElementById('btracks-file-input');
   _btDropzone.addEventListener('click', () => _btFileInput.click());
@@ -5900,13 +5927,92 @@ function renderRombergInterface() {
     const files = Array.from(e.target.files);
     if (files.length) _handleBTrackSFiles(files);
   });
+
+  // HTML upload zone
+  const _htmlDropzone  = document.getElementById('btracks-html-dropzone');
+  const _htmlFileInput = document.getElementById('btracks-html-file-input');
+  _htmlDropzone.addEventListener('click', () => _htmlFileInput.click());
+  _htmlDropzone.addEventListener('dragover',  e => { e.preventDefault(); _htmlDropzone.style.borderColor = '#2563eb'; });
+  _htmlDropzone.addEventListener('dragleave', () => { _htmlDropzone.style.borderColor = '#e5e7eb'; });
+  _htmlDropzone.addEventListener('drop', e => {
+    e.preventDefault();
+    _htmlDropzone.style.borderColor = '#e5e7eb';
+    const files = Array.from(e.dataTransfer.files).filter(f => f.name.match(/\.html?$/i));
+    if (files.length) _handleBTrackSHtmlFile(files[0]);
+  });
+  _htmlFileInput.addEventListener('change', e => {
+    if (e.target.files.length) _handleBTrackSHtmlFile(e.target.files[0]);
+  });
 }
 
 function _onRombergSourceChange() {
-  const src  = document.getElementById('romberg-source').value;
-  const zone = document.getElementById('btracks-upload-zone');
-  if (zone) zone.style.display = src === 'btracks_html' ? 'block' : 'none';
-  if (src !== 'btracks_html') _btracksData = null;
+  const src      = document.getElementById('romberg-source').value;
+  const imgZone  = document.getElementById('btracks-upload-zone');
+  const htmlZone = document.getElementById('btracks-html-upload-zone');
+  if (imgZone)  imgZone.style.display  = src === 'btracks_html'      ? 'block' : 'none';
+  if (htmlZone) htmlZone.style.display = src === 'btracks_html_file' ? 'block' : 'none';
+  if (src === 'manual') _btracksData = null;
+}
+
+function _buildBTracksSummaryHTML(parsed, dir, dirSource, title) {
+  const fmt   = k => parsed[k] != null ? parsed[k] : '—';
+  const rq    = parsed.path_std && parsed.path_ves ? (parsed.path_ves / parsed.path_std).toFixed(2) : '—';
+  const angV  = parsed.cop_ang_ves != null ? parsed.cop_ang_ves : `<span style="color:#d97706;">—</span>`;
+  return `
+    <div style="font-weight:600;color:#1d4ed8;margin-bottom:8px;">📊 ${title}</div>
+    <table style="width:100%;font-size:12px;border-collapse:collapse;">
+      <tr style="background:#dbeafe;font-weight:600;">
+        <td style="padding:4px 8px;">條件</td>
+        <td style="padding:4px 8px;text-align:right;">Path (cm)</td>
+        <td style="padding:4px 8px;text-align:right;">ML</td>
+        <td style="padding:4px 8px;text-align:right;">AP</td>
+        <td style="padding:4px 8px;text-align:right;">Ang°</td>
+      </tr>
+      <tr><td style="padding:3px 8px;">STD</td><td style="padding:3px 8px;text-align:right;">${fmt('path_std')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ml_std')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ap_std')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ang_std')}</td></tr>
+      <tr><td style="padding:3px 8px;">PRO</td><td style="padding:3px 8px;text-align:right;">${fmt('path_pro')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ml_pro')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ap_pro')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ang_pro')}</td></tr>
+      <tr><td style="padding:3px 8px;">VIS</td><td style="padding:3px 8px;text-align:right;">${fmt('path_vis')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ml_vis')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ap_vis')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ang_vis')}</td></tr>
+      <tr style="font-weight:600;background:#eff6ff;"><td style="padding:3px 8px;">VES</td><td style="padding:3px 8px;text-align:right;">${fmt('path_ves')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ml_ves')}</td><td style="padding:3px 8px;text-align:right;">${fmt('cop_ap_ves')}</td><td style="padding:3px 8px;text-align:right;">${angV}</td></tr>
+    </table>
+    <div style="margin-top:10px;display:flex;gap:20px;flex-wrap:wrap;font-size:13px;font-weight:600;">
+      <span>RQ = <strong style="color:#1d4ed8;">${rq}</strong></span>
+      ${dir ? `<span>偏移方向：<strong style="color:#1d4ed8;">${dir}</strong><span style="font-size:11px;font-weight:400;color:#6b7280;margin-left:4px;">(${dirSource})</span></span>`
+            : '<span style="color:#9ca3af;font-weight:400;">無法推算方向，請手動選擇</span>'}
+    </div>
+    ${parsed.errors && parsed.errors.length ? `<div style="color:#d97706;font-size:11px;margin-top:6px;">⚠ 未解析到：${parsed.errors.join('、')}</div>` : ''}
+  `;
+}
+
+function _handleBTrackSHtmlFile(file) {
+  const summary = document.getElementById('btracks-html-summary');
+  if (summary) { summary.style.display = 'block'; summary.innerHTML = '<div style="color:#6b7280;">⏳ 正在解析 HTML 報告…</div>'; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const parsed = parseBTrackSReport(e.target.result);
+    _btracksData = parsed;
+    const eoEl  = document.getElementById('romberg-path-eo');
+    const proEl = document.getElementById('romberg-path-pro');
+    const visEl = document.getElementById('romberg-path-vis');
+    const ecEl  = document.getElementById('romberg-path-ec');
+    const dirEl = document.getElementById('romberg-direction');
+    if (parsed.path_std != null && eoEl)  eoEl.value  = parsed.path_std;
+    if (parsed.path_pro != null && proEl) proEl.value = parsed.path_pro;
+    if (parsed.path_vis != null && visEl) visEl.value = parsed.path_vis;
+    if (parsed.path_ves != null && ecEl)  ecEl.value  = parsed.path_ves;
+    _rombergUpdateRq();
+    const dirFromAng  = _btracksAngleDirection(parsed.cop_ap_ves, parsed.cop_ang_ves);
+    const dirFromMLAP = _btracksMLAPDirection(parsed.cop_ml_ves, parsed.cop_ap_ves);
+    const dir       = dirFromAng || dirFromMLAP;
+    const dirSource = dirFromAng ? 'AP+Ang' : (dirFromMLAP ? 'ML+AP 推算' : '');
+    if (dir && dirEl) dirEl.value = dir;
+    if (summary) summary.innerHTML = _buildBTracksSummaryHTML(parsed, dir, dirSource, 'BTrackS HTML 解析結果');
+    showToast('BTrackS HTML 報告解析成功，已自動填入數值', 'success');
+    if (dir && parsed.path_std && parsed.path_ves) setTimeout(() => _rombergCompute(), 150);
+  };
+  reader.onerror = () => {
+    if (summary) summary.innerHTML = '<div style="color:#dc2626;">❌ 讀取 HTML 檔案失敗</div>';
+    showToast('HTML 檔案讀取失敗', 'error');
+  };
+  reader.readAsText(file, 'utf-8');
 }
 
 function _handleBTrackSFiles(files) {
@@ -5933,49 +6039,23 @@ function _handleBTrackSFiles(files) {
     _btracksData = parsed;
 
     const eoEl  = document.getElementById('romberg-path-eo');
+    const proEl = document.getElementById('romberg-path-pro');
+    const visEl = document.getElementById('romberg-path-vis');
     const ecEl  = document.getElementById('romberg-path-ec');
     const dirEl = document.getElementById('romberg-direction');
-    if (parsed.path_std != null && eoEl) eoEl.value = parsed.path_std;
-    if (parsed.path_ves != null && ecEl) ecEl.value = parsed.path_ves;
+    if (parsed.path_std != null && eoEl)  eoEl.value  = parsed.path_std;
+    if (parsed.path_pro != null && proEl) proEl.value = parsed.path_pro;
+    if (parsed.path_vis != null && visEl) visEl.value = parsed.path_vis;
+    if (parsed.path_ves != null && ecEl)  ecEl.value  = parsed.path_ves;
     _rombergUpdateRq();
 
-    const dirFromAng = _btracksAngleDirection(parsed.cop_ap_ves, parsed.cop_ang_ves);
+    const dirFromAng  = _btracksAngleDirection(parsed.cop_ap_ves, parsed.cop_ang_ves);
     const dirFromMLAP = _btracksMLAPDirection(parsed.cop_ml_ves, parsed.cop_ap_ves);
-    const dir = dirFromAng || dirFromMLAP;
+    const dir       = dirFromAng || dirFromMLAP;
     const dirSource = dirFromAng ? 'AP+Ang' : (dirFromMLAP ? 'ML+AP 推算' : '');
     if (dir && dirEl) dirEl.value = dir;
 
-    const rq = parsed.path_std && parsed.path_ves ? (parsed.path_ves / parsed.path_std).toFixed(2) : '—';
-    const v = k => parsed[k] != null ? parsed[k] : '—';
-    if (summary) {
-      const angDisplay = parsed.cop_ang_ves != null ? parsed.cop_ang_ves : `<span style="color:#d97706;">— (由ML+AP推算)</span>`;
-      summary.innerHTML = `
-        <div style="font-weight:600;color:#1d4ed8;margin-bottom:8px;">📊 BTrackS AI 解析結果</div>
-        <table style="width:100%;font-size:12px;border-collapse:collapse;">
-          <tr style="background:#dbeafe;font-weight:600;">
-            <td style="padding:4px 8px;">條件</td>
-            <td style="padding:4px 8px;text-align:right;">Path (cm)</td>
-            <td style="padding:4px 8px;text-align:right;">VES ML</td>
-            <td style="padding:4px 8px;text-align:right;">VES AP</td>
-            <td style="padding:4px 8px;text-align:right;">VES Ang°</td>
-          </tr>
-          <tr><td style="padding:3px 8px;">STD</td><td style="padding:3px 8px;text-align:right;">${v('path_std')}</td><td colspan="3"></td></tr>
-          <tr><td style="padding:3px 8px;">PRO</td><td style="padding:3px 8px;text-align:right;">${v('path_pro')}</td><td colspan="3"></td></tr>
-          <tr><td style="padding:3px 8px;">VIS</td><td style="padding:3px 8px;text-align:right;">${v('path_vis')}</td><td colspan="3"></td></tr>
-          <tr style="font-weight:600;background:#eff6ff;">
-            <td style="padding:3px 8px;">VES</td>
-            <td style="padding:3px 8px;text-align:right;">${v('path_ves')}</td>
-            <td style="padding:3px 8px;text-align:right;">${v('cop_ml_ves')}</td>
-            <td style="padding:3px 8px;text-align:right;">${v('cop_ap_ves')}</td>
-            <td style="padding:3px 8px;text-align:right;">${angDisplay}</td>
-          </tr>
-        </table>
-        <div style="margin-top:10px;display:flex;gap:20px;flex-wrap:wrap;font-size:13px;font-weight:600;">
-          <span>RQ = <strong style="color:#1d4ed8;">${rq}</strong></span>
-          ${dir ? `<span>偏移方向：<strong style="color:#1d4ed8;">${dir}</strong><span style="font-size:11px;font-weight:400;color:#6b7280;margin-left:4px;">(${dirSource})</span></span>`
-                : '<span style="color:#9ca3af;font-weight:400;">無法推算方向，請手動選擇</span>'}
-        </div>`;
-    }
+    if (summary) summary.innerHTML = _buildBTracksSummaryHTML(parsed, dir, dirSource, 'BTrackS AI 解析結果');
     showToast('BTrackS 圖片解析成功，已自動填入數值', 'success');
     if (dir && parsed.path_std && parsed.path_ves) setTimeout(() => _rombergCompute(), 150);
   }).catch(err => {
@@ -6212,10 +6292,12 @@ function _rombergCompute() {
 let _mBtracksData = null;
 
 function _mOnRombergSourceChange() {
-  const src  = document.getElementById('modal-romberg-source').value;
-  const zone = document.getElementById('modal-btracks-dropzone-wrap');
-  if (zone) zone.style.display = src === 'btracks_html' ? 'block' : 'none';
-  if (src !== 'btracks_html') _mBtracksData = null;
+  const src      = document.getElementById('modal-romberg-source').value;
+  const imgZone  = document.getElementById('modal-btracks-dropzone-wrap');
+  const htmlZone = document.getElementById('modal-btracks-html-zone');
+  if (imgZone)  imgZone.style.display  = src === 'btracks_html'      ? 'block' : 'none';
+  if (htmlZone) htmlZone.style.display = src === 'btracks_html_file' ? 'block' : 'none';
+  if (src === 'manual') _mBtracksData = null;
 }
 
 function _mRombergUpdateRq() {
@@ -6235,6 +6317,39 @@ function _mRombergUpdateRq() {
   } else {
     display.textContent = '—'; badge.textContent = ''; badge.style.background = '';
   }
+}
+
+function _mHandleBTrackSHtmlFile(file) {
+  const summary = document.getElementById('modal-btracks-html-summary');
+  if (summary) { summary.style.display = 'block'; summary.innerHTML = '<div style="color:#6b7280;">⏳ 正在解析 HTML 報告…</div>'; }
+  const reader = new FileReader();
+  reader.onload = e => {
+    const parsed = parseBTrackSReport(e.target.result);
+    _mBtracksData = parsed;
+    const eoEl  = document.getElementById('modal-romberg-path-eo');
+    const proEl = document.getElementById('modal-romberg-path-pro');
+    const visEl = document.getElementById('modal-romberg-path-vis');
+    const ecEl  = document.getElementById('modal-romberg-path-ec');
+    const dirEl = document.getElementById('modal-romberg-direction');
+    if (parsed.path_std != null && eoEl)  eoEl.value  = parsed.path_std;
+    if (parsed.path_pro != null && proEl) proEl.value = parsed.path_pro;
+    if (parsed.path_vis != null && visEl) visEl.value = parsed.path_vis;
+    if (parsed.path_ves != null && ecEl)  ecEl.value  = parsed.path_ves;
+    _mRombergUpdateRq();
+    const dirFromAng  = _btracksAngleDirection(parsed.cop_ap_ves, parsed.cop_ang_ves);
+    const dirFromMLAP = _btracksMLAPDirection(parsed.cop_ml_ves, parsed.cop_ap_ves);
+    const dir       = dirFromAng || dirFromMLAP;
+    const dirSource = dirFromAng ? 'AP+Ang' : (dirFromMLAP ? 'ML+AP 推算' : '');
+    if (dir && dirEl) dirEl.value = dir;
+    if (summary) summary.innerHTML = _buildBTracksSummaryHTML(parsed, dir, dirSource, 'BTrackS HTML 解析結果');
+    showToast('BTrackS HTML 報告解析成功，已自動填入數值', 'success');
+    if (dir && parsed.path_std && parsed.path_ves) setTimeout(() => _mRombergCompute(), 150);
+  };
+  reader.onerror = () => {
+    if (summary) summary.innerHTML = '<div style="color:#dc2626;">❌ 讀取 HTML 檔案失敗</div>';
+    showToast('HTML 檔案讀取失敗', 'error');
+  };
+  reader.readAsText(file, 'utf-8');
 }
 
 function _mBTrackSFiles(files) {
@@ -6261,49 +6376,23 @@ function _mBTrackSFiles(files) {
     _mBtracksData = parsed;
 
     const eoEl  = document.getElementById('modal-romberg-path-eo');
+    const proEl = document.getElementById('modal-romberg-path-pro');
+    const visEl = document.getElementById('modal-romberg-path-vis');
     const ecEl  = document.getElementById('modal-romberg-path-ec');
     const dirEl = document.getElementById('modal-romberg-direction');
-    if (parsed.path_std != null && eoEl) eoEl.value = parsed.path_std;
-    if (parsed.path_ves != null && ecEl) ecEl.value = parsed.path_ves;
+    if (parsed.path_std != null && eoEl)  eoEl.value  = parsed.path_std;
+    if (parsed.path_pro != null && proEl) proEl.value = parsed.path_pro;
+    if (parsed.path_vis != null && visEl) visEl.value = parsed.path_vis;
+    if (parsed.path_ves != null && ecEl)  ecEl.value  = parsed.path_ves;
     _mRombergUpdateRq();
 
     const dirFromAng  = _btracksAngleDirection(parsed.cop_ap_ves, parsed.cop_ang_ves);
     const dirFromMLAP = _btracksMLAPDirection(parsed.cop_ml_ves, parsed.cop_ap_ves);
-    const dir = dirFromAng || dirFromMLAP;
+    const dir       = dirFromAng || dirFromMLAP;
     const dirSource = dirFromAng ? 'AP+Ang' : (dirFromMLAP ? 'ML+AP 推算' : '');
     if (dir && dirEl) dirEl.value = dir;
 
-    const rq = parsed.path_std && parsed.path_ves ? (parsed.path_ves / parsed.path_std).toFixed(2) : '—';
-    const v = k => parsed[k] != null ? parsed[k] : '—';
-    if (summary) {
-      const angDisplay = parsed.cop_ang_ves != null ? parsed.cop_ang_ves : `<span style="color:#d97706;">— (由ML+AP推算)</span>`;
-      summary.innerHTML = `
-        <div style="font-weight:600;color:#1d4ed8;margin-bottom:8px;">📊 BTrackS AI 解析結果</div>
-        <table style="width:100%;font-size:12px;border-collapse:collapse;">
-          <tr style="background:#dbeafe;font-weight:600;">
-            <td style="padding:4px 8px;">條件</td>
-            <td style="padding:4px 8px;text-align:right;">Path (cm)</td>
-            <td style="padding:4px 8px;text-align:right;">VES ML</td>
-            <td style="padding:4px 8px;text-align:right;">VES AP</td>
-            <td style="padding:4px 8px;text-align:right;">VES Ang°</td>
-          </tr>
-          <tr><td style="padding:3px 8px;">STD</td><td style="padding:3px 8px;text-align:right;">${v('path_std')}</td><td colspan="3"></td></tr>
-          <tr><td style="padding:3px 8px;">PRO</td><td style="padding:3px 8px;text-align:right;">${v('path_pro')}</td><td colspan="3"></td></tr>
-          <tr><td style="padding:3px 8px;">VIS</td><td style="padding:3px 8px;text-align:right;">${v('path_vis')}</td><td colspan="3"></td></tr>
-          <tr style="font-weight:600;background:#eff6ff;">
-            <td style="padding:3px 8px;">VES</td>
-            <td style="padding:3px 8px;text-align:right;">${v('path_ves')}</td>
-            <td style="padding:3px 8px;text-align:right;">${v('cop_ml_ves')}</td>
-            <td style="padding:3px 8px;text-align:right;">${v('cop_ap_ves')}</td>
-            <td style="padding:3px 8px;text-align:right;">${angDisplay}</td>
-          </tr>
-        </table>
-        <div style="margin-top:10px;display:flex;gap:20px;flex-wrap:wrap;font-size:13px;font-weight:600;">
-          <span>RQ = <strong style="color:#1d4ed8;">${rq}</strong></span>
-          ${dir ? `<span>偏移方向：<strong style="color:#1d4ed8;">${dir}</strong><span style="font-size:11px;font-weight:400;color:#6b7280;margin-left:4px;">(${dirSource})</span></span>`
-                : '<span style="color:#9ca3af;font-weight:400;">無法推算方向，請手動選擇</span>'}
-        </div>`;
-    }
+    if (summary) summary.innerHTML = _buildBTracksSummaryHTML(parsed, dir, dirSource, 'BTrackS AI 解析結果');
     showToast('BTrackS 圖片解析成功，已自動填入數值', 'success');
     if (dir && parsed.path_std && parsed.path_ves) setTimeout(() => _mRombergCompute(), 150);
   }).catch(err => {
@@ -6484,8 +6573,23 @@ function renderAssessmentForm() {
         <label class="form-label">數據來源</label>
         <select class="select" id="modal-romberg-source" onchange="_mOnRombergSourceChange()">
           <option value="manual">手動輸入</option>
-          <option value="btracks_html">BTrackS HTML 報告</option>
+          <option value="btracks_html_file">BTrackS HTML 報告（直接解析）</option>
+          <option value="btracks_html">BTrackS 截圖上傳（AI 辨識）</option>
         </select>
+      </div>
+
+      <div id="modal-btracks-html-zone" style="display:none;margin-bottom:14px;">
+        <label class="form-label">BTrackS HTML 報告檔案</label>
+        <div style="font-size:11px;color:#6b7280;margin-bottom:8px;background:#f0fdf4;border:1px solid #86efac;border-radius:6px;padding:8px 10px;">
+          💡 上傳 BTrackS 匯出的 HTML 報告，自動解析 mCTSIB 四條件（STD / PRO / VIS / VES）數值，無需 AI，即時完成
+        </div>
+        <div id="modal-btracks-html-dropzone" style="border:2px dashed #e5e7eb;border-radius:8px;padding:20px;text-align:center;cursor:pointer;background:#f9fafb;transition:border-color .15s;">
+          <div style="font-size:2em;margin-bottom:6px;">📄</div>
+          <div style="font-size:13px;color:#374151;font-weight:500;">拖曳或點擊上傳 BTrackS HTML 報告</div>
+          <div style="font-size:11px;color:#9ca3af;margin-top:3px;">支援 .html / .htm</div>
+          <input type="file" id="modal-btracks-html-file" accept=".html,.htm" style="display:none;">
+        </div>
+        <div id="modal-btracks-html-summary" style="display:none;margin-top:10px;padding:12px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe;font-size:13px;"></div>
       </div>
 
       <div id="modal-btracks-dropzone-wrap" style="display:none;margin-bottom:14px;">
@@ -6520,12 +6624,22 @@ function renderAssessmentForm() {
       </div>
 
       <div class="form-group" style="margin-bottom:14px;">
-        <label class="form-label">張眼路徑長度 Path Length (EO) cm</label>
+        <label class="form-label">STD 路徑長度 Path Length (Standard / EO) cm</label>
         <input type="number" class="input" id="modal-romberg-path-eo" min="0" step="0.1" placeholder="例：25.3" oninput="_mRombergUpdateRq()">
       </div>
 
       <div class="form-group" style="margin-bottom:14px;">
-        <label class="form-label">閉眼路徑長度 Path Length (EC) cm</label>
+        <label class="form-label">PRO 路徑長度 Path Length (Proprioception) cm</label>
+        <input type="number" class="input" id="modal-romberg-path-pro" min="0" step="0.1" placeholder="例：30.1">
+      </div>
+
+      <div class="form-group" style="margin-bottom:14px;">
+        <label class="form-label">VIS 路徑長度 Path Length (Visual) cm</label>
+        <input type="number" class="input" id="modal-romberg-path-vis" min="0" step="0.1" placeholder="例：35.7">
+      </div>
+
+      <div class="form-group" style="margin-bottom:14px;">
+        <label class="form-label">VEST 路徑長度 Path Length (Vestibular / EC) cm</label>
         <input type="number" class="input" id="modal-romberg-path-ec" min="0" step="0.1" placeholder="例：54.8" oninput="_mRombergUpdateRq()">
       </div>
 
@@ -6554,6 +6668,7 @@ function renderAssessmentForm() {
       <div id="modal-romberg-result" style="display:none;margin-top:24px;"></div>
     `;
 
+    // Image upload zone
     const dropzone  = document.getElementById('modal-btracks-dropzone');
     const fileInput = document.getElementById('modal-btracks-file');
     dropzone.addEventListener('click', () => fileInput.click());
@@ -6566,6 +6681,20 @@ function renderAssessmentForm() {
       if (files.length) _mBTrackSFiles(files);
     });
     fileInput.addEventListener('change', e => { if (e.target.files.length) _mBTrackSFiles(Array.from(e.target.files)); });
+
+    // HTML upload zone
+    const htmlDropzone  = document.getElementById('modal-btracks-html-dropzone');
+    const htmlFileInput = document.getElementById('modal-btracks-html-file');
+    htmlDropzone.addEventListener('click', () => htmlFileInput.click());
+    htmlDropzone.addEventListener('dragover',  e => { e.preventDefault(); htmlDropzone.style.borderColor = '#2563eb'; });
+    htmlDropzone.addEventListener('dragleave', () => { htmlDropzone.style.borderColor = '#e5e7eb'; });
+    htmlDropzone.addEventListener('drop', e => {
+      e.preventDefault();
+      htmlDropzone.style.borderColor = '#e5e7eb';
+      const files = Array.from(e.dataTransfer.files).filter(f => f.name.match(/\.html?$/i));
+      if (files.length) _mHandleBTrackSHtmlFile(files[0]);
+    });
+    htmlFileInput.addEventListener('change', e => { if (e.target.files.length) _mHandleBTrackSHtmlFile(e.target.files[0]); });
     return;
   }
 
