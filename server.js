@@ -255,7 +255,7 @@ app.post('/api/analyze-righteye', async (req, res) => {
   "syncH": <Synchronization SP 水平 0~1>,
   "syncV": <Synchronization SP 垂直 0~1>,
   "intrusion": <"none" | "up" | "down" | "left" | "right">,
-  "intrusionAmp": <Intrusion 振幅大小: "small" | "large" | null（small=小振幅震顫/固視不穩；large=大幅擺動/交叉脊髓束；無 intrusion 填 null）>,
+  "intrusionAmp": <Intrusion 振幅大小: "小" | "中" | "大" | null（小=細微震顫/固視不穩；中=中度擺動；大=大幅擺動/交叉脊髓束；無 intrusion 填 null）>,
   "hTotal": <Horizontal Saccade 總次數>,
   "hOverR": <Horizontal 右向 Overshoot 次數>,
   "hUnderR": <Horizontal 右向 Undershoot 次數>,

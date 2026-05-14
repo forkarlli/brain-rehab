@@ -840,8 +840,8 @@ function showAssessmentDetail(aid) {
       field('垂直 Velocity (svV)', n(a.svV, ' d/s'), svChip(a.svV)),
     ]);
 
-    const intDir = { none:'無', up:'Up（向上）', down:'Down（向下）', left:'Left（向左）', right:'Right（向右）' };
-    const intAmp = { none:'未指定', small:'小振幅（Fixation Stability）', large:'大振幅（Cross-Cord）' };
+    const intDir = { none:'無', up:'Up（向上）', down:'Down（向下）', horizontal:'Horizontal（水平）' };
+    const intAmp = { none:'無', '小':'小振幅', '中':'中振幅', '大':'大振幅' };
     body += secTitle('Lateral Pulsion ｜ Intrusion');
     body += grid2([
       field('垂直追隨偏移 (mm)', n(a.vpLateralDrift, ' mm'), ['#f0f9ff','#1d4ed8']),
@@ -2957,7 +2957,7 @@ function computeFlyingChairRx(affectedItems, patient) {
 
 // ===== RIGHT EYE REPORT ANALYSIS =====
 function computeRightEyeRx(data) {
-  const { spH, spV, spC, eso, svH, svV, syncH, syncV, intrusion, intrusionAmp,
+  const { spH, spV, spC, eso, svH, svV, syncH, syncV, intrusion, intrusionAmp, intrusionType,
           pldRight, pldLeft, orthRight, orthLeft,
           svRight, svLeft, svUp, svDown,
           hTotal, hOverR, hUnderR, hMissedR, hOverL, hUnderL, hMissedL,
@@ -2985,7 +2985,7 @@ function computeRightEyeRx(data) {
   const svVSt  = svSt(svV);
   const syncHSt = syncSt(syncH);
   const syncVSt = syncSt(syncV);
-  const intSt  = intrusion === 'none' ? 'normal' : intrusionAmp === 'small' ? 'mild' : 'severe';
+  const intSt  = intrusion === 'none' ? 'normal' : intrusionAmp === '小' ? 'mild' : intrusionAmp === '中' ? 'moderate' : intrusionAmp === '大' ? 'severe' : 'mild';
 
   const svRSt   = svSt(svRight);
   const svLSt   = svSt(svLeft);
@@ -3111,29 +3111,24 @@ function computeRightEyeRx(data) {
       label: 'Intrusion', status: intSt,
       value: (() => {
         if (intrusion === 'none') return '無';
-        const dir = intrusion === 'up' ? 'Up（向上）' : intrusion === 'down' ? 'Down（向下）'
-                  : intrusion === 'left' ? 'Left（向左）' : 'Right（向右）';
-        return intrusionAmp === 'small' ? dir + '｜小振幅' : intrusionAmp === 'large' ? dir + '｜大振幅' : dir;
+        const dir = intrusion === 'up' ? 'Up（向上）' : intrusion === 'down' ? 'Down（向下）' : 'Horizontal（水平）';
+        const ampStr = intrusionAmp === '小' ? '｜小振幅' : intrusionAmp === '中' ? '｜中振幅' : intrusionAmp === '大' ? '｜大振幅' : '';
+        const typeStr = intrusionType && intrusionType !== 'none' ? `｜${intrusionType === 'swj' ? 'SWJ' : intrusionType === 'saccadic' ? '掃視侵入' : intrusionType === 'vertical' ? '垂直侵入' : '趕上性掃視'}` : '';
+        return dir + ampStr + typeStr;
       })(),
       brain: (() => {
         if (intrusion === 'none') return [];
-        const base = intrusion === 'up'   ? ['Medulla', 'Inferior Vermis']
-                   : intrusion === 'down' ? ['Midbrain', 'Superior Vermis', 'Superior Colliculus']
-                   : intrusion === 'left' ? ['Right Cortex', 'Right Cerebellum']
-                   : ['Left Cortex', 'Left Cerebellum'];
-        if (intrusionAmp === 'small') return ['Cerebellum (Flocculus)', 'Superior Colliculus'];
-        if (intrusionAmp === 'large') return [...base, 'Cross-Cord Pathway'];
-        return base;
+        const isVert = intrusion === 'up' || intrusion === 'down';
+        const base = isVert ? ['Midbrain', 'CB Flocculus'] : ['CB Flocculus', 'Superior Colliculus'];
+        return intrusionAmp === '大' ? [...base, 'Cerebellar Fastigial Nucleus', 'BG'] : base;
       })(),
       note: (() => {
         if (intrusion === 'none') return '';
-        const base = intrusion === 'up'   ? '↑ Medulla / Lower Brainstem — 強化下轉眼動（Downward OKN + VOR）'
-                   : intrusion === 'down' ? '↑ Midbrain / Superior Vermis — 強化上轉眼動（Upward OKN + Anti-Saccade）'
-                   : intrusion === 'left' ? '↑ Right Cx / Right Cb — 右側肢體複雜運動 + 向右 OKN'
-                   : '↑ Left Cx / Left Cb — 左側肢體複雜運動 + 向左 OKN';
-        if (intrusionAmp === 'small') return base + '｜小振幅 → 固視穩定性障礙（Flocculus/SC）';
-        if (intrusionAmp === 'large') return base + '｜大振幅 → 交叉脊髓束異常（Cross-Cord Pathway）';
-        return base;
+        const isVert = intrusion === 'up' || intrusion === 'down';
+        const base = isVert
+          ? 'INC/中腦垂直整合中樞失能 — 建議 Vertical Anti-Saccade + Gaze Holding'
+          : 'CB Flocculus掃視抑制弱化 + SC過度放電 — 建議 Gaze Holding + Stare OPK';
+        return intrusionAmp === '大' ? base + '；Fastigial Nucleus/BG抑制喪失 ⚠️' : base;
       })(),
     },
     // ── Saccade Over/Under/Missed ──
@@ -3191,13 +3186,13 @@ function computeRightEyeRx(data) {
     // ── Orthogonal 垂直眼動指標 ──
     ...(orthAbn(orthRight) ? [{
       label: 'SP 右追蹤 Orthogonal', value: orthRight === 'up' ? '向上偏移' : '向下偏移', status: 'severe',
-      brain: ['Right CB'],
-      note: '右向追蹤出現垂直眼動偏移 → Right CB 弱化 ⚠️',
+      brain: ['Right CB', 'Right Flocculus'],
+      note: '右向追蹤 Orthogonal 偏移 → Right CB + Right Flocculus 追蹤增益控制失能 ⚠️',
     }] : []),
     ...(orthAbn(orthLeft) ? [{
       label: 'SP 左追蹤 Orthogonal', value: orthLeft === 'up' ? '向上偏移' : '向下偏移', status: 'severe',
-      brain: ['Left CB'],
-      note: '左向追蹤出現垂直眼動偏移 → Left CB 弱化 ⚠️',
+      brain: ['Left CB', 'Left Flocculus'],
+      note: '左向追蹤 Orthogonal 偏移 → Left CB + Left Flocculus 追蹤增益控制失能 ⚠️',
     }] : []),
     // ── 個別方向 Saccadic Velocity ──
     ...(svRight !== null ? [{
@@ -3354,30 +3349,28 @@ function computeRightEyeRx(data) {
     addRx({ mode: 'M1', name: 'Pursuit均速', angle: '0°（固視穩定訓練）', speed: 'S1', dist: 'D3', reps: '15', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: Intrusion/Sync低 → 固視穩定訓練'], priority: 3 });
   }
   // Intrusion 方向對應處方
-  if (intrusion === 'up') {
-    // Up Intrusion → Medulla/Inferior Vermis → 強化下轉追蹤（Downward OKN）
-    addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑', angle: 'R0/L0（垂直）', speed: 'S3', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: Up Intrusion → Medulla/Inferior Vermis — 強化下轉 OKN（M3 Downward）'], priority: 2 });
+  if (intrusion === 'up' || intrusion === 'down') {
+    const mode = intrusion === 'up' ? 'M3' : 'M4';
+    const name = intrusion === 'up' ? 'Saccade↓+Pursuit↑' : 'Saccade↑+Pursuit↓';
+    addRx({ mode, name, angle: 'R0/L0（垂直Intrusion-Midbrain/INC）', speed: 'S3', dist: 'D3', reps: '15', target: '有', bg: '空白背板',
+      notes: [
+        `RightEye: ${intrusion === 'up' ? 'Up' : 'Down'} Intrusion → Midbrain INC/CB Flocculus失能`,
+        '建議加入 Vertical Anti-Saccade 訓練，提升中腦對垂直眼球移動的煞車力',
+      ], priority: 2 });
   }
-  if (intrusion === 'down') {
-    // Down Intrusion → Midbrain/Superior Vermis → 強化上轉追蹤（Upward OKN）
-    addRx({ mode: 'M4', name: 'Saccade↑+Pursuit↓', angle: 'R0/L0（垂直）', speed: 'S3', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: Down Intrusion → Midbrain/Superior Vermis — 強化上轉 OKN（M4 Upward）'], priority: 2 });
+  if (intrusion === 'horizontal') {
+    addRx({ mode: 'M2', name: 'Saccade左右（SC/Flocculus抑制）', angle: 'R90/L90（Horizontal Intrusion）', speed: 'S3', dist: 'D3', reps: '15', target: '有', bg: '空白背板',
+      notes: ['RightEye: Horizontal Intrusion → CB Flocculus掃視抑制弱化 + SC過度放電'], priority: 2 });
   }
-  if (intrusion === 'left') {
-    // Left Intrusion → Right Cx/Cb → Right Pursuit + Left Saccade R45
-    addRx({ mode: 'M1', name: 'Pursuit右向', angle: 'R45（右斜向）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: Left Intrusion → ↑Right Cx/Cb — Right Pursuit + Left Saccade R45'], priority: 2 });
+  // Intrusion 定位 Flocculus → Gaze Holding
+  if (intAbn) {
+    addRx({ mode: 'M1', name: 'Gaze Holding固視保持', angle: '0°（Flocculus抑制重建）', speed: 'S1', dist: 'D2', reps: '20', target: '有（點狀小目標）', bg: '空白背板',
+      notes: ['建議優先 Gaze Holding 凝視保持訓練，重新建立 Flocculus 對掃視發射器的抑制；可加入 Stare OPK 減少中腦過度徵召'], priority: 2 });
   }
-  if (intrusion === 'right') {
-    // Right Intrusion → Left Cx/Cb → Left Pursuit + Right Saccade L45
-    addRx({ mode: 'M1', name: 'Pursuit左向', angle: 'L45（左斜向）', speed: 'S3', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: Right Intrusion → ↑Left Cx/Cb — Left Pursuit + Right Saccade L45'], priority: 2 });
-  }
-  // Intrusion 振幅過濾
-  if (intAbn && intrusionAmp === 'small') {
-    // 小振幅 → 固視穩定性障礙（Flocculus/SC）
-    addRx({ mode: 'M1', name: 'Fixation固視穩定', angle: '0°（固視穩定專訓）', speed: 'S1', dist: 'D2', reps: '20', target: '有（點狀小目標）', bg: '空白背板', notes: ['Intrusion小振幅 → Cerebellum Flocculus/SC 固視穩定訓練'], priority: 2 });
-  }
-  if (intAbn && intrusionAmp === 'large') {
-    // 大振幅 → 交叉脊髓束（Cross-Cord Pathway）
-    addRx({ mode: 'M7', name: '複合Saccade交叉整合', angle: 'R45/L45（Cross-Cord訓練）', speed: 'S4', dist: 'D4', reps: '10', target: '有', bg: '空白背板', notes: ['Intrusion大振幅 → Cross-Cord Pathway — 交叉整合訓練（M7）'], priority: 2 });
+  // 振幅大 → Fastigial Nucleus / BG
+  if (intAbn && intrusionAmp === '大') {
+    addRx({ mode: 'M7', name: '複合Saccade交叉整合', angle: 'R45/L45（Fastigial/BG）', speed: 'S4', dist: 'D4', reps: '10', target: '有', bg: '空白背板',
+      notes: ['Intrusion振幅大 → Cerebellar Fastigial Nucleus + BG 注視抑制嚴重喪失 — 交叉整合訓練（M7）'], priority: 2 });
   }
   // Intrusion + Sync低 → M7 BrainStem
   if (intAbn && syncAbn) {
@@ -3792,6 +3785,7 @@ function generateBCFResults() {
     syncV:     parseNum(document.getElementById('re-syncV')?.value),
     intrusion: document.getElementById('re-intrusion')?.value || 'none',
     intrusionAmp: document.getElementById('re-intrusion-amp')?.value || 'none',
+    intrusionType: document.getElementById('re-intrusion-type')?.value || 'none',
     hTotal:    parseNum(document.getElementById('re-h-total')?.value),
     hOverR:    parseNum(document.getElementById('re-h-over-r')?.value),
     hUnderR:   parseNum(document.getElementById('re-h-under-r')?.value),
@@ -4132,6 +4126,7 @@ function generateIntegratedPrescription() {
     syncV:     parseNum(document.getElementById('re-syncV')?.value),
     intrusion: document.getElementById('re-intrusion')?.value || 'none',
     intrusionAmp: document.getElementById('re-intrusion-amp')?.value || 'none',
+    intrusionType: document.getElementById('re-intrusion-type')?.value || 'none',
     hTotal:    parseNum(document.getElementById('re-h-total')?.value),
     hOverR:    parseNum(document.getElementById('re-h-over-r')?.value),
     hUnderR:   parseNum(document.getElementById('re-h-under-r')?.value),
@@ -4716,15 +4711,24 @@ function renderRightEyeInterface() {
                   <option value="none">無</option>
                   <option value="up">Up（向上）</option>
                   <option value="down">Down（向下）</option>
-                  <option value="left">Left（向左）</option>
-                  <option value="right">Right（向右）</option>
+                  <option value="horizontal">Horizontal（水平）</option>
                 </select>
               </div>
-              <div class="form-group" style="margin-bottom:14px"><label>振幅</label>
+              <div class="form-group" style="margin-bottom:8px"><label>振幅</label>
                 <select id="re-intrusion-amp" class="select">
-                  <option value="none">未指定</option>
-                  <option value="small">小振幅（固視穩定性障礙）</option>
-                  <option value="large">大振幅（Cross-Cord）</option>
+                  <option value="none">無</option>
+                  <option value="小">小</option>
+                  <option value="中">中</option>
+                  <option value="大">大</option>
+                </select>
+              </div>
+              <div class="form-group" style="margin-bottom:14px"><label>侵入類型</label>
+                <select id="re-intrusion-type" class="select">
+                  <option value="none">未分類</option>
+                  <option value="saccadic">掃視侵入（Saccadic Intrusion）</option>
+                  <option value="swj">方波跳動（Square Wave Jerks）</option>
+                  <option value="vertical">垂直侵入（Vertical Intrusion）</option>
+                  <option value="catchup">趕上性掃視（Catch-up Saccades）</option>
                 </select>
               </div>
               <div class="re-num-group">Saccade 垂直（次數）</div>
@@ -4944,6 +4948,8 @@ function clearRightEyeForm() {
   if (reInt) reInt.value = 'none';
   const reIntAmp = document.getElementById('re-intrusion-amp');
   if (reIntAmp) reIntAmp.value = 'none';
+  const reIntType = document.getElementById('re-intrusion-type');
+  if (reIntType) reIntType.value = 'none';
   const reOrthR = document.getElementById('re-orth-right');
   if (reOrthR) reOrthR.value = 'none';
   const reOrthL = document.getElementById('re-orth-left');
@@ -5263,7 +5269,11 @@ async function readRightEyeWithAI() {
     }
     if (vals.intrusionAmp) {
       const intAmpEl = document.getElementById('re-intrusion-amp');
-      if (intAmpEl) intAmpEl.value = vals.intrusionAmp;
+      if (intAmpEl) {
+        // 相容舊版 AI 回傳值 small→小 / large→大
+        const ampMap = { small: '小', large: '大' };
+        intAmpEl.value = ampMap[vals.intrusionAmp] || vals.intrusionAmp;
+      }
     }
     const fillSel = (id, v) => { if (v && v !== 'none') { const el = document.getElementById(id); if (el) el.value = v; } };
     fillSel('re-orth-right', vals.orthRight);
@@ -5307,6 +5317,7 @@ function analyzeRightEyeStandalone() {
     syncV:     parseNum(document.getElementById('re-syncV')?.value),
     intrusion: document.getElementById('re-intrusion')?.value || 'none',
     intrusionAmp: document.getElementById('re-intrusion-amp')?.value || 'none',
+    intrusionType: document.getElementById('re-intrusion-type')?.value || 'none',
     hTotal:    parseNum(document.getElementById('re-h-total')?.value),
     hOverR:    parseNum(document.getElementById('re-h-over-r')?.value),
     hUnderR:   parseNum(document.getElementById('re-h-under-r')?.value),
@@ -5485,6 +5496,7 @@ function generateREStrategyPrescription() {
     syncV:     parseNum(document.getElementById('re-syncV')?.value),
     intrusion: document.getElementById('re-intrusion')?.value || 'none',
     intrusionAmp: document.getElementById('re-intrusion-amp')?.value || 'none',
+    intrusionType: document.getElementById('re-intrusion-type')?.value || 'none',
     hTotal:    parseNum(document.getElementById('re-h-total')?.value),
     hOverR:    parseNum(document.getElementById('re-h-over-r')?.value),
     hUnderR:   parseNum(document.getElementById('re-h-under-r')?.value),
@@ -5605,6 +5617,7 @@ async function saveRightEyeAssessment() {
     // Intrusion
     intrusion:    document.getElementById('re-intrusion')?.value || 'none',
     intrusionAmp: document.getElementById('re-intrusion-amp')?.value || 'none',
+    intrusionType: document.getElementById('re-intrusion-type')?.value || 'none',
     // Lateral Pulsion
     vpLateralDrift: parseNum(document.getElementById('re-vp-lateral-drift')?.value),
     vsLateralDrift: parseNum(document.getElementById('re-vs-lateral-drift')?.value),
