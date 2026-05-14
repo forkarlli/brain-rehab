@@ -7136,37 +7136,121 @@ function renderZone3(result) {
   // --- 互補資訊 ---
   const muscleRec2  = result.records?.muscle;
   const reRec2      = result.records?.rightEye;
-  const muscleCompItems = [];
-  if (muscleRec2?.convergenceItems && Object.keys(muscleRec2.convergenceItems).length > 0)
-    muscleCompItems.push('Convergence 異常：' + Object.keys(muscleRec2.convergenceItems).join('、'));
-  if (muscleRec2?.cervicalItems && Object.values(muscleRec2.cervicalItems).some(v => v && v !== 'none'))
-    muscleCompItems.push('頸椎/頭部姿勢異常');
-  if (muscleRec2?.stanceItems && Object.values(muscleRec2.stanceItems).some(v => v && v !== 'none'))
-    muscleCompItems.push('站立姿勢張力異常');
-  const reCompItems = [];
-  if (reRec2?.intrusion && reRec2.intrusion !== 'none') {
-    const intTypeMap = { saccadic:'掃視侵入', swj:'SWJ', vertical:'垂直侵入', catchup:'趕上性掃視' };
-    const tName = intTypeMap[reRec2.intrusionType] || '';
-    reCompItems.push(`Intrusion：${reRec2.intrusion === 'up' ? 'Up' : reRec2.intrusion === 'down' ? 'Down' : 'Horizontal'}${tName ? `（${tName}）` : ''}`);
+
+  // helper: small badge
+  const _cBadge = (text, bg) =>
+    `<span style="display:inline-block;background:${bg};color:#fff;border-radius:4px;padding:1px 8px;font-size:10px;margin:2px 2px 2px 0;font-weight:600">${text}</span>`;
+  const _indNote =
+    `<span style="font-size:9px;color:var(--gray-400);margin-left:6px;font-weight:400">此項目無對應比較模組，為獨立臨床發現</span>`;
+
+  // — 肌肉張力獨有 —
+  const muscleCompSections = [];
+
+  // 1. C碼 對角視覺刺激
+  const C_DIR = { C2:'左上↗ Right Temporal', C4:'左下↘ Right Parietal', C6:'右上↖ Left Temporal', C8:'右下↙ Left Parietal' };
+  const cCodes = (muscleRec2?.visualStimItems ?? []).filter(id => C_DIR[id]);
+  if (cCodes.length > 0) {
+    muscleCompSections.push(`
+      <div style="margin-bottom:8px">
+        <div style="font-size:10px;font-weight:700;color:#c2410c;margin-bottom:4px">⚠️ 對角視覺刺激反饋（C碼）${_indNote}</div>
+        <div>${cCodes.map(id => _cBadge(id + '　' + C_DIR[id], '#7c3aed')).join('')}</div>
+      </div>`);
   }
-  if ((reRec2?.syncH != null && reRec2.syncH < 0.85) || (reRec2?.syncV != null && reRec2.syncV < 0.85))
-    reCompItems.push(`Sync SP 異常：H=${reRec2.syncH ?? '—'} / V=${reRec2.syncV ?? '—'}`);
-  if (reRec2?.eso != null && reRec2.eso > 1.0)
-    reCompItems.push(`ESO 偏高：${reRec2.eso.toFixed(2)}`);
-  if ((reRec2?.latOD != null && reRec2.latOD > 200) || (reRec2?.latOS != null && reRec2.latOS > 200))
-    reCompItems.push(`Latency 延遲：OD=${reRec2.latOD ?? '—'}ms / OS=${reRec2.latOS ?? '—'}ms`);
-  const compHtml = (muscleCompItems.length + reCompItems.length > 0) ? `
+
+  // 2. Convergence
+  const CONV_LBL = { 'conv-up':'上方Convergence', 'conv-mid':'中間Convergence', 'conv-dn':'下方Convergence' };
+  const convKeys = Object.keys(muscleRec2?.convergenceItems ?? {}).filter(k => CONV_LBL[k]);
+  if (convKeys.length > 0) {
+    muscleCompSections.push(`
+      <div style="margin-bottom:8px">
+        <div style="font-size:10px;font-weight:700;color:#c2410c;margin-bottom:4px">⚠️ Convergence 收斂測試${_indNote}</div>
+        <div>${convKeys.map(k => _cBadge(CONV_LBL[k], '#d97706')).join('')}</div>
+      </div>`);
+  }
+
+  // 3. 延腦功能 — 舌頭推頂
+  const TONGUE_SIDE = { right:'右頂→右延腦', left:'左頂→左延腦' };
+  const WEAK_LBL    = { left:'弱側：左', right:'弱側：右', bilateral:'弱側：雙側' };
+  const tongueKeys  = Object.keys(muscleRec2?.tongueItems ?? {});
+  if (tongueKeys.length > 0) {
+    muscleCompSections.push(`
+      <div style="margin-bottom:8px">
+        <div style="font-size:10px;font-weight:700;color:#c2410c;margin-bottom:4px">⚠️ 延腦功能（舌頭推頂）${_indNote}</div>
+        <div>${tongueKeys.map(side => {
+          const info = muscleRec2.tongueItems[side];
+          const weak = info.weakSide ? '　' + (WEAK_LBL[info.weakSide] ?? info.weakSide) : '';
+          return _cBadge((TONGUE_SIDE[side] ?? side) + weak, '#059669');
+        }).join('')}</div>
+      </div>`);
+  }
+
+  // 4. 頸椎 / 站立（保留，只顯示有異常時）
+  if (muscleRec2?.cervicalItems && Object.values(muscleRec2.cervicalItems).some(v => v && v !== 'none'))
+    muscleCompSections.push(`
+      <div style="margin-bottom:8px">
+        <div style="font-size:10px;font-weight:700;color:#c2410c;margin-bottom:4px">⚠️ 頸椎/頭部姿勢異常${_indNote}</div>
+      </div>`);
+  if (muscleRec2?.stanceItems && Object.values(muscleRec2.stanceItems).some(v => v && v !== 'none'))
+    muscleCompSections.push(`
+      <div style="margin-bottom:8px">
+        <div style="font-size:10px;font-weight:700;color:#c2410c;margin-bottom:4px">⚠️ 站立姿勢張力異常${_indNote}</div>
+      </div>`);
+
+  // — RightEye 獨有 —
+  const reCompSections = [];
+
+  // Intrusion
+  if (reRec2?.intrusion && reRec2.intrusion !== 'none') {
+    const INT_TYPE = { saccadic:'掃視侵入', swj:'SWJ', vertical:'垂直侵入', catchup:'趕上性掃視' };
+    const dirLbl = reRec2.intrusion === 'up' ? '向上' : reRec2.intrusion === 'down' ? '向下' : '水平';
+    const ampLbl = reRec2.intrusionAmp && reRec2.intrusionAmp !== 'none' ? reRec2.intrusionAmp + '振幅' : '';
+    const typLbl = INT_TYPE[reRec2.intrusionType] || '';
+    reCompSections.push(`
+      <div style="margin-bottom:8px">
+        <div style="font-size:10px;font-weight:700;color:#7e22ce;margin-bottom:4px">⚠️ Intrusion 掃視侵入${_indNote}</div>
+        <div>${_cBadge(`${dirLbl}${ampLbl ? ' / ' + ampLbl : ''}${typLbl ? '（' + typLbl + '）' : ''}`, '#7c3aed')}</div>
+      </div>`);
+  }
+
+  // Sync SP
+  if ((reRec2?.syncH != null && reRec2.syncH < 0.85) || (reRec2?.syncV != null && reRec2.syncV < 0.85)) {
+    reCompSections.push(`
+      <div style="margin-bottom:8px">
+        <div style="font-size:10px;font-weight:700;color:#7e22ce;margin-bottom:4px">⚠️ Sync SP 同步性異常${_indNote}</div>
+        <div>${_cBadge(`水平 ${reRec2.syncH ?? '—'} / 垂直 ${reRec2.syncV ?? '—'}`, '#0369a1')}</div>
+      </div>`);
+  }
+
+  // Latency
+  if ((reRec2?.latOD != null && reRec2.latOD > 200) || (reRec2?.latOS != null && reRec2.latOS > 200)) {
+    reCompSections.push(`
+      <div style="margin-bottom:8px">
+        <div style="font-size:10px;font-weight:700;color:#7e22ce;margin-bottom:4px">⚠️ Saccadic Latency 延遲${_indNote}</div>
+        <div>${_cBadge(`OD ${reRec2.latOD ?? '—'} ms`, '#be185d')} ${_cBadge(`OS ${reRec2.latOS ?? '—'} ms`, '#be185d')}</div>
+      </div>`);
+  }
+
+  // ESO
+  if (reRec2?.eso != null && reRec2.eso > 1.0) {
+    reCompSections.push(`
+      <div style="margin-bottom:8px">
+        <div style="font-size:10px;font-weight:700;color:#7e22ce;margin-bottom:4px">⚠️ ESO 偏高${_indNote}</div>
+        <div>${_cBadge(`ESO ${reRec2.eso.toFixed(2)}（正常 < 1.0）`, '#b45309')}</div>
+      </div>`);
+  }
+
+  const compHtml = (muscleCompSections.length + reCompSections.length > 0) ? `
     <div style="margin-bottom:16px;padding:12px 14px;border:1px solid var(--gray-200);border-radius:8px">
       <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:10px">📋 互補資訊（各模組獨有發現）</div>
-      ${muscleCompItems.length > 0 ? `
-      <div style="margin-bottom:8px">
-        <div style="font-size:10px;color:#15803d;font-weight:700;margin-bottom:4px">肌肉張力獨有</div>
-        ${muscleCompItems.map(t=>`<div style="font-size:11px;color:var(--gray-600);padding:2px 0">• ${t}</div>`).join('')}
+      ${muscleCompSections.length > 0 ? `
+      <div style="margin-bottom:${reCompSections.length > 0 ? '12px' : '0'};padding-bottom:${reCompSections.length > 0 ? '12px' : '0'};border-bottom:${reCompSections.length > 0 ? '1px solid var(--gray-100)' : 'none'}">
+        <div style="font-size:10px;color:#15803d;font-weight:700;margin-bottom:8px">🟢 肌肉張力獨有</div>
+        ${muscleCompSections.join('')}
       </div>` : ''}
-      ${reCompItems.length > 0 ? `
+      ${reCompSections.length > 0 ? `
       <div>
-        <div style="font-size:10px;color:#7e22ce;font-weight:700;margin-bottom:4px">RightEye 獨有</div>
-        ${reCompItems.map(t=>`<div style="font-size:11px;color:var(--gray-600);padding:2px 0">• ${t}</div>`).join('')}
+        <div style="font-size:10px;color:#7e22ce;font-weight:700;margin-bottom:8px">🟣 RightEye 獨有</div>
+        ${reCompSections.join('')}
       </div>` : ''}
     </div>` : '';
 
