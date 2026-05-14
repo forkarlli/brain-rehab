@@ -5818,11 +5818,11 @@ function renderRombergInterface() {
       const computeBtn = container.querySelector('#romberg-compute-btn');
       const saveBtn = document.createElement('button');
       saveBtn.id = 'btracks-save-btn';
-      saveBtn.className = 'btn btn-outline';
-      saveBtn.style.width = '100%';
+      saveBtn.className = 'btn btn-success';
+      saveBtn.style.cssText = 'width:100%;margin-bottom:10px;';
       saveBtn.textContent = '💾 儲存平衡測試結果';
       saveBtn.addEventListener('click', saveBTracksAssessment);
-      computeBtn.insertAdjacentElement('afterend', saveBtn);
+      computeBtn.insertAdjacentElement('beforebegin', saveBtn);
     }
     return;
   }
@@ -5953,8 +5953,8 @@ function renderRombergInterface() {
           </select>
         </div>
 
+        <button id="btracks-save-btn" class="btn btn-success" style="width:100%;margin-bottom:10px;" onclick="saveBTracksAssessment()">💾 儲存平衡測試結果</button>
         <button id="romberg-compute-btn" class="btn btn-primary" style="width:100%;margin-bottom:10px;">生成診斷與處方</button>
-        <button id="btracks-save-btn" class="btn btn-outline" style="width:100%;" onclick="saveBTracksAssessment()">💾 儲存平衡測試結果</button>
 
         <div id="romberg-result" style="display:none;margin-top:24px;"></div>
       </div>
