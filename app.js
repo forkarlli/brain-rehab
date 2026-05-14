@@ -6876,6 +6876,7 @@ function runIntegratedAnalysis(patientId) {
       spH: reRec.spH, spV: reRec.spV, spC: reRec.spC, eso: reRec.eso,
       svH: reRec.svH, svV: reRec.svV, syncH: reRec.syncH, syncV: reRec.syncV,
       intrusion: reRec.intrusion || 'none', intrusionAmp: reRec.intrusionAmp || 'none',
+      intrusionType: reRec.intrusionType || 'none',
       vpLateralDrift: reRec.vpLateralDrift ?? null, vsLateralDrift: reRec.vsLateralDrift ?? null,
       hTotal: reRec.hTotal, hOverR: reRec.hOverR, hUnderR: reRec.hUnderR, hMissedR: reRec.hMissedR,
       hOverL: reRec.hOverL, hUnderL: reRec.hUnderL, hMissedL: reRec.hMissedL,
@@ -6885,6 +6886,7 @@ function runIntegratedAnalysis(patientId) {
       orthRight: reRec.orthRight ?? null, orthLeft: reRec.orthLeft ?? null,
       svRight: reRec.svRight ?? null, svLeft: reRec.svLeft ?? null,
       svUp: reRec.svUp ?? null, svDown: reRec.svDown ?? null,
+      latOD: reRec.latOD ?? null, latOS: reRec.latOS ?? null,
       hOverRGrade: null, hUnderRGrade: null, hOverLGrade: null, hUnderLGrade: null,
     });
   }
@@ -6940,7 +6942,44 @@ function runIntegratedAnalysis(patientId) {
     hasData: allRegions > 0,
     activeModules, effectiveModuleCount,
     confirmedCount: highConf, totalRegionCount: allRegions,
+    moduleOutputs,
+    records: { muscle: muscleRec, rightEye: reRec },
   };
+}
+
+// ── 三域對比：從模組 weakRegions 篩出屬於該域的腦區 ──
+function extractDomainRegions(moduleOutput, domain) {
+  const domainRegions = {
+    horizontal: ['Left FEF','Right FEF','Left PPRF','Right PPRF','Left CB','Right CB','Left SC','Right SC','Left BG','Right BG'],
+    vertical:   ['riMLF','CB Vermis','Superior Colliculus','Midbrain','Bilateral Midbrain','Bilateral SC','Cerebellar Fastigial Nucleus'],
+    vestibular: ['Left CB','Right CB','Left Flocculus','Right Flocculus','CB Flocculus','Vestibulocerebellum',
+                 'Left Vestibular','Right Vestibular','Bilateral Anterior Canal',
+                 'Left Anterior Canal','Right Anterior Canal','Left Posterior Canal','Right Posterior Canal'],
+  };
+  const targetList = domainRegions[domain] ?? [];
+  return [...new Set(
+    (moduleOutput?.weakRegions ?? [])
+      .map(r => normalizeBrainRegion(r.name))
+      .filter(canonical => targetList.some(t => canonical === t || canonical.includes(t) || t.includes(canonical)))
+  )];
+}
+
+// ── 三域對比：比較兩模組在同一域的腦區集合 ──
+function compareDomain(muscleRegions, rightEyeRegions) {
+  if (muscleRegions.length === 0 || rightEyeRegions.length === 0) {
+    return { status: 'insufficient', common: [], conflict: [], muscleOnly: muscleRegions, rightEyeOnly: rightEyeRegions };
+  }
+  const a = new Set(muscleRegions), b = new Set(rightEyeRegions);
+  const common = [...a].filter(x => b.has(x));
+  const conflict = [];
+  for (const r of a) {
+    const opp = r.startsWith('Left ') ? r.replace('Left ','Right ') : r.startsWith('Right ') ? r.replace('Right ','Left ') : null;
+    if (opp && b.has(opp)) conflict.push(`${r} vs ${opp}`);
+  }
+  const muscleOnly = [...a].filter(x => !b.has(x));
+  const rightEyeOnly = [...b].filter(x => !a.has(x));
+  const status = conflict.length > 0 ? 'conflict' : common.length > 0 ? 'consistent' : 'complementary';
+  return { status, common, conflict, muscleOnly, rightEyeOnly };
 }
 
 function renderZone3(result) {
@@ -6977,7 +7016,6 @@ function renderZone3(result) {
         <div style="flex:1;background:var(--gray-100);border-radius:4px;height:14px;overflow:hidden">
           <div style="width:${pct}%;background:${clr};height:100%;border-radius:4px;transition:width .5s ease"></div>
         </div>
-        <span style="min-width:36px;text-align:right;font-size:12px;font-weight:800;color:${clr}">${pct}%</span>
       </div>`;
   }).join('');
 
@@ -6989,22 +7027,13 @@ function renderZone3(result) {
     const isHigh    = info.sources.length >= 2;
     const status    = isHigh ? '🔴 跨模組確認' : '🟡 單一模組';
     const statusClr = isHigh ? '#dc2626' : '#d97706';
-    const confPct  = Math.round(info.confidence * 100);
-    const uniqSrc  = [...new Set(info.sources)];
+    const uniqSrc   = [...new Set(info.sources)];
     const srcBadges = uniqSrc.map(s => MOD_BADGE[s] || s).join(' ');
     return `
       <tr>
         <td><span class="bcf-brain-region-tag" style="font-size:11px">🧠 ${region}</span></td>
         <td style="white-space:nowrap">${srcBadges}</td>
         <td style="text-align:center;font-weight:700;color:var(--gray-700)">${info.sources.length}</td>
-        <td style="min-width:120px">
-          <div style="display:flex;align-items:center;gap:6px">
-            <div style="flex:1;background:var(--gray-100);border-radius:3px;height:8px;overflow:hidden">
-              <div style="width:${confPct}%;background:${statusClr};height:100%;border-radius:3px"></div>
-            </div>
-            <span style="font-size:11px;font-weight:700;color:${statusClr};min-width:30px">${confPct}%</span>
-          </div>
-        </td>
         <td><span style="color:${statusClr};font-size:12px;font-weight:600">${status}</span></td>
       </tr>`;
   }).join('');
@@ -7013,7 +7042,7 @@ function renderZone3(result) {
   const modCount = effectiveModuleCount ?? Object.keys(weights).length;
   const lat = consistencyLat ?? { pct: 0, status: 'insufficient', detail: '無資料', perModule: {} };
 
-  // --- Area 1: Laterality bars ---
+  // --- 側性橫條 ---
   const LAT_SIDE_LABELS = { left: '左側傾向', right: '右側傾向', bilateral: '雙側' };
   const perModLatRows = Object.entries(lat.perModule ?? {}).map(([mod, info]) => {
     const sideClr = info.dominantSide === 'left' ? '#2563eb' : info.dominantSide === 'right' ? '#dc2626' : '#7c3aed';
@@ -7040,7 +7069,7 @@ function renderZone3(result) {
         .join(' vs ')
     : '';
 
-  // --- Area 2: Multi-module confirmed (sources >= 2) ---
+  // --- 跨模組確認腦區 ---
   const confirmedEntries = Object.entries(brainRegionMap)
     .filter(([, v]) => v.sources.length >= 2)
     .sort(([, a], [, b]) => b.confidence - a.confidence);
@@ -7055,24 +7084,91 @@ function renderZone3(result) {
       }).join('')
     : `<div style="font-size:11px;color:var(--gray-400);padding:2px 0">目前無跨模組確認腦區，建議完成平衡測試</div>`;
 
-  // --- Area 3: Single-module hints (sources === 1), grouped by mod ---
-  const singleEntries = Object.entries(brainRegionMap).filter(([, v]) => v.sources.length === 1);
-  const byMod = {};
-  for (const [region, info] of singleEntries) {
-    const mod = info.sources[0];
-    if (!byMod[mod]) byMod[mod] = [];
-    byMod[mod].push(region);
-  }
-  const singleRows = Object.entries(byMod).map(([mod, regions]) => {
-    const tags = regions.map(r =>
-      `<span style="display:inline-block;background:#fff7ed;color:#c2410c;border-radius:4px;padding:1px 6px;font-size:10px;margin:2px 2px 2px 0">⚠️ ${r}</span>`
-    ).join('');
-    return `<div style="margin-bottom:7px">
-      <div style="font-size:10px;color:var(--gray-500);margin-bottom:3px">${MOD_LABELS[mod] ?? mod} 提示：</div>
-      <div style="line-height:1.8">${tags}</div>
+  // --- 三域對比卡片 ---
+  const muscleModOut   = result.moduleOutputs?.muscle;
+  const rightEyeModOut = result.moduleOutputs?.rightEye;
+  const DOMAIN_DEFS = [
+    { key: 'horizontal', icon: '↔', label: '水平眼球運動', muscleLabel: '肌肉張力（E5/E6）', reLabel: 'RightEye（H-Saccade）' },
+    { key: 'vertical',   icon: '↕', label: '垂直眼球運動', muscleLabel: '肌肉張力（E7/E8）', reLabel: 'RightEye（V-Saccade）' },
+    { key: 'vestibular', icon: '🌀', label: '前庭小腦整合', muscleLabel: '肌肉張力（V碼）',   reLabel: 'RightEye（Pursuit/Orth）' },
+  ];
+  const rbadge = r => `<span style="display:inline-block;background:#f1f5f9;color:#334155;border-radius:4px;padding:1px 6px;font-size:10px;margin:1px;font-weight:600">🧠 ${r}</span>`;
+  const domainCardsHtml = DOMAIN_DEFS.map(def => {
+    const mR  = extractDomainRegions(muscleModOut, def.key);
+    const reR = extractDomainRegions(rightEyeModOut, def.key);
+    const cmp = compareDomain(mR, reR);
+    const mBadges  = mR.length  > 0 ? mR.map(rbadge).join('')  : `<span style="font-size:10px;color:var(--gray-400)">無此域異常</span>`;
+    const reBadges = reR.length > 0 ? reR.map(rbadge).join('') : `<span style="font-size:10px;color:var(--gray-400)">無此域異常</span>`;
+    let statusHtml;
+    if (cmp.status === 'consistent') {
+      statusHtml = `<div style="padding:5px 8px;background:#f0fdf4;border-radius:5px;display:flex;align-items:flex-start;gap:5px">
+        <span style="color:#16a34a">✅</span>
+        <div><span style="font-size:11px;font-weight:700;color:#15803d">共同確認：</span>
+        ${cmp.common.map(r=>`<span style="background:#dcfce7;color:#15803d;border-radius:4px;padding:1px 6px;font-size:10px;margin:1px;display:inline-block">🧠 ${r}</span>`).join('')}</div>
+      </div>`;
+    } else if (cmp.status === 'conflict') {
+      statusHtml = `<div style="padding:5px 8px;background:#fef2f2;border-radius:5px">
+        <div style="display:flex;align-items:center;gap:5px;margin-bottom:3px"><span style="color:#dc2626">❌</span>
+        <span style="font-size:11px;font-weight:700;color:#b91c1c">側性矛盾：${cmp.conflict.join('；')}</span></div>
+        <div style="font-size:10px;color:#b91c1c;padding-left:18px">建議重新評估確認</div>
+      </div>`;
+    } else if (cmp.status === 'complementary') {
+      statusHtml = `<div style="padding:5px 8px;background:#eff6ff;border-radius:5px;display:flex;align-items:center;gap:5px">
+        <span style="color:#2563eb">➕</span>
+        <span style="font-size:11px;color:#1d4ed8">互補資訊：兩模組指向不同腦區</span>
+      </div>`;
+    } else {
+      const missing = mR.length === 0 ? '肌肉張力' : 'RightEye';
+      statusHtml = `<div style="padding:5px 8px;background:#f8fafc;border-radius:5px;display:flex;align-items:center;gap:5px">
+        <span style="color:var(--gray-400)">➖</span>
+        <span style="font-size:11px;color:var(--gray-500)">資料不足：${missing}無此域異常</span>
+      </div>`;
+    }
+    const borderClr = cmp.status === 'consistent' ? '#86efac' : cmp.status === 'conflict' ? '#fca5a5' : cmp.status === 'complementary' ? '#93c5fd' : '#e2e8f0';
+    return `<div style="border:1.5px solid ${borderClr};border-radius:8px;padding:11px 13px;margin-bottom:10px">
+      <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:7px">${def.icon} ${def.label}</div>
+      <div style="margin-bottom:3px"><span style="font-size:10px;color:var(--gray-500)">${def.muscleLabel}：</span>${mBadges}</div>
+      <div style="margin-bottom:8px"><span style="font-size:10px;color:var(--gray-500)">${def.reLabel}：</span>${reBadges}</div>
+      <div style="border-top:1px solid var(--gray-100);padding-top:7px">${statusHtml}</div>
     </div>`;
   }).join('');
-  const singleContent = singleRows || `<div style="font-size:11px;color:var(--gray-400)">無單一模組提示腦區</div>`;
+
+  // --- 互補資訊 ---
+  const muscleRec2  = result.records?.muscle;
+  const reRec2      = result.records?.rightEye;
+  const muscleCompItems = [];
+  if (muscleRec2?.convergenceItems && Object.keys(muscleRec2.convergenceItems).length > 0)
+    muscleCompItems.push('Convergence 異常：' + Object.keys(muscleRec2.convergenceItems).join('、'));
+  if (muscleRec2?.cervicalItems && Object.values(muscleRec2.cervicalItems).some(v => v && v !== 'none'))
+    muscleCompItems.push('頸椎/頭部姿勢異常');
+  if (muscleRec2?.stanceItems && Object.values(muscleRec2.stanceItems).some(v => v && v !== 'none'))
+    muscleCompItems.push('站立姿勢張力異常');
+  const reCompItems = [];
+  if (reRec2?.intrusion && reRec2.intrusion !== 'none') {
+    const intTypeMap = { saccadic:'掃視侵入', swj:'SWJ', vertical:'垂直侵入', catchup:'趕上性掃視' };
+    const tName = intTypeMap[reRec2.intrusionType] || '';
+    reCompItems.push(`Intrusion：${reRec2.intrusion === 'up' ? 'Up' : reRec2.intrusion === 'down' ? 'Down' : 'Horizontal'}${tName ? `（${tName}）` : ''}`);
+  }
+  if ((reRec2?.syncH != null && reRec2.syncH < 0.85) || (reRec2?.syncV != null && reRec2.syncV < 0.85))
+    reCompItems.push(`Sync SP 異常：H=${reRec2.syncH ?? '—'} / V=${reRec2.syncV ?? '—'}`);
+  if (reRec2?.eso != null && reRec2.eso > 1.0)
+    reCompItems.push(`ESO 偏高：${reRec2.eso.toFixed(2)}`);
+  if ((reRec2?.latOD != null && reRec2.latOD > 200) || (reRec2?.latOS != null && reRec2.latOS > 200))
+    reCompItems.push(`Latency 延遲：OD=${reRec2.latOD ?? '—'}ms / OS=${reRec2.latOS ?? '—'}ms`);
+  const compHtml = (muscleCompItems.length + reCompItems.length > 0) ? `
+    <div style="margin-bottom:16px;padding:12px 14px;border:1px solid var(--gray-200);border-radius:8px">
+      <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:10px">📋 互補資訊（各模組獨有發現）</div>
+      ${muscleCompItems.length > 0 ? `
+      <div style="margin-bottom:8px">
+        <div style="font-size:10px;color:#15803d;font-weight:700;margin-bottom:4px">肌肉張力獨有</div>
+        ${muscleCompItems.map(t=>`<div style="font-size:11px;color:var(--gray-600);padding:2px 0">• ${t}</div>`).join('')}
+      </div>` : ''}
+      ${reCompItems.length > 0 ? `
+      <div>
+        <div style="font-size:10px;color:#7e22ce;font-weight:700;margin-bottom:4px">RightEye 獨有</div>
+        ${reCompItems.map(t=>`<div style="font-size:11px;color:var(--gray-600);padding:2px 0">• ${t}</div>`).join('')}
+      </div>` : ''}
+    </div>` : '';
 
   const noBalanceBanner = (activeModules && !activeModules.includes('balance'))
     ? `<div style="margin-bottom:16px;padding:10px 16px;background:#fff7ed;border-left:4px solid #f97316;border-radius:6px;display:flex;align-items:flex-start;gap:10px">
@@ -7086,7 +7182,8 @@ function renderZone3(result) {
     <div class="card" style="padding:20px;margin-bottom:20px">
     ${noBalanceBanner}
 
-      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;flex-wrap:wrap">
+      <!-- Row 1: Weight bars + Laterality/Conflict -->
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px;margin-bottom:20px">
 
         <!-- Weight bars -->
         <div>
@@ -7096,14 +7193,11 @@ function renderZone3(result) {
           ${weightBars}
         </div>
 
-        <!-- Clinical Summary -->
+        <!-- Laterality + Conflict -->
         <div style="border:1px solid var(--gray-200);border-radius:10px;overflow:hidden">
-          <!-- Header -->
           <div style="padding:8px 14px;background:var(--gray-50);border-bottom:1px solid var(--gray-200);font-size:11px;color:var(--gray-500)">
-            📋 臨床整合摘要｜基於 ${modCount} 個有效模組
+            📋 側性與矛盾分析｜基於 ${modCount} 個有效模組
           </div>
-
-          <!-- Area 1: Laterality -->
           <div style="padding:12px 14px;border-bottom:1px solid var(--gray-100)">
             <div style="background:#eff6ff;border-radius:5px;padding:4px 10px;margin-bottom:8px;font-size:11px;font-weight:700;color:#1d4ed8">🧭 側性判斷</div>
             ${perModLatRows}
@@ -7112,20 +7206,6 @@ function renderZone3(result) {
               ${latIsConflict ? '<br><span style="font-size:10px;font-weight:400">建議重新評估確認側性</span>' : ''}
             </div>
           </div>
-
-          <!-- Area 2: Multi-module confirmed -->
-          <div style="padding:12px 14px;border-bottom:1px solid var(--gray-100)">
-            <div style="background:#f0fdf4;border-radius:5px;padding:4px 10px;margin-bottom:8px;font-size:11px;font-weight:700;color:#15803d">✅ 高可信發現（≥2個模組確認）</div>
-            ${confirmedRows}
-          </div>
-
-          <!-- Area 3: Single-module hints -->
-          <div style="padding:12px 14px;border-bottom:1px solid var(--gray-100)">
-            <div style="background:#fff7ed;border-radius:5px;padding:4px 10px;margin-bottom:8px;font-size:11px;font-weight:700;color:#c2410c">⚠️ 待確認發現（單一模組提示）</div>
-            ${singleContent}
-          </div>
-
-          <!-- Area 4: Conflict detection -->
           <div style="padding:12px 14px">
             <div style="background:${latIsConflict ? '#fef2f2' : '#f8fafc'};border-radius:5px;padding:4px 10px;margin-bottom:8px;font-size:11px;font-weight:700;color:${latIsConflict ? '#b91c1c' : '#475569'}">
               ${latIsConflict ? '❌' : '✅'} 模組間矛盾檢查
@@ -7141,8 +7221,23 @@ function renderZone3(result) {
         </div>
       </div>
 
+      <!-- Row 2: Three domain comparison cards -->
+      <div style="margin-bottom:16px">
+        <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:10px">🔍 三域對比分析（肌肉張力 vs RightEye）</div>
+        ${domainCardsHtml}
+      </div>
+
+      <!-- Row 3: 互補資訊 -->
+      ${compHtml}
+
+      <!-- Row 4: 高可信發現 -->
+      <div style="margin-bottom:16px;padding:12px 14px;border:1px solid #bbf7d0;border-radius:8px;background:#f0fdf4">
+        <div style="font-size:12px;font-weight:700;color:#15803d;margin-bottom:10px">✅ 高可信發現（≥2個模組確認）</div>
+        ${confirmedRows}
+      </div>
+
       <!-- Brain region table -->
-      <div style="margin-top:20px">
+      <div style="margin-bottom:16px">
         <div style="font-size:12px;font-weight:700;color:var(--gray-700);margin-bottom:8px">🧠 腦區弱化彙整</div>
         <div style="overflow-x:auto">
           <table class="data-table" style="margin:0;font-size:12px">
@@ -7151,19 +7246,18 @@ function renderZone3(result) {
                 <th>腦區</th>
                 <th>來源模組</th>
                 <th style="text-align:center">信號數</th>
-                <th>加權信心度</th>
                 <th>狀態</th>
               </tr>
             </thead>
             <tbody>
-              ${tableRows || '<tr><td colspan="5" style="text-align:center;padding:20px;color:var(--gray-300)">尚無跨模組腦區數據</td></tr>'}
+              ${tableRows || '<tr><td colspan="4" style="text-align:center;padding:20px;color:var(--gray-300)">尚無跨模組腦區數據</td></tr>'}
             </tbody>
           </table>
         </div>
       </div>
 
       <!-- Completion banner -->
-      <div style="margin-top:16px;padding:10px 16px;background:#f0fdf4;border-left:3px solid #16a34a;border-radius:6px;display:flex;align-items:center;gap:10px">
+      <div style="margin-top:4px;padding:10px 16px;background:#f0fdf4;border-left:3px solid #16a34a;border-radius:6px;display:flex;align-items:center;gap:10px">
         <span style="font-size:16px">✅</span>
         <span style="font-size:13px;font-weight:600;color:#15803d">整合分析完成，請選擇訓練策略</span>
       </div>
