@@ -114,7 +114,7 @@
 - Intrusion 振幅過濾器：小振幅 → Flocculus/SC + M1固視穩定處方；大振幅 → Cross-Cord Pathway + M7複合處方
 - 當日處方產生器（Zone1-5）：三模組整合分析、策略選擇、處方表、PDF匯出、儲存至歷史
 - RightEye 截圖 AI 自動讀取（已完成，呼叫 Railway /api/analyze-righteye）
-- BCF 飛行椅處方自動化（`_computeBCFChairRx`）：8半規管矩陣、Step-Jitter 步進計劃、雙側非對稱補償算法
+- BCF 飛行椅處方自動化（`_computeBCFChairRx`）：8半規管矩陣、Step-Jitter 步進計劃、雙側非對稱補償算法、自主神經安全監控建議
 
 ---
 
@@ -145,8 +145,8 @@
 - "Left Ant. + Post. Canal" (PL方向) → HLC
 
 ### Step-Jitter 步進計劃
-- 步進：5°→45°，每步 5°（9步）
-- Jitter 振幅：≤20° → ±1°；>20° → ±2°
+- 步進：**0°→45°**，每步 5°（共 10 步，含起始 0°）
+- Jitter 振幅：**±1.5°（XYZ 三軸）**，全步程統一
 - 步進節律（依 VES Path Length）：
   - < 40 cm（輕度）→ 每 2 秒一步
   - 40–70 cm（中度）→ 每 3 秒一步
@@ -155,9 +155,23 @@
 
 ### 雙側非對稱補償算法（僅 BAC/BPC）
 - Vector Angle = arctan(|ML| / |AP|)
-- Case A：AP > ML × 1.5 → Yaw 補償 = arctan(ML/AP)°，加入初始 Yaw
+- Case A：AP > ML × 1.5 → Yaw 補償 = arctan(ML/AP)°，加入初始 Yaw（例：AP=6.5, ML=3.1 → offset +25°）
 - Case B：ML > AP → Roll 補償 = arctan(ML/AP)°（顯示提示，不調整 Yaw）
 
 ### Horizontal Canal 向量分析（HRC/HLC）
-- |Vector Angle| ≤ 15° → 純 Yaw 旋轉
+- |Vector Angle| ≤ 15° → 純 Yaw 旋轉（±15° Roll 範圍）
 - |Vector Angle| > 15° → 考慮加入 Roll 分量
+
+### 自主神經安全監控（`autoMonitor`）
+| Path Length | 嚴重度 | 建議設備 |
+|------------|--------|---------|
+| < 40 cm | 輕度 | 標準 SpO₂ 監測 |
+| 40–70 cm | 中度 | PPG 指尖血流監測 |
+| > 70 cm | 重度 | CNAP 逐搏血壓監測 |
+
+**警戒指標：**
+- PPG 波幅下降 > 30% → 立即暫停，椅子回正
+- 心率突然上升 > 20 bpm → 降低步進至 2°
+- 患者回報頭暈加劇 → 停止並記錄當前角度
+
+**Emergency Reset：**偵測到 PPG Amplitude 驟減 → 自動回正至初始 Yaw 角度

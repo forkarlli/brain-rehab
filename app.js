@@ -2411,10 +2411,30 @@ function _computeBCFChairRx(canalStr, apSway, mlSway, pathLength) {
   // Yaw initial (base + asymmetry offset for Case A)
   const yawInitial = base.yawBase + (asymCase === 'A' ? offsetDeg : 0);
 
-  // Step-Jitter plan: 5°→45° in 5° increments, ±1° for ≤20°, ±2° for >20°
-  const steps = [];
+  // Step-Jitter plan: 0°→45° in 5° increments, ±1.5° XYZ three-axis perturbation
+  const steps = [{ step: 0, jitter: '±1.5°', note: '起始' }];
   for (let deg = 5; deg <= 45; deg += 5) {
-    steps.push({ step: deg, jitter: deg <= 20 ? '±1°' : '±2°' });
+    steps.push({ step: deg, jitter: '±1.5°' });
+  }
+
+  // Autonomic monitoring recommendation based on path severity
+  let autoMonitor;
+  if (path > 0 && path < 40) {
+    autoMonitor = { severity: 'mild',     severityLabel: '輕度',
+                    device: '標準 SpO₂ 監測', deviceShort: 'SpO₂',
+                    pathNote: `Path ${path.toFixed(0)} cm` };
+  } else if (path >= 40 && path < 70) {
+    autoMonitor = { severity: 'moderate', severityLabel: '中度',
+                    device: 'PPG 指尖血流監測', deviceShort: 'PPG',
+                    pathNote: `Path ${path.toFixed(0)} cm` };
+  } else if (path >= 70) {
+    autoMonitor = { severity: 'severe',   severityLabel: '重度',
+                    device: 'CNAP 逐搏血壓監測', deviceShort: 'CNAP',
+                    pathNote: `Path ${path.toFixed(0)} cm` };
+  } else {
+    autoMonitor = { severity: 'unknown',  severityLabel: '未知',
+                    device: 'PPG 指尖血流監測', deviceShort: 'PPG',
+                    pathNote: '未提供 Path 數據' };
   }
 
   // Safety notes
@@ -2427,11 +2447,11 @@ function _computeBCFChairRx(canalStr, apSway, mlSway, pathLength) {
 
   return {
     canalCode,
-    plane:      base.plane,
-    posture:    base.posture,
-    axis:       base.axis,
-    pitchDir:   base.pitchDir,
-    yawBase:    base.yawBase,
+    plane:       base.plane,
+    posture:     base.posture,
+    axis:        base.axis,
+    pitchDir:    base.pitchDir,
+    yawBase:     base.yawBase,
     yawInitial,
     offsetDeg,
     offsetNote,
@@ -2440,6 +2460,7 @@ function _computeBCFChairRx(canalStr, apSway, mlSway, pathLength) {
     jitterFreq,
     jitterNote,
     steps,
+    autoMonitor,
     safetyNotes,
   };
 }
@@ -6546,15 +6567,37 @@ function _renderRombergResultHTML(result) {
       </div>
       ${bcfChair.offsetNote ? `<div style="font-size:11px;color:#92400e;background:#fffbeb;padding:5px 10px;border-radius:5px;margin-bottom:6px;">📐 ${bcfChair.offsetNote}</div>` : ''}
       ${bcfChair.hcYawNote  ? `<div style="font-size:11px;color:#1e40af;background:#eff6ff;padding:5px 10px;border-radius:5px;margin-bottom:6px;">🔄 ${bcfChair.hcYawNote}</div>` : ''}
-      <div style="font-size:11px;font-weight:600;color:#7c3aed;margin-bottom:5px;">步進計劃（Step-Jitter 5°→45°）</div>
+      <div style="font-size:11px;font-weight:600;color:#7c3aed;margin-bottom:5px;">步進計劃（Step-Jitter 0°→45°，微動 ±1.5° XYZ）</div>
       <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;">
         ${bcfChair.steps.map(s => `
-          <div style="text-align:center;padding:5px 7px;background:#fff;border:1px solid #e9d5ff;border-radius:5px;min-width:38px;">
+          <div style="text-align:center;padding:5px 7px;background:${s.note ? '#f5f3ff' : '#fff'};border:1px solid #e9d5ff;border-radius:5px;min-width:38px;">
             <div style="font-weight:700;color:#7c3aed;font-size:12px;">${s.step}°</div>
-            <div style="color:#9ca3af;font-size:10px;">${s.jitter}</div>
+            <div style="color:#9ca3af;font-size:10px;">${s.note || s.jitter}</div>
           </div>`).join('')}
       </div>
       <div style="font-size:11px;color:#6b7280;line-height:1.6;">${bcfChair.safetyNotes.map(n => `⚠️ ${n}`).join('<br>')}</div>
+    </div>` : '';
+
+  const am = bcfChair?.autoMonitor || null;
+  const amSeverityColor = am?.severity === 'severe' ? '#991b1b' : am?.severity === 'moderate' ? '#92400e' : '#065F46';
+  const amSeverityBg    = am?.severity === 'severe' ? '#fee2e2' : am?.severity === 'moderate' ? '#fef3c7' : '#d1fae5';
+  const autonomicHTML = am ? `
+    <div style="margin-top:14px;padding:14px;background:#f0fdfa;border:1px solid #99f6e4;border-radius:8px;">
+      <div style="font-size:13px;font-weight:700;color:#0f766e;margin-bottom:10px;">🫀 自主神經安全監控建議</div>
+      <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:#fff;border-radius:6px;border:1px solid #99f6e4;margin-bottom:10px;flex-wrap:wrap;">
+        <span style="font-size:11px;padding:2px 8px;border-radius:3px;font-weight:600;background:${amSeverityBg};color:${amSeverityColor};">${am.severityLabel}</span>
+        <span style="font-size:12px;color:#134e4a;"><span style="font-weight:600;">建議監控設備：</span>${am.device}</span>
+        <span style="font-size:11px;color:#6b7280;">${am.pathNote}</span>
+      </div>
+      <div style="font-size:11px;font-weight:600;color:#0f766e;margin-bottom:6px;">⚡ 警戒指標（任一出現即停止）</div>
+      <div style="font-size:12px;color:#134e4a;line-height:2;">
+        <div>🔴 <span style="font-weight:600;">PPG 波幅下降 > 30%</span> → 立即暫停，椅子回正</div>
+        <div>🟡 <span style="font-weight:600;">心率突然上升 > 20 bpm</span> → 降低步進至 2°</div>
+        <div>🟡 <span style="font-weight:600;">患者回報頭暈加劇</span> → 停止並記錄當前角度</div>
+      </div>
+      <div style="margin-top:8px;font-size:11px;color:#0f766e;padding:6px 10px;background:#ccfbf1;border-radius:5px;line-height:1.5;">
+        🛡️ <strong>Emergency Reset：</strong>偵測到 PPG Amplitude 驟減時，系統自動觸發回正至初始 Yaw 角度${bcfChair ? ` (${bcfChair.yawInitial}°)` : ''}
+      </div>
     </div>` : '';
 
   return `
@@ -6570,6 +6613,7 @@ function _renderRombergResultHTML(result) {
       ${result.btracks_data?.sway_velocity ? `<div style="margin-bottom:6px;"><strong>EC Sway Velocity：</strong>${result.btracks_data.sway_velocity.toFixed(2)} cm/s</div>` : ''}
       ${alertsHTML}
       ${chairHTML}
+      ${autonomicHTML}
       ${trainingHTML}
       <div style="margin-top:12px;font-size:11px;color:#9ca3af;">Prescription Key: ${result.prescription_key}</div>
     </div>`;
