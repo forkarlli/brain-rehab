@@ -5813,7 +5813,19 @@ let _btracksData = null; // parsed BTrackS HTML report data
 function renderRombergInterface() {
   const container = document.getElementById('romberg-interface');
   if (!container) return;
-  if (container.querySelector('#romberg-compute-btn')) return;
+  if (container.querySelector('#romberg-compute-btn')) {
+    if (!container.querySelector('#btracks-save-btn')) {
+      const computeBtn = container.querySelector('#romberg-compute-btn');
+      const saveBtn = document.createElement('button');
+      saveBtn.id = 'btracks-save-btn';
+      saveBtn.className = 'btn btn-outline';
+      saveBtn.style.width = '100%';
+      saveBtn.textContent = '💾 儲存平衡測試結果';
+      saveBtn.addEventListener('click', saveBTracksAssessment);
+      computeBtn.insertAdjacentElement('afterend', saveBtn);
+    }
+    return;
+  }
 
   container.innerHTML = `
     <div class="card">
@@ -8274,7 +8286,37 @@ function _rxNoDataCard(icon, title) {
 }
 
 function _renderBalanceCard(rec) {
-  if (!rec || !rec.sway_direction) return _rxNoDataCard('⚖️', '平衡測試');
+  if (!rec) return _rxNoDataCard('⚖️', '平衡測試');
+  if (!rec.sway_direction) {
+    // Partial record (no direction): show available numerical data only
+    const rqVal = rec.rq ?? (rec.path_eo > 0 && rec.path_ec > 0 ? parseFloat((rec.path_ec / rec.path_eo).toFixed(2)) : null);
+    if (!rqVal && !rec.btracks_data) return _rxNoDataCard('⚖️', '平衡測試');
+    const rqClr = rqVal >= 2.0 ? '#dc2626' : '#d97706';
+    const pPro = rec.pct_pro ?? rec.btracks_data?.pct_pro;
+    const pVis = rec.pct_vis ?? rec.btracks_data?.pct_vis;
+    const pVes = rec.pct_ves ?? rec.btracks_data?.pct_ves;
+    const chip = (label, v) => {
+      if (v == null) return '';
+      const clr = v < 25 ? '#dc2626' : v <= 50 ? '#d97706' : '#16a34a';
+      const bg  = v < 25 ? '#fef2f2' : v <= 50 ? '#fffbeb' : '#f0fdf4';
+      return `<span style="background:${bg};color:${clr};border-radius:4px;padding:1px 5px;font-weight:600;margin-right:4px;">${label} ${v}%</span>`;
+    };
+    return `
+      <div class="rx-module-card">
+        <div class="rx-module-card-header">
+          <span class="rx-module-card-icon">⚖️</span>
+          <span class="rx-module-card-title">平衡測試（BTrackS/Romberg）</span>
+          <span style="font-size:10px;color:#6b7280;margin-left:auto;">偏移方向未填</span>
+        </div>
+        <div class="rx-module-card-date">評估日期：${rec.date}</div>
+        <div class="rx-module-card-body">
+          ${rqVal != null ? `<div class="rx-module-row"><span class="rx-module-label">RQ 值</span><span class="rx-module-value"><strong style="font-size:18px;color:${rqClr}">${rqVal}</strong></span></div>` : ''}
+          ${rec.btracks_data ? `<div class="rx-module-row"><span class="rx-module-label">路徑長度</span><span class="rx-module-value" style="font-size:11px">STD ${rec.btracks_data.path_std ?? '—'} ｜ PRO ${rec.btracks_data.path_pro ?? '—'} ｜ VIS ${rec.btracks_data.path_vis ?? '—'} ｜ <span style="color:#1d4ed8;font-weight:600">VES ${rec.btracks_data.path_ves ?? '—'}</span></span></div>` : ''}
+          ${(pPro != null || pVis != null || pVes != null) ? `<div class="rx-module-row"><span class="rx-module-label">Percentile</span><span class="rx-module-value" style="font-size:11px">${chip('PRO',pPro)}${chip('VIS',pVis)}${chip('VES',pVes)}</span></div>` : ''}
+          <div style="font-size:11px;color:#d97706;margin-top:8px;">⚠ 請補填偏移方向以完成完整分析</div>
+        </div>
+      </div>`;
+  }
 
   const result = computeRombergRx({
     source_type:            rec.btracks_data ? 'btracks_html' : 'manual',
