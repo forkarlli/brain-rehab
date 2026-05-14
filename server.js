@@ -275,7 +275,17 @@ app.post('/api/analyze-righteye', async (req, res) => {
   "leftward_overshoot":   <往左 Saccade Overshoot 程度: "none" | "mild" | "moderate" | "severe">,
   "leftward_undershoot":  <往左 Saccade Undershoot 程度: "none" | "mild" | "moderate" | "severe">,
   "vpLateralDrift": <垂直追隨水平偏移 mm（左偏負值，右偏正值，無偏移填 0）>,
-  "vsLateralDrift": <垂直跳視水平偏移 mm（左偏負值，右偏正值，無偏移填 0）>
+  "vsLateralDrift": <垂直跳視水平偏移 mm（左偏負值，右偏正值，無偏移填 0）>,
+  "latency_direction": {
+    "rightward_delayed": <往右掃視是否有延遲啟動：true | false | null>,
+    "leftward_delayed": <往左掃視是否有延遲啟動：true | false | null>,
+    "confidence": <判斷信心度："high" | "medium" | "low">,
+    "reason": <判斷依據（30字以內）>
+  },
+  "latency": {
+    "od_ms": <OD（右眼）平均 Saccadic Latency ms，找不到填 null>,
+    "os_ms": <OS（左眼）平均 Saccadic Latency ms，找不到填 null>
+  }
 }`;
   try {
     const response = await anthropic.messages.create({
@@ -328,7 +338,34 @@ app.post('/api/analyze-righteye', async (req, res) => {
    - "large"：大幅擺動（Cross-Cord Pathway 問題，波形大幅偏離 >5° 或明顯來回振盪）
    - null：無 intrusion（intrusion 填 "none" 時同步填 null）
 
-6. 數值提取：仔細讀取圖片中所有數字，包括小數點。找不到的欄位填 null。
+6. 【方向性 Latency 判斷】
+   請仔細觀察 Horizontal Saccades 軌跡圖：
+
+   判斷標準：
+   - 正常掃視：軌跡在目標出現後立即乾淨啟動，無停頓
+   - 延遲掃視：軌跡起點有明顯停頓或猶豫，或與對側方向相比啟動明顯較慢
+
+   請判斷：
+   1. 往右方向掃視是否有明顯延遲啟動跡象？
+   2. 往左方向掃視是否有明顯延遲啟動跡象？
+   3. 你的判斷信心度（high/medium/low）
+
+   在 JSON 中回傳：
+   "latency_direction": {
+     "rightward_delayed": true/false/null（無法判斷填 null）,
+     "leftward_delayed": true/false/null,
+     "confidence": "high" | "medium" | "low",
+     "reason": "簡短說明判斷依據（30字以內）"
+   }
+
+7. 【Saccade Latency OD/OS 提取】
+   請從 Saccade 統計表格中提取每隻眼睛的平均潛伏期：
+   - OD（右眼，Oculus Dexter）平均 Latency ms
+   - OS（左眼，Oculus Sinister）平均 Latency ms
+   若報告以 Mean Latency 或 Average Latency 呈現，分別讀取左右眼數值。
+   找不到則填 null。
+
+8. 數值提取：仔細讀取圖片中所有數字，包括小數點。找不到的欄位填 null。
 
 只回傳 JSON，不附加任何說明文字。`,
       messages: [{ role: 'user', content: [...imageBlocks, { type: 'text', text: userPrompt }] }],

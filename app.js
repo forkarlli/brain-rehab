@@ -1319,7 +1319,9 @@ const BRAIN_REGION_ALIASES = {
   'riMLF':                ['內側縱束嘴側間質核', '垂直眼動中樞', '中腦上視中樞',
                            'rostral interstitial MLF', 'Bilateral riMLF'],
   'Bilateral Midbrain':   ['雙側中腦', 'Midbrain', '中腦', 'Bilateral Midbrain（雙側）', '中腦上視中樞（雙側）'],
-  'Superior Colliculus':  ['上丘', '上視丘', 'SC', '上直肌神經支配中樞', '動眼神經核上方'],
+  'Superior Colliculus':  ['上丘', '上視丘', 'SC', 'Bilateral SC', '上直肌神經支配中樞', '動眼神經核上方'],
+  'Left SC':              ['左上丘', 'Left Superior Colliculus'],
+  'Right SC':             ['右上丘', 'Right Superior Colliculus'],
   'CN III':               ['動眼神經核', '上直肌神經支配', 'Oculomotor Nucleus', 'CN3'],
   'Left Vestibular':      ['左側前庭核', 'Left Vest'],
   'Right Vestibular':     ['右側前庭核', 'Right Vest'],
@@ -2470,6 +2472,9 @@ function computeEyeMachineRx(affectedBrainRegions, affectedItems, convMCodes) {
   const hasPPRF      = has('Left PPRF')  || has('Right PPRF');
   const hasMes       = has('Left Mes')   || has('Right Mes');
   const hasBrainStem = hasMidbrain || hasPons || hasPPRF || hasMes;
+  const hasLeftSC    = has('Left SC');
+  const hasRightSC   = has('Right SC');
+  const hasSC        = hasLeftSC || hasRightSC || has('Superior Colliculus');
 
   // === 眼動方向旗標 ===
   const codes     = new Set(affectedItems.map(i => i.code));
@@ -2676,6 +2681,14 @@ function computeEyeMachineRx(affectedBrainRegions, affectedItems, convMCodes) {
   // === M8: 複合Pursuit左右+前後（必放目標物）===
   if (hasBrainStem && hasCB && hasFEF) {
     rec.push({ mode: 'M8', name: '複合Pursuit左右+前後', angle: '多方向複合', speed: 'S5', dist: 'D5', reps: '15', target: '有（必放）', bg: '空白背板', notes: [] });
+  }
+
+  // === SC 多感官整合訓練建議（Left SC / Right SC 時加入注意事項）===
+  if (hasLeftSC) {
+    rec.push({ mode: 'SC-L', name: 'Left SC 多感官整合', angle: '左視野側刺激', speed: '—', dist: '—', reps: '10–15', target: '聲音+閃光', bg: '—', notes: ['建議加入多感官整合訓練：在左視野側同時給予聲音+閃光刺激，強化 Left SC 空間地圖校正（往右 Missed — 對側整合啟動端不足）'] });
+  }
+  if (hasRightSC) {
+    rec.push({ mode: 'SC-R', name: 'Right SC 多感官整合', angle: '右視野側刺激', speed: '—', dist: '—', reps: '10–15', target: '聲音+閃光', bg: '—', notes: ['建議加入多感官整合訓練：在右視野側同時給予聲音+閃光刺激，強化 Right SC 空間地圖校正（往左 Missed — 對側整合啟動端不足）'] });
   }
 
   return { rec, positionNote, headPos };
@@ -2950,7 +2963,8 @@ function computeRightEyeRx(data) {
           hTotal, hOverR, hUnderR, hMissedR, hOverL, hUnderL, hMissedL,
           vTotal, vOverR, vUnderR, vMissedR, vOverL, vUnderL, vMissedL,
           hOverRGrade, hUnderRGrade, hOverLGrade, hUnderLGrade,
-          vpLateralDrift, vsLateralDrift } = data;
+          vpLateralDrift, vsLateralDrift,
+          latOD, latOS } = data;
 
   const spSt   = v => v === null ? 'na' : v > 90   ? 'normal' : v >= 80   ? 'mild' : 'severe';
   const esoSt  = v => v === null ? 'na' : v < 1.0  ? 'normal' : v <= 2.0  ? 'mild' : 'severe';
@@ -3128,20 +3142,20 @@ function computeRightEyeRx(data) {
         brain: overBrain(hOverRSt, ['Right CB'], ['Right CB']),
         note:  overNote(hOverRSt, 'Right CB 過衝抑制嚴重異常 ⚠️', 'Right CB 過衝中度，低速精準控制訓練', 'Right CB 過衝輕度，建議精準控制訓練') },
       { label: '水平 Saccade 右向 Undershoot', value: hUnderRPct !== null ? hUnderRPct + '%' : '—', status: hUnderRSt,
-        brain: overBrain(hUnderRSt, ['Left BG', 'Right FEF'], ['Left BG', 'Right FEF']),
-        note:  overNote(hUnderRSt, 'Left BG + Right FEF 欠衝嚴重，右向啟動不足 ⚠️', 'Left BG + Right FEF 欠衝中度，強化啟動訓練', 'Left BG + Right FEF 啟動輕度不足') },
+        brain: overBrain(hUnderRSt, ['Left CB'], ['Left CB']),
+        note:  overNote(hUnderRSt, 'Left CB 欠衝嚴重，右向精準度不足 ⚠️', 'Left CB 欠衝中度，強化精準控制訓練', 'Left CB 欠衝輕度，建議精準控制訓練') },
       { label: '水平 Saccade 右向 Missed',    value: hMissRPct  !== null ? hMissRPct  + '%' : '—', status: hMissRSt,
-        brain: overBrain(hMissRSt, ['Right PPRF', 'Left FEF'], ['Right PPRF', 'Left FEF']),
-        note:  overNote(hMissRSt, 'Right PPRF/Left FEF 嚴重不足 ⚠️', 'Right PPRF/Left FEF 中度不足', 'Right PPRF/Left FEF 輕度不足') },
+        brain: overBrain(hMissRSt, ['Right PPRF', 'Left SC'], ['Right PPRF', 'Left SC']),
+        note:  overNote(hMissRSt, 'Right PPRF（同側執行端）+ Left SC（對側整合啟動端）嚴重不足 ⚠️', 'Right PPRF + Left SC 中度不足', 'Right PPRF + Left SC 輕度不足') },
       { label: '水平 Saccade 左向 Overshoot',  value: hOverLPct  !== null ? hOverLPct  + '%' : '—', status: hOverLSt,
         brain: overBrain(hOverLSt, ['Left CB'], ['Left CB']),
         note:  overNote(hOverLSt, 'Left CB 過衝抑制嚴重異常 ⚠️', 'Left CB 過衝中度，低速精準控制訓練', 'Left CB 過衝輕度，建議精準控制訓練') },
       { label: '水平 Saccade 左向 Undershoot', value: hUnderLPct !== null ? hUnderLPct + '%' : '—', status: hUnderLSt,
-        brain: overBrain(hUnderLSt, ['Right BG', 'Left FEF'], ['Right BG', 'Left FEF']),
-        note:  overNote(hUnderLSt, 'Right BG + Left FEF 欠衝嚴重，左向啟動不足 ⚠️', 'Right BG + Left FEF 欠衝中度，強化啟動訓練', 'Right BG + Left FEF 啟動輕度不足') },
+        brain: overBrain(hUnderLSt, ['Right CB'], ['Right CB']),
+        note:  overNote(hUnderLSt, 'Right CB 欠衝嚴重，左向精準度不足 ⚠️', 'Right CB 欠衝中度，強化精準控制訓練', 'Right CB 欠衝輕度，建議精準控制訓練') },
       { label: '水平 Saccade 左向 Missed',    value: hMissLPct  !== null ? hMissLPct  + '%' : '—', status: hMissLSt,
-        brain: overBrain(hMissLSt, ['Left PPRF', 'Right FEF'], ['Left PPRF', 'Right FEF']),
-        note:  overNote(hMissLSt, 'Left PPRF/Right FEF 嚴重不足 ⚠️', 'Left PPRF/Right FEF 中度不足', 'Left PPRF/Right FEF 輕度不足') },
+        brain: overBrain(hMissLSt, ['Left PPRF', 'Right SC'], ['Left PPRF', 'Right SC']),
+        note:  overNote(hMissLSt, 'Left PPRF（同側執行端）+ Right SC（對側整合啟動端）嚴重不足 ⚠️', 'Left PPRF + Right SC 中度不足', 'Left PPRF + Right SC 輕度不足') },
     ] : []),
     ...(vTotal ? [
       { label: '垂直 Saccade 上向 Overshoot',  value: vOverRPct  !== null ? vOverRPct  + '%' : '—', status: vOverRSt,
@@ -3152,7 +3166,7 @@ function computeRightEyeRx(data) {
         note:  overNote(vUnderRSt, 'riMLF 垂直啟動嚴重不足 ⚠️', 'riMLF 垂直啟動中度不足', 'riMLF 垂直啟動輕度不足') },
       { label: '垂直 Saccade 上向 Missed',    value: vMissRPct  !== null ? vMissRPct  + '%' : '—', status: vMissRSt,
         brain: overBrain(vMissRSt, ['riMLF', 'Superior Colliculus'], ['riMLF', 'Superior Colliculus']),
-        note:  overNote(vMissRSt, 'riMLF/SC 嚴重不足 ⚠️', 'riMLF/SC 中度不足', 'riMLF/SC 輕度不足') },
+        note:  overNote(vMissRSt, 'riMLF + Bilateral SC 嚴重不足 ⚠️', 'riMLF + Bilateral SC 中度不足', 'riMLF + Bilateral SC 輕度不足') },
       { label: '垂直 Saccade 下向 Overshoot',  value: vOverLPct  !== null ? vOverLPct  + '%' : '—', status: vOverLSt,
         brain: overBrain(vOverLSt, ['CB Vermis'], ['CB Vermis']),
         note:  overNote(vOverLSt, '小腦蚓部 Overshoot 嚴重異常 ⚠️', 'CB Vermis 過衝中度，低速精準訓練', 'CB Vermis 過衝輕度') },
@@ -3161,7 +3175,7 @@ function computeRightEyeRx(data) {
         note:  overNote(vUnderLSt, 'riMLF 垂直啟動嚴重不足 ⚠️', 'riMLF 垂直啟動中度不足', 'riMLF 垂直啟動輕度不足') },
       { label: '垂直 Saccade 下向 Missed',    value: vMissLPct  !== null ? vMissLPct  + '%' : '—', status: vMissLSt,
         brain: overBrain(vMissLSt, ['riMLF', 'Superior Colliculus'], ['riMLF', 'Superior Colliculus']),
-        note:  overNote(vMissLSt, 'riMLF/SC 嚴重不足 ⚠️', 'riMLF/SC 中度不足', 'riMLF/SC 輕度不足') },
+        note:  overNote(vMissLSt, 'riMLF + Bilateral SC 嚴重不足 ⚠️', 'riMLF + Bilateral SC 中度不足', 'riMLF + Bilateral SC 輕度不足') },
     ] : []),
     // ── PLD 側性指標 ──
     ...(pldRight !== null ? [{
@@ -3226,6 +3240,25 @@ function computeRightEyeRx(data) {
     }] : []),
   ];
 
+  // ── Saccadic Latency OD/OS ──
+  const LATENCY_THRESHOLD = 300;
+  const latSt = v => v === null ? 'na' : v <= LATENCY_THRESHOLD ? 'normal' : v <= 400 ? 'mild' : 'severe';
+  {
+    const odAbn = latOD !== null && latOD > LATENCY_THRESHOLD;
+    const osAbn = latOS !== null && latOS > LATENCY_THRESHOLD;
+    if (latOD !== null) indicators.push({
+      label: 'Saccadic Latency OD（右眼）', value: latOD + ' ms', status: latSt(latOD),
+      brain: odAbn && osAbn ? ['Bilateral FEF', 'Dopamine System'] : odAbn ? ['FEF（待確認側性）'] : [],
+      note:  odAbn && osAbn ? `OD ${latOD}ms + OS ${latOS}ms — 雙側FEF啟動延遲，Basal Ganglia過度抑制`
+           : odAbn          ? `OD ${latOD}ms偏高 — 需確認方向性Latency` : '',
+    });
+    if (latOS !== null) indicators.push({
+      label: 'Saccadic Latency OS（左眼）', value: latOS + ' ms', status: latSt(latOS),
+      brain: odAbn && osAbn ? [] : osAbn ? ['FEF（待確認側性）'] : [],
+      note:  odAbn && osAbn ? '雙側異常（見OD條目）' : osAbn ? `OS ${latOS}ms偏高 — 需確認方向性Latency` : '',
+    });
+  }
+
   const brainRegions = new Set();
   indicators.forEach(ind => ind.brain.forEach(b => brainRegions.add(b)));
 
@@ -3250,6 +3283,7 @@ function computeRightEyeRx(data) {
     'Left FEF','Right FEF',
     'Left BG','Right BG',
     'Bilateral Midbrain','Superior Colliculus',
+    'Left SC','Right SC','Bilateral SC',
     'riMLF','PPRF',
   ];
   const addRx = entry => {
@@ -3373,26 +3407,20 @@ function computeRightEyeRx(data) {
   } else if (vOverRSt === 'mild' || vOverLSt === 'mild') {
     addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑ 垂直', angle: 'R0/L0（垂直 CB Vermis 過衝-輕度）', speed: 'S4', dist: 'D3', reps: '10', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 垂直 Overshoot 10-30% → CB Vermis 輕度抑制'], priority: 3 });
   }
-  // Undershoot → BG → M2 + FEF → M5（啟動訓練）
+  // Undershoot → CB（對側）→ M3 低速精準訓練（往右欠衝→Left CB；往左欠衝→Right CB）
   if (hUnderRSt === 'severe') {
-    addRx({ mode: 'M2', name: 'Saccade右向 BG啟動', angle: 'R90（Left BG 欠衝-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Undershoot >60% → Left BG 啟動，極低速'], priority: 2 });
-    addRx({ mode: 'M5', name: 'Vergence Pursuit 右向 FEF', angle: 'R90（Right FEF 欠衝-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Undershoot >60% → Right FEF 激活訓練'], priority: 2 });
+    addRx({ mode: 'M3', name: 'Saccade右向 CB精準', angle: 'R90（Left CB 欠衝-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 右向 Undershoot >60% → Left CB 精準控制，極低速'], priority: 2 });
   } else if (hUnderRSt === 'moderate') {
-    addRx({ mode: 'M2', name: 'Saccade右向 BG啟動', angle: 'R90（Left BG 欠衝-中度）', speed: 'S3', dist: 'D3', reps: '13', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Undershoot 40-60% → Left BG 啟動，中速'], priority: 2 });
-    addRx({ mode: 'M5', name: 'Vergence Pursuit 右向 FEF', angle: 'R90（Right FEF 欠衝-中度）', speed: 'S3', dist: 'D3', reps: '13', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Undershoot 40-60% → Right FEF 中度激活'], priority: 2 });
+    addRx({ mode: 'M3', name: 'Saccade右向 CB精準', angle: 'R90（Left CB 欠衝-中度）', speed: 'S3', dist: 'D3', reps: '13', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 右向 Undershoot 40-60% → Left CB 精準控制，中速'], priority: 2 });
   } else if (hUnderRSt === 'mild') {
-    addRx({ mode: 'M2', name: 'Saccade右向 BG啟動', angle: 'R90（Left BG 欠衝-輕度）', speed: 'S4', dist: 'D3', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Undershoot 20-40% → Left BG 輕度啟動'], priority: 3 });
-    addRx({ mode: 'M5', name: 'Vergence Pursuit 右向 FEF', angle: 'R90（Right FEF 欠衝-輕度）', speed: 'S4', dist: 'D3', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Undershoot 20-40% → Right FEF 輕度激活'], priority: 3 });
+    addRx({ mode: 'M3', name: 'Saccade右向 CB精準', angle: 'R90（Left CB 欠衝-輕度）', speed: 'S4', dist: 'D3', reps: '10', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 右向 Undershoot 20-40% → Left CB 輕度精準訓練'], priority: 3 });
   }
   if (hUnderLSt === 'severe') {
-    addRx({ mode: 'M2', name: 'Saccade左向 BG啟動', angle: 'L90（Right BG 欠衝-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Undershoot >60% → Right BG 啟動，極低速'], priority: 2 });
-    addRx({ mode: 'M5', name: 'Vergence Pursuit 左向 FEF', angle: 'L90（Left FEF 欠衝-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Undershoot >60% → Left FEF 激活訓練'], priority: 2 });
+    addRx({ mode: 'M3', name: 'Saccade左向 CB精準', angle: 'L90（Right CB 欠衝-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 左向 Undershoot >60% → Right CB 精準控制，極低速'], priority: 2 });
   } else if (hUnderLSt === 'moderate') {
-    addRx({ mode: 'M2', name: 'Saccade左向 BG啟動', angle: 'L90（Right BG 欠衝-中度）', speed: 'S3', dist: 'D3', reps: '13', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Undershoot 40-60% → Right BG 啟動，中速'], priority: 2 });
-    addRx({ mode: 'M5', name: 'Vergence Pursuit 左向 FEF', angle: 'L90（Left FEF 欠衝-中度）', speed: 'S3', dist: 'D3', reps: '13', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Undershoot 40-60% → Left FEF 中度激活'], priority: 2 });
+    addRx({ mode: 'M3', name: 'Saccade左向 CB精準', angle: 'L90（Right CB 欠衝-中度）', speed: 'S3', dist: 'D3', reps: '13', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 左向 Undershoot 40-60% → Right CB 精準控制，中速'], priority: 2 });
   } else if (hUnderLSt === 'mild') {
-    addRx({ mode: 'M2', name: 'Saccade左向 BG啟動', angle: 'L90（Right BG 欠衝-輕度）', speed: 'S4', dist: 'D3', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Undershoot 20-40% → Right BG 輕度啟動'], priority: 3 });
-    addRx({ mode: 'M5', name: 'Vergence Pursuit 左向 FEF', angle: 'L90（Left FEF 欠衝-輕度）', speed: 'S4', dist: 'D3', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Undershoot 20-40% → Left FEF 輕度激活'], priority: 3 });
+    addRx({ mode: 'M3', name: 'Saccade左向 CB精準', angle: 'L90（Right CB 欠衝-輕度）', speed: 'S4', dist: 'D3', reps: '10', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 左向 Undershoot 20-40% → Right CB 輕度精準訓練'], priority: 3 });
   }
   if (vUnderRSt === 'severe' || vUnderLSt === 'severe') {
     addRx({ mode: 'M2', name: 'Saccade垂直 BG啟動', angle: 'R0/L0（riMLF BG 欠衝-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 垂直 Undershoot >60% → riMLF BG 啟動，極低速'], priority: 2 });
@@ -3404,20 +3432,20 @@ function computeRightEyeRx(data) {
     addRx({ mode: 'M2', name: 'Saccade垂直 BG啟動', angle: 'R0/L0（riMLF BG 欠衝-輕度）', speed: 'S4', dist: 'D3', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 垂直 Undershoot 20-40% → riMLF BG 輕度啟動'], priority: 3 });
     addRx({ mode: 'M5', name: 'Vergence Pursuit 垂直 FEF', angle: 'R0/L0（FEF 垂直欠衝-輕度）', speed: 'S4', dist: 'D3', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 垂直 Undershoot 20-40% → FEF 垂直輕度激活'], priority: 3 });
   }
-  // Missed → PPRF/FEF → M5（反射性 Saccade 緊急訓練）
+  // Missed → PPRF（同側執行端）+ SC（對側整合啟動端）→ M5（反射性 Saccade 緊急訓練）
   if (hMissRSt === 'severe') {
-    addRx({ mode: 'M5', name: 'Vergence Saccade 右向 PPRF', angle: 'R90（Right PPRF/Left FEF Missed-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Missed >30% → Right PPRF/Left FEF 緊急激活 ⚠️'], priority: 1 });
+    addRx({ mode: 'M5', name: 'Vergence Saccade 右向 PPRF+SC', angle: 'R90（Right PPRF+Left SC Missed-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Missed >30% → Right PPRF（同側執行端）+ Left SC（對側整合啟動端）緊急激活 ⚠️', '建議加入多感官整合訓練：在左視野側同時給予聲音+閃光刺激，強化 Left SC 空間地圖校正'], priority: 1 });
   } else if (hMissRSt === 'moderate') {
-    addRx({ mode: 'M5', name: 'Vergence Saccade 右向 PPRF', angle: 'R90（Right PPRF/Left FEF Missed-中度）', speed: 'S3', dist: 'D3', reps: '13', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Missed 15-30% → Right PPRF/Left FEF 中度強化'], priority: 2 });
+    addRx({ mode: 'M5', name: 'Vergence Saccade 右向 PPRF+SC', angle: 'R90（Right PPRF+Left SC Missed-中度）', speed: 'S3', dist: 'D3', reps: '13', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Missed 15-30% → Right PPRF + Left SC 中度強化', '建議加入多感官整合訓練：在左視野側同時給予聲音+閃光刺激，強化 Left SC 空間地圖校正'], priority: 2 });
   } else if (hMissRSt === 'mild') {
-    addRx({ mode: 'M5', name: 'Vergence Saccade 右向 PPRF', angle: 'R90（Right PPRF 輕度 Missed）', speed: 'S4', dist: 'D3', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Missed 5-15% → Right PPRF 輕度強化'], priority: 3 });
+    addRx({ mode: 'M5', name: 'Vergence Saccade 右向 PPRF+SC', angle: 'R90（Right PPRF+Left SC 輕度 Missed）', speed: 'S4', dist: 'D3', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 右向 Missed 5-15% → Right PPRF + Left SC 輕度強化'], priority: 3 });
   }
   if (hMissLSt === 'severe') {
-    addRx({ mode: 'M5', name: 'Vergence Saccade 左向 PPRF', angle: 'L90（Left PPRF/Right FEF Missed-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Missed >30% → Left PPRF/Right FEF 緊急激活 ⚠️'], priority: 1 });
+    addRx({ mode: 'M5', name: 'Vergence Saccade 左向 PPRF+SC', angle: 'L90（Left PPRF+Right SC Missed-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Missed >30% → Left PPRF（同側執行端）+ Right SC（對側整合啟動端）緊急激活 ⚠️', '建議加入多感官整合訓練：在右視野側同時給予聲音+閃光刺激，強化 Right SC 空間地圖校正'], priority: 1 });
   } else if (hMissLSt === 'moderate') {
-    addRx({ mode: 'M5', name: 'Vergence Saccade 左向 PPRF', angle: 'L90（Left PPRF/Right FEF Missed-中度）', speed: 'S3', dist: 'D3', reps: '13', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Missed 15-30% → Left PPRF/Right FEF 中度強化'], priority: 2 });
+    addRx({ mode: 'M5', name: 'Vergence Saccade 左向 PPRF+SC', angle: 'L90（Left PPRF+Right SC Missed-中度）', speed: 'S3', dist: 'D3', reps: '13', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Missed 15-30% → Left PPRF + Right SC 中度強化', '建議加入多感官整合訓練：在右視野側同時給予聲音+閃光刺激，強化 Right SC 空間地圖校正'], priority: 2 });
   } else if (hMissLSt === 'mild') {
-    addRx({ mode: 'M5', name: 'Vergence Saccade 左向 PPRF', angle: 'L90（Left PPRF 輕度 Missed）', speed: 'S4', dist: 'D3', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Missed 5-15% → Left PPRF 輕度強化'], priority: 3 });
+    addRx({ mode: 'M5', name: 'Vergence Saccade 左向 PPRF+SC', angle: 'L90（Left PPRF+Right SC 輕度 Missed）', speed: 'S4', dist: 'D3', reps: '10', target: '有', bg: '空白背板', notes: ['RightEye: 左向 Missed 5-15% → Left PPRF + Right SC 輕度強化'], priority: 3 });
   }
   if (vMissRSt === 'severe' || vMissLSt === 'severe') {
     addRx({ mode: 'M5', name: 'Vergence Saccade 垂直 PPRF', angle: 'R0/L0（riMLF/SC Missed-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: 垂直 Missed >30% → riMLF/SC 緊急激活 ⚠️'], priority: 1 });
@@ -3496,9 +3524,10 @@ function computeRightEyeRx(data) {
       reRegionEv[b].push(`${ind.label} ${ind.value}`);
     });
   });
-  const reWeakRegions = Object.entries(reRegionEv).map(([name, ev]) => ({
-    name, evidence: ev.join('；'),
-  }));
+  const reWeakRegions = Object.entries(reRegionEv).map(([name, ev]) => {
+    const lat = /^Left /i.test(name) ? 'left' : /^Right /i.test(name) ? 'right' : 'bilateral';
+    return { name, evidence: ev.join('；'), laterality: lat };
+  });
   const reAbnormalCount = indicators.filter(i => isAbn(i.status)).length;
 
   return {
@@ -4123,6 +4152,8 @@ function generateIntegratedPrescription() {
     hUnderLGrade: reAIGrades.leftward_undershoot,
     vpLateralDrift: parseNum(document.getElementById('re-vp-lateral-drift')?.value),
     vsLateralDrift: parseNum(document.getElementById('re-vs-lateral-drift')?.value),
+    latOD: parseNum(document.getElementById('re-lat-od')?.value),
+    latOS: parseNum(document.getElementById('re-lat-os')?.value),
   };
   const reResult = computeRightEyeRx(reData);
 
@@ -4656,6 +4687,9 @@ function renderRightEyeInterface() {
               <div class="form-group" style="margin-bottom:6px"><label>左向</label><input type="number" id="re-sv-left" class="input" min="0" step="1" placeholder="正常 >150"></div>
               <div class="form-group" style="margin-bottom:6px"><label>上向</label><input type="number" id="re-sv-up" class="input" min="0" step="1" placeholder="正常 >150"></div>
               <div class="form-group" style="margin-bottom:14px"><label>下向</label><input type="number" id="re-sv-down" class="input" min="0" step="1" placeholder="正常 >150"></div>
+              <div class="re-num-group">Saccadic Latency（ms）</div>
+              <div class="form-group" style="margin-bottom:8px"><label>OD（右眼）</label><input type="number" id="re-lat-od" class="input" min="0" step="1" placeholder="正常 &lt;200ms"></div>
+              <div class="form-group" style="margin-bottom:14px"><label>OS（左眼）</label><input type="number" id="re-lat-os" class="input" min="0" step="1" placeholder="正常 &lt;200ms"></div>
               <div class="re-num-group">Saccade 水平（次數）</div>
               <div class="form-group" style="margin-bottom:6px"><label>總次數</label><input type="number" id="re-h-total" class="input" min="0" step="1" placeholder="如 22"></div>
               <div class="form-group" style="margin-bottom:6px"><label>右向 Overshoot</label><input type="number" id="re-h-over-r" class="input" min="0" step="1" placeholder="9-18+18-36mm 合計"></div>
@@ -4903,7 +4937,7 @@ function updateREImageLabel(id, label) {
 function clearRightEyeForm() {
   ['re-spH','re-spV','re-spC','re-eso','re-svH','re-svV','re-syncH','re-syncV',
    're-sv-right','re-sv-left','re-sv-up','re-sv-down','re-pld-right','re-pld-left',
-   're-vp-lateral-drift','re-vs-lateral-drift'].forEach(id => {
+   're-vp-lateral-drift','re-vs-lateral-drift','re-lat-od','re-lat-os'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
   });
   const reInt = document.getElementById('re-intrusion');
@@ -5221,6 +5255,8 @@ async function readRightEyeWithAI() {
     fillNum('re-v-over-l',   vals.vOverL);
     fillNum('re-v-under-l',  vals.vUnderL);
     fillNum('re-v-missed-l', vals.vMissedL);
+    fillNum('re-lat-od', vals.latency?.od_ms);
+    fillNum('re-lat-os', vals.latency?.os_ms);
     if (vals.intrusion) {
       const intEl = document.getElementById('re-intrusion');
       if (intEl) intEl.value = vals.intrusion;
@@ -5291,6 +5327,8 @@ function analyzeRightEyeStandalone() {
     hUnderLGrade: reAIGrades.leftward_undershoot,
     vpLateralDrift: parseNum(document.getElementById('re-vp-lateral-drift')?.value),
     vsLateralDrift: parseNum(document.getElementById('re-vs-lateral-drift')?.value),
+    latOD: parseNum(document.getElementById('re-lat-od')?.value),
+    latOS: parseNum(document.getElementById('re-lat-os')?.value),
   };
   const reResult = computeRightEyeRx(reData);
   const resultsEl = document.getElementById('re-results');
@@ -5467,6 +5505,8 @@ function generateREStrategyPrescription() {
     hUnderLGrade: reAIGrades.leftward_undershoot,
     vpLateralDrift: parseNum(document.getElementById('re-vp-lateral-drift')?.value),
     vsLateralDrift: parseNum(document.getElementById('re-vs-lateral-drift')?.value),
+    latOD: parseNum(document.getElementById('re-lat-od')?.value),
+    latOS: parseNum(document.getElementById('re-lat-os')?.value),
   };
   const reResult = computeRightEyeRx(reData);
   const stratEl = document.getElementById('re-strategy-results');
@@ -5584,6 +5624,8 @@ async function saveRightEyeAssessment() {
     vOverL:   parseNum(document.getElementById('re-v-over-l')?.value),
     vUnderL:  parseNum(document.getElementById('re-v-under-l')?.value),
     vMissedL: parseNum(document.getElementById('re-v-missed-l')?.value),
+    latOD: parseNum(document.getElementById('re-lat-od')?.value),
+    latOS: parseNum(document.getElementById('re-lat-os')?.value),
   };
 
   // Compute and store analysis results
@@ -5601,6 +5643,8 @@ async function saveRightEyeAssessment() {
       hUnderRGrade: reAIGrades.rightward_undershoot,
       hOverLGrade:  reAIGrades.leftward_overshoot,
       hUnderLGrade: reAIGrades.leftward_undershoot,
+      latOD: parseNum(document.getElementById('re-lat-od')?.value),
+      latOS: parseNum(document.getElementById('re-lat-os')?.value),
     };
     const rxResult = computeRightEyeRx(reDataForAnalysis);
     reRec.indicators   = rxResult.indicators.map(i => ({ label: i.label, value: i.value, status: i.status, brain: i.brain, note: i.note }));
