@@ -5868,9 +5868,9 @@ function renderRombergInterface() {
           <div id="btracks-dropzone" style="border:2px dashed #e5e7eb;border-radius:8px;padding:20px;text-align:center;cursor:pointer;background:#f9fafb;transition:border-color .15s;">
             <div style="font-size:2em;margin-bottom:6px;">🖼️</div>
             <div style="font-size:13px;color:#374151;font-weight:500;">拖曳或點擊上傳 BTrackS 數據表格圖片</div>
-            <div style="font-size:11px;color:#9ca3af;margin-top:3px;">支援 .png / .jpg / .jpeg，可同時上傳兩張</div>
-            <input type="file" id="btracks-file-input" accept=".png,.jpg,.jpeg" multiple style="display:none;">
+            <div style="font-size:11px;color:#9ca3af;margin-top:3px;">支援 PNG / JPG，可同時上傳兩張，或 <strong>Ctrl+V</strong> 貼上截圖</div>
           </div>
+          <input type="file" id="btracks-file-input" accept="image/*" multiple style="display:none;">
           <div id="btracks-parsed-summary" style="display:none;margin-top:10px;padding:12px;background:#eff6ff;border-radius:8px;border:1px solid #bfdbfe;font-size:13px;"></div>
         </div>
 
@@ -5971,7 +5971,10 @@ function renderRombergInterface() {
   // Image upload zone
   const _btDropzone  = document.getElementById('btracks-dropzone');
   const _btFileInput = document.getElementById('btracks-file-input');
-  _btDropzone.addEventListener('click', () => _btFileInput.click());
+  _btDropzone.addEventListener('click', e => {
+    e.stopPropagation();
+    _btFileInput.click();
+  });
   _btDropzone.addEventListener('dragover',  e => { e.preventDefault(); _btDropzone.style.borderColor = '#2563eb'; });
   _btDropzone.addEventListener('dragleave', () => { _btDropzone.style.borderColor = '#e5e7eb'; });
   _btDropzone.addEventListener('drop', e => {
@@ -5983,6 +5986,20 @@ function renderRombergInterface() {
   _btFileInput.addEventListener('change', e => {
     const files = Array.from(e.target.files);
     if (files.length) _handleBTrackSFiles(files);
+  });
+
+  // Ctrl+V paste support
+  document.addEventListener('paste', function _btPaste(e) {
+    const uploadZone = document.getElementById('btracks-upload-zone');
+    if (!uploadZone || uploadZone.offsetParent === null) return;
+    const images = Array.from(e.clipboardData?.items || [])
+      .filter(i => i.type.startsWith('image/'))
+      .map(i => i.getAsFile())
+      .filter(Boolean);
+    if (!images.length) return;
+    e.preventDefault();
+    _handleBTrackSFiles(images);
+    showToast(`已貼上 ${images.length} 張截圖，AI 正在辨識…`, 'success');
   });
 
   // HTML upload zone
