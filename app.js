@@ -2330,7 +2330,7 @@ const ROMBERG_MATRIX_B = {
 // Inputs: canalStr from failure.canal, apSway=COP_y (cm),
 //         mlSway=COP_x (cm), pathLength=VES path (cm)
 // ============================================================
-function _computeBCFChairRx(canalStr, apSway, mlSway, pathLength) {
+function _computeBCFChairRx(canalStr, apSway, mlSway, pathLength, postureOverride) {
   if (!canalStr) return null;
   const c = canalStr.toLowerCase();
 
@@ -2369,6 +2369,7 @@ function _computeBCFChairRx(canalStr, apSway, mlSway, pathLength) {
   };
   const base = CANAL_BASE[canalCode];
   if (!base) return null;
+  const posture = postureOverride || base.posture;
 
   // Step-Jitter frequency based on VES path length
   const path = pathLength || 0;
@@ -2439,16 +2440,17 @@ function _computeBCFChairRx(canalStr, apSway, mlSway, pathLength) {
 
   // Safety notes
   const safetyNotes = [];
-  if (base.posture === '趴臥')      safetyNotes.push('前額置於支撐架，確認呼吸道暢通');
-  else if (base.posture === '仰臥') safetyNotes.push('枕部支撐到位，頸部自然延伸，避免過伸');
-  else                              safetyNotes.push('確認頭部固定中線，安全帶已繫好');
+  if (posture === '趴臥')      safetyNotes.push('前額置於支撐架，確認呼吸道暢通');
+  else if (posture === '仰臥') safetyNotes.push('枕部支撐到位，頸部自然延伸，避免過伸');
+  else                         safetyNotes.push('確認頭部固定中線，安全帶已繫好');
   safetyNotes.push('首次從 5° 開始，全程監控頭暈症狀');
   safetyNotes.push('Path 改善 >10% → 增加步進；退步 → 退至 2° 步進');
 
   return {
     canalCode,
     plane:       base.plane,
-    posture:     base.posture,
+    posture,
+    postureOverridden: postureOverride != null && postureOverride !== base.posture,
     axis:        base.axis,
     pitchDir:    base.pitchDir,
     yawBase:     base.yawBase,
@@ -2462,6 +2464,143 @@ function _computeBCFChairRx(canalStr, apSway, mlSway, pathLength) {
     steps,
     autoMonitor,
     safetyNotes,
+  };
+}
+
+// ============================================================
+// _computeLateralBiasChairRx: BCF Lateral Bias multi-canal prescription
+// Triggered when BTrackS ML_Sway ≠ 0 + Path Length ≥ 40 cm
+// ============================================================
+function _computeLateralBiasChairRx(lateralBias, pathLength) {
+  if (!lateralBias) return null;
+  const isRight = lateralBias.direction === 'right';
+  const path = pathLength || 0;
+
+  let jitterFreq, jitterNote;
+  if (path > 0 && path < 40)        { jitterFreq = '每 2 秒一步'; jitterNote = `Path ${path.toFixed(0)} cm（輕度）`; }
+  else if (path >= 40 && path < 70) { jitterFreq = '每 3 秒一步'; jitterNote = `Path ${path.toFixed(0)} cm（中度）`; }
+  else if (path >= 70)              { jitterFreq = '每 5 秒一步'; jitterNote = `Path ${path.toFixed(0)} cm（重度）`; }
+  else                              { jitterFreq = '每 3 秒一步'; jitterNote = '未提供 Path 數據'; }
+
+  const rollSign = isRight ? '+' : '-';
+  const phase1Steps = [];
+  for (let deg = 0; deg <= 20; deg += 5) {
+    phase1Steps.push({
+      roll:   deg === 0 ? '0°' : `${rollSign}${deg}°`,
+      pitchA: deg === 0 ? '0°' : '-5°',
+      pitchB: deg === 0 ? '0°' : '+5°',
+      yaw:    '0°',
+      note:   deg === 0 ? '起始' : '',
+    });
+  }
+
+  let autoMonitor;
+  if (path > 0 && path < 40) {
+    autoMonitor = { severity: 'mild',    severityLabel: '輕度', device: '標準 SpO₂ 監測',     pathNote: `Path ${path.toFixed(0)} cm` };
+  } else if (path >= 40 && path < 70) {
+    autoMonitor = { severity: 'moderate',severityLabel: '中度', device: 'PPG 指尖血流監測',  pathNote: `Path ${path.toFixed(0)} cm` };
+  } else if (path >= 70) {
+    autoMonitor = { severity: 'severe',  severityLabel: '重度', device: 'CNAP 逐搏血壓監測', pathNote: `Path ${path.toFixed(0)} cm` };
+  } else {
+    autoMonitor = { severity: 'unknown', severityLabel: '未知', device: 'PPG 指尖血流監測',  pathNote: '未提供 Path 數據' };
+  }
+
+  return {
+    direction:    lateralBias.direction,
+    diagnosis:    lateralBias.diagnosis,
+    targetCanals: lateralBias.targetCanals,
+    mlValue:      lateralBias.mlValue,
+    jitterFreq,
+    jitterNote,
+    phase1Steps,
+    phase2Jitter: { yaw: '±2°', x: '1°', y: '2°', z: '1°' },
+    autoMonitor,
+    neurophysNote: isRight
+      ? 'Right Roll 物理刺激同時切入 RAC 和 RPC 的平面；側傾激活同側 Lateral Vestibular Nucleus → 增強同側所有半規管張力；Yaw 震盪整合 HC 刺激 → 加速 Medial-Lateral Control 恢復'
+      : 'Left Roll 物理刺激同時切入 LAC 和 LPC 的平面；側傾激活同側 Lateral Vestibular Nucleus → 增強同側所有半規管張力；Yaw 震盪整合 HC 刺激 → 加速 Medial-Lateral Control 恢復',
+  };
+}
+
+// ============================================================
+// _selectPosture: posture selection decision matrix
+// AP/ML are raw signed BTrackS COP values (cm); positive AP = anterior lean
+// ============================================================
+function _selectPosture(canalStr, apSway, mlSway) {
+  const c      = (canalStr || '').toLowerCase();
+  const hasAnt = /ant\.|anterior/.test(c);
+  const hasPost= /post\.|posterior/.test(c);
+  const hasLat = /lat\.|lateral|horizontal/.test(c);
+  const isBilat= /bilateral/.test(c);
+
+  const apAbs    = Math.abs(apSway || 0);
+  const mlAbs    = Math.abs(mlSway || 0);
+  const apSigned = apSway || 0;
+
+  // Bilateral + Lateral Bias → provide dual strategy A/B for therapist to choose
+  if (isBilat && hasAnt && hasPost && mlAbs > 0) {
+    return {
+      code:      'BILATERAL_LATERAL',
+      posture:   null,
+      reason:    `Bilateral canal 合併 ML 偏移 ${mlAbs.toFixed(1)} cm（AP=${apAbs.toFixed(1)} cm）`,
+      strategyA: { posture: '趴臥', pitchNote: 'Pitch Down −5°', desc: '策略A（前跌風險高）：趴臥 + Roll + Pitch Down → 強化 Extensor Thrust 自我保護機制' },
+      strategyB: { posture: '坐姿', pitchNote: 'Pitch Up +5°',   desc: '策略B（後跌/自主神經不穩）：坐姿 + Roll + Pitch Up → 穩定 Midline Stability' },
+      hemo:      '策略A 趴臥：頭部低位，回心血量充足，適合 POTS 傾向；策略B 坐姿：自主神經挑戰較大',
+      visual:    '策略A：閉眼本體覺整合訓練；策略B：注視前方視標訓練 VOR',
+    };
+  }
+
+  // Anterior dominant (no Posterior, no Lateral) → PRONE
+  if (hasAnt && !hasPost && !hasLat) {
+    return {
+      code:    'PRONE',
+      posture: '趴臥',
+      reason:  `Anterior Canal 主導（AP=${apAbs.toFixed(1)} cm）：趴臥使 AC 處於重力敏感位，前俯產生最強興奮性淋巴液流動`,
+      hemo:    '頭部低位，回心血量充足，適合 POTS / 低血壓傾向患者',
+      visual:  '視線朝下，閉眼前庭-本體覺整合訓練',
+    };
+  }
+
+  // Posterior dominant (no Anterior, no Lateral) → UPRIGHT
+  if (hasPost && !hasAnt && !hasLat) {
+    return {
+      code:    'UPRIGHT',
+      posture: '坐姿',
+      reason:  `Posterior Canal 主導（AP=${apAbs.toFixed(1)} cm）：坐姿後仰符合 PC 解剖平面，誘發 VSR 抗重力伸肌反應`,
+      hemo:    '坐姿自主神經挑戰較大，適合進階訓練',
+      visual:  '注視前方固定視標，訓練 VOR（視覺-前庭整合）',
+    };
+  }
+
+  // ML dominant (ML > AP) → UPRIGHT with Roll
+  if (mlAbs > apAbs) {
+    return {
+      code:    'UPRIGHT_WITH_ROLL',
+      posture: '坐姿',
+      reason:  `ML 側偏顯著 ${mlAbs.toFixed(1)} cm > AP ${apAbs.toFixed(1)} cm：坐姿 Roll 建立軀幹側向張力，Lateral Bias 主導`,
+      hemo:    '坐姿自主神經挑戰較大，適合進階訓練',
+      visual:  '注視前方固定視標，訓練 VOR',
+    };
+  }
+
+  // Bilateral AP-only: forward lean → PRONE, backward → UPRIGHT
+  if (apSigned > 0) {
+    return {
+      code:    'PRONE',
+      posture: '趴臥',
+      reason:  `AP 前偏 ${apAbs.toFixed(1)} cm（ML=${mlAbs.toFixed(1)} cm）：前偏主導，趴臥激活 Anterior Canal`,
+      hemo:    '頭部低位，回心血量充足，適合 POTS / 低血壓傾向患者',
+      visual:  '視線朝下，閉眼本體覺整合訓練',
+    };
+  }
+
+  return {
+    code:    'UPRIGHT',
+    posture: '坐姿',
+    reason:  apAbs > 0
+      ? `AP 後偏 ${apAbs.toFixed(1)} cm：坐姿後仰符合 Posterior Canal 力學`
+      : `無顯著 AP/ML 偏移（AP=${apAbs.toFixed(1)}, ML=${mlAbs.toFixed(1)} cm）：預設坐姿`,
+    hemo:    '坐姿自主神經挑戰較大，適合進階訓練',
+    visual:  '注視前方固定視標，訓練 VOR',
   };
 }
 
@@ -2521,6 +2660,28 @@ function computeRombergRx(input) {
     sway_velocity: input.btracks_sway_velocity || null,
   };
 
+  // Lateral Bias detection: ML_Sway ≠ 0 + Path Length ≥ 40 cm (abnormal range)
+  const _mlRaw = btracksData.cop_x_mean;
+  const _pathAbnormal = (input.path_eyes_closed || 0) >= 40;
+  let lateralBias = null;
+  if (_mlRaw != null && _pathAbnormal) {
+    if (_mlRaw > 0) {
+      lateralBias = {
+        direction:    'right',
+        diagnosis:    'Right Vestibular Hypofunction with Lateral Bias',
+        mlValue:      _mlRaw,
+        targetCanals: ['RAC', 'RPC', 'R-HC'],
+      };
+    } else if (_mlRaw < 0) {
+      lateralBias = {
+        direction:    'left',
+        diagnosis:    'Left Vestibular Hypofunction with Lateral Bias',
+        mlValue:      _mlRaw,
+        targetCanals: ['LAC', 'LPC', 'L-HC'],
+      };
+    }
+  }
+
   // Build weakRegions for integrated analysis (both FAILURE and COMPENSATORY)
   const canalStr   = diagEntry.canal   || '';
   const spindleStr = diagEntry.spindle || '';
@@ -2548,12 +2709,21 @@ function computeRombergRx(input) {
   if (input.sway_direction && input.sway_direction !== '') rombergAbnCount += 1;
   rombergAbnCount += alerts.length;
 
+  // Posture selection decision matrix (AP/ML from BTrackS, signed values)
+  const postureDecision = _selectPosture(
+    entry.failure.canal || '',
+    btracksData.cop_y_mean,
+    btracksData.cop_x_mean,
+  );
+
   // BCF flying chair prescription — always based on failure canal regardless of mode
+  // Override posture from decision matrix (BILATERAL_LATERAL has null posture → keep canal default)
   const bcfChair = _computeBCFChairRx(
     entry.failure.canal || '',
     btracksData.cop_y_mean,  // AP_Sway
     btracksData.cop_x_mean,  // ML_Sway
-    input.path_eyes_closed   // VES path length
+    input.path_eyes_closed,  // VES path length
+    postureDecision.code !== 'BILATERAL_LATERAL' ? postureDecision.posture : null
   );
 
   return {
@@ -2574,6 +2744,9 @@ function computeRombergRx(input) {
     weakRegions:      rombergWeakRegions,
     abnormalCount:    rombergAbnCount,
     bcfChair,
+    postureDecision,
+    lateralBias,
+    lateralBiasChair: lateralBias ? _computeLateralBiasChairRx(lateralBias, input.path_eyes_closed) : null,
   };
 }
 
@@ -6544,6 +6717,7 @@ function _renderRombergResultHTML(result) {
     </div>` : '';
 
   const bcfChair = result.bcfChair || null;
+  const pd       = result.postureDecision || null;
   const chairHTML = bcfChair ? `
     <div style="margin-top:14px;padding:14px;background:#fdf4ff;border:1px solid #e9d5ff;border-radius:8px;">
       <div style="font-size:13px;font-weight:700;color:#7c3aed;margin-bottom:10px;">🪑 BCF 飛行椅處方（${bcfChair.canalCode} — ${bcfChair.plane}）</div>
@@ -6567,6 +6741,27 @@ function _renderRombergResultHTML(result) {
       </div>
       ${bcfChair.offsetNote ? `<div style="font-size:11px;color:#92400e;background:#fffbeb;padding:5px 10px;border-radius:5px;margin-bottom:6px;">📐 ${bcfChair.offsetNote}</div>` : ''}
       ${bcfChair.hcYawNote  ? `<div style="font-size:11px;color:#1e40af;background:#eff6ff;padding:5px 10px;border-radius:5px;margin-bottom:6px;">🔄 ${bcfChair.hcYawNote}</div>` : ''}
+      ${pd ? `
+      <div style="margin-bottom:8px;padding:8px 10px;background:#f0fdf4;border:1px solid #bbf7d0;border-radius:6px;">
+        <div style="font-size:11px;font-weight:600;color:#15803d;margin-bottom:4px;">🪑 姿勢選擇理由</div>
+        <div style="font-size:11px;color:#166534;line-height:1.6;">${pd.reason}</div>
+        ${bcfChair.postureOverridden ? `<div style="font-size:10px;color:#b45309;margin-top:3px;">⚡ AP/ML 數據修正了預設姿勢</div>` : ''}
+        ${pd.strategyA ? `
+        <div style="margin-top:7px;display:grid;grid-template-columns:1fr 1fr;gap:5px;">
+          <div style="padding:6px 8px;background:#fff;border:1px solid #bbf7d0;border-radius:5px;font-size:11px;">
+            <div style="font-weight:600;color:#15803d;margin-bottom:2px;">策略A（趴臥）</div>
+            <div style="color:#374151;">${pd.strategyA.desc}</div>
+          </div>
+          <div style="padding:6px 8px;background:#fff;border:1px solid #bbf7d0;border-radius:5px;font-size:11px;">
+            <div style="font-weight:600;color:#15803d;margin-bottom:2px;">策略B（坐姿）</div>
+            <div style="color:#374151;">${pd.strategyB.desc}</div>
+          </div>
+        </div>` : ''}
+        <div style="margin-top:6px;display:flex;gap:14px;flex-wrap:wrap;">
+          <div style="font-size:11px;color:#166534;">💉 ${pd.hemo}</div>
+          <div style="font-size:11px;color:#1e40af;">👁 ${pd.visual}</div>
+        </div>
+      </div>` : ''}
       <div style="font-size:11px;font-weight:600;color:#7c3aed;margin-bottom:5px;">步進計劃（Step-Jitter 0°→45°，微動 ±1.5° XYZ）</div>
       <div style="display:flex;flex-wrap:wrap;gap:4px;margin-bottom:10px;">
         ${bcfChair.steps.map(s => `
@@ -6577,6 +6772,69 @@ function _renderRombergResultHTML(result) {
       </div>
       <div style="font-size:11px;color:#6b7280;line-height:1.6;">${bcfChair.safetyNotes.map(n => `⚠️ ${n}`).join('<br>')}</div>
     </div>` : '';
+
+  // Lateral Bias 複合處方區塊
+  const lb = result.lateralBiasChair || null;
+  const lateralBiasHTML = lb ? (() => {
+    const lbAmColor = lb.autoMonitor.severity === 'severe' ? '#991b1b' : lb.autoMonitor.severity === 'moderate' ? '#92400e' : '#065F46';
+    const lbAmBg    = lb.autoMonitor.severity === 'severe' ? '#fee2e2' : lb.autoMonitor.severity === 'moderate' ? '#fef3c7' : '#d1fae5';
+    const phase1Rows = lb.phase1Steps.map(s => `
+      <tr style="background:${s.note ? '#fff7ed' : '#fff'};">
+        <td style="padding:4px 8px;border:1px solid #fed7aa;font-weight:600;color:#c2410c;">${s.roll}${s.note ? ` <span style="font-size:10px;color:#6b7280;">(${s.note})</span>` : ''}</td>
+        <td style="padding:4px 8px;border:1px solid #fed7aa;text-align:center;">${s.yaw}</td>
+        <td style="padding:4px 8px;border:1px solid #fed7aa;text-align:center;color:#1e40af;">${s.pitchA}</td>
+        <td style="padding:4px 8px;border:1px solid #fed7aa;text-align:center;color:#065F46;">${s.pitchB}</td>
+      </tr>`).join('');
+    const jitterCards = [
+      ['Yaw 震盪', lb.phase2Jitter.yaw, '#7c3aed'],
+      ['X 微動',   lb.phase2Jitter.x,   '#1e40af'],
+      ['Y 微動',   lb.phase2Jitter.y,   '#1e40af'],
+      ['Z 微動',   lb.phase2Jitter.z,   '#1e40af'],
+    ].map(([label, val, color]) => `
+      <div style="text-align:center;padding:6px 10px;background:#fff;border:1px solid #fed7aa;border-radius:6px;min-width:60px;">
+        <div style="font-size:10px;color:#9ca3af;margin-bottom:2px;">${label}</div>
+        <div style="font-weight:700;color:${color};font-size:13px;">${val}</div>
+      </div>`).join('');
+    return `
+    <div style="margin-top:14px;padding:14px;background:#fff7ed;border:1px solid #fed7aa;border-radius:8px;">
+      <div style="font-size:13px;font-weight:700;color:#c2410c;margin-bottom:10px;">🧭 BCF 姿勢觀察 — Lateral Bias 複合處方</div>
+      <div style="padding:8px 12px;background:#fff;border:1px solid #fed7aa;border-radius:6px;margin-bottom:10px;font-size:12px;">
+        <div style="font-weight:600;color:#c2410c;margin-bottom:3px;">
+          姿勢觀察：ML 偏移 ${lb.mlValue > 0 ? '右偏' : '左偏'} (${lb.mlValue.toFixed(1)} cm) 合併 Path Length 異常
+        </div>
+        <div style="color:#7c3aed;font-weight:600;">診斷：${lb.diagnosis}</div>
+        <div style="color:#374151;margin-top:3px;">
+          目標半規管：<strong>${lb.targetCanals.join(' + ')}</strong>
+          ・處方類型：<span style="padding:2px 8px;background:#fef3c7;border-radius:4px;color:#92400e;font-weight:600;">Lateral Bias 複合處方</span>
+        </div>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:#c2410c;margin-bottom:5px;">第一階段：進程（Roll + 複合 Pitch 刺激，節律 ${lb.jitterFreq}）</div>
+      <div style="overflow-x:auto;margin-bottom:10px;">
+        <table style="width:100%;border-collapse:collapse;font-size:11px;">
+          <tr style="background:#fff7ed;color:#92400e;font-weight:600;">
+            <td style="padding:4px 8px;border:1px solid #fed7aa;">Roll 步驟</td>
+            <td style="padding:4px 8px;border:1px solid #fed7aa;text-align:center;">Yaw</td>
+            <td style="padding:4px 8px;border:1px solid #fed7aa;text-align:center;">複合 Pitch A（強化 ${lb.targetCanals[0]}）</td>
+            <td style="padding:4px 8px;border:1px solid #fed7aa;text-align:center;">複合 Pitch B（強化 ${lb.targetCanals[1]}）</td>
+          </tr>
+          ${phase1Rows}
+        </table>
+      </div>
+      <div style="font-size:12px;font-weight:600;color:#c2410c;margin-bottom:5px;">第二階段：擾動 Jitter（HC 整合刺激）</div>
+      <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">${jitterCards}</div>
+      <div style="font-size:12px;font-weight:600;color:#c2410c;margin-bottom:4px;">第三階段：閉環回測</div>
+      <div style="font-size:11px;color:#374151;padding:6px 10px;background:#fff;border:1px solid #fed7aa;border-radius:5px;margin-bottom:10px;">
+        觀察 BTrackS ML 數值是否向 0 趨近。ML 改善 &gt;10% → 增加 Roll 步進角度；退步 → 退至 2° 步進。
+      </div>
+      <div style="font-size:11px;color:#92400e;background:#fffbeb;padding:8px 10px;border-radius:5px;margin-bottom:10px;line-height:1.6;">
+        🧠 <strong>神經生理學說明：</strong>${lb.neurophysNote}
+      </div>
+      <div style="font-size:11px;padding:7px 10px;border-radius:5px;background:${lbAmBg};color:${lbAmColor};line-height:1.6;">
+        🫀 <strong>PPG 監控建議：</strong>${lb.autoMonitor.severityLabel} — ${lb.autoMonitor.device}（${lb.autoMonitor.pathNote}）
+        ${lb.autoMonitor.severity === 'severe' ? '<br>⚠️ Path &gt;70 cm：CNAP 逐搏監測為必要，需預設 Emergency Reset' : ''}
+      </div>
+    </div>`;
+  })() : '';
 
   const am = bcfChair?.autoMonitor || null;
   const amSeverityColor = am?.severity === 'severe' ? '#991b1b' : am?.severity === 'moderate' ? '#92400e' : '#065F46';
@@ -6610,8 +6868,13 @@ function _renderRombergResultHTML(result) {
       <div style="margin-bottom:6px;"><strong>前庭定位：</strong>${diagLabel}</div>
       <div style="margin-bottom:6px;"><strong>臨床標籤：</strong>${result.diagnosis.label}</div>
       <div style="margin-bottom:6px;"><strong>信心分數：</strong>${(result.diagnosis.confidence * 100).toFixed(0)}%</div>
+      <div style="margin-bottom:6px;"><strong>處方類型：</strong>${result.lateralBias
+        ? `<span style="padding:2px 8px;background:#fef3c7;border-radius:4px;color:#92400e;font-weight:600;font-size:12px;">Lateral Bias 複合處方</span>`
+        : `<span style="padding:2px 8px;background:#eff6ff;border-radius:4px;color:#1e40af;font-weight:600;font-size:12px;">單 Canal 處方</span>`}
+      </div>
       ${result.btracks_data?.sway_velocity ? `<div style="margin-bottom:6px;"><strong>EC Sway Velocity：</strong>${result.btracks_data.sway_velocity.toFixed(2)} cm/s</div>` : ''}
       ${alertsHTML}
+      ${lateralBiasHTML}
       ${chairHTML}
       ${autonomicHTML}
       ${trainingHTML}

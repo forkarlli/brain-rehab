@@ -115,6 +115,8 @@
 - 當日處方產生器（Zone1-5）：三模組整合分析、策略選擇、處方表、PDF匯出、儲存至歷史
 - RightEye 截圖 AI 自動讀取（已完成，呼叫 Railway /api/analyze-righteye）
 - BCF 飛行椅處方自動化（`_computeBCFChairRx`）：8半規管矩陣、Step-Jitter 步進計劃、雙側非對稱補償算法、自主神經安全監控建議
+- BCF 姿勢觀察 Lateral Bias 複合處方（`_computeLateralBiasChairRx`）：ML_Sway 偵測、三階段飛行椅指令表、神經生理學說明
+- 姿勢選擇決策矩陣（`_selectPosture`）：6條件判斷、BILATERAL_LATERAL 雙策略A/B、覆寫 `_computeBCFChairRx` 預設姿勢、血流動力學與視覺整合建議
 
 ---
 
@@ -175,3 +177,81 @@
 - 患者回報頭暈加劇 → 停止並記錄當前角度
 
 **Emergency Reset：**偵測到 PPG Amplitude 驟減 → 自動回正至初始 Yaw 角度
+
+---
+
+## 姿勢選擇決策矩陣（`_selectPosture`）
+
+輸入：`canalStr`（failure.canal 字串）、`apSway`（BTrackS cop_y_mean，正值=前偏）、`mlSway`（cop_x_mean，正值=右偏）
+
+| 條件 | 代碼 | 姿勢 |
+|------|------|------|
+| Bilateral + ML偏 > 0 | BILATERAL_LATERAL | null（提供策略A/B） |
+| Anterior only | PRONE | 趴臥 |
+| Posterior only | UPRIGHT | 坐姿 |
+| ML > AP（絕對值） | UPRIGHT_WITH_ROLL | 坐姿 |
+| AP 前偏（signed > 0）| PRONE | 趴臥 |
+| AP 後偏 / 無偏 | UPRIGHT | 坐姿 |
+
+### BILATERAL_LATERAL 雙策略
+- **策略A**（前跌風險高）：趴臥 + Roll + Pitch Down → 強化 Extensor Thrust 自我保護機制
+- **策略B**（後跌/自主神經不穩）：坐姿 + Roll + Pitch Up → 穩定 Midline Stability
+
+### 姿勢臨床意義
+| 姿勢 | 血流動力學 | 視覺整合 |
+|------|-----------|---------|
+| 趴臥 | 頭部低位，回心血量充足，適合 POTS / 低血壓傾向 | 閉眼本體覺整合訓練 |
+| 坐姿 | 自主神經挑戰較大，適合進階訓練 | 注視前方固定視標，訓練 VOR |
+
+### 整合流程（`computeRombergRx` 內）
+1. 計算 `btracksData.cop_y_mean / cop_x_mean`
+2. 呼叫 `_selectPosture(failure.canal, ap, ml)` → `postureDecision`
+3. 若 `code !== 'BILATERAL_LATERAL'`，以 `postureDecision.posture` 覆寫 `_computeBCFChairRx` 的預設姿勢
+4. `bcfChair.postureOverridden = true` 時，UI 顯示「AP/ML 數據修正了預設姿勢」
+5. `postureDecision` 加入 return → `_renderRombergResultHTML` 顯示姿勢選擇理由 + 策略A/B + 血流動力學 + 視覺整合建議
+
+---
+
+## BCF 姿勢觀察 Lateral Bias 複合處方（`_computeLateralBiasChairRx`）
+
+### 觸發條件（`computeRombergRx` 內自動偵測）
+- `btracksData.cop_x_mean`（ML_Sway）≠ null
+- `input.path_eyes_closed` ≥ 40 cm（VES 條件路徑長度進入中度或重度異常範圍）
+- ML > 0（右偏）→ Right Vestibular Hypofunction with Lateral Bias
+- ML < 0（左偏）→ Left Vestibular Hypofunction with Lateral Bias
+
+### 目標半規管
+| 側別 | 目標 Canals |
+|------|------------|
+| Right Lateral Bias | RAC + RPC + R-HC |
+| Left Lateral Bias  | LAC + LPC + L-HC |
+
+### 三階段飛行椅執行順序
+**第一階段（進程）：** Roll 0°→20°，每步 5°，節律同 `_computeBCFChairRx`  
+- 複合刺激 A（強化 AC）：Roll 基礎上加入 Pitch Down -5°  
+- 複合刺激 B（強化 PC）：Roll 基礎上加入 Pitch Up +5°
+
+**第二階段（擾動 Jitter）：** 在側傾峰值位停留，執行  
+- Yaw 快速震盪：±2°（整合 HC 刺激）  
+- 三軸微動：X=1°, Y=2°, Z=1°
+
+**第三階段（閉環回測）：**  
+- 觀察 BTrackS ML 數值是否向 0 趨近  
+- ML 改善 >10% → 增加 Roll 步進；退步 → 退至 2° 步進
+
+### 神經生理學說明
+- Roll 物理刺激同時切入同側 AC + PC 的運動平面  
+- 側傾激活同側 Lateral Vestibular Nucleus → 增強同側所有半規管張力  
+- Yaw 震盪整合 HC 刺激 → 加速 Medial-Lateral Control 恢復
+
+### PPG 監控建議
+與 `_computeBCFChairRx` 相同分級，Path > 70 cm 時 CNAP 為必要
+
+### 輸出欄位（`computeRombergRx` 回傳）
+- `lateralBias`：`{ direction, diagnosis, mlValue, targetCanals }` 或 `null`
+- `lateralBiasChair`：`_computeLateralBiasChairRx` 完整結果或 `null`
+- 渲染函數 `_renderRombergResultHTML` 新增：
+  - 處方類型 badge（單 Canal 處方 / Lateral Bias 複合處方）
+  - 姿勢觀察卡片（ML 偏移方向 + 診斷 + 目標 Canals）
+  - 三階段飛行椅三軸指令表
+  - PPG 監控建議（含 CNAP 必要提示）
