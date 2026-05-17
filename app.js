@@ -5727,6 +5727,14 @@ async function readRightEyeWithAI() {
     fillSel('re-orth-right', vals.orthRight);
     fillSel('re-orth-left',  vals.orthLeft);
 
+    fillNum('re-fixation-score',   vals.fixationScore);
+    fillNum('re-saccade-score',    vals.saccadeScore);
+    fillNum('re-saccade-ta-right', vals.saccadeTaRight);
+    fillNum('re-saccade-ta-left',  vals.saccadeTaLeft);
+    if (vals.fixationScore !== null && vals.fixationScore !== undefined) {
+      runOPNsLocalization();
+    }
+
     // Store directional saccade grades from AI
     reAIGrades = {
       rightward_overshoot:  vals.rightward_overshoot  || null,

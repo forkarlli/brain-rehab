@@ -293,7 +293,11 @@ app.post('/api/analyze-righteye', async (req, res) => {
   "latency": {
     "od_ms": <OD（右眼）平均 Saccadic Latency ms，找不到填 null>,
     "os_ms": <OS（左眼）平均 Saccadic Latency ms，找不到填 null>
-  }
+  },
+  "fixationScore": <Fixation 區塊的 Accuracy Score 數字（0–100），位於報告右上方 Fixations 區塊，如 100>,
+  "saccadeScore": <Saccade 區塊的 Accuracy Score 數字（0–100），位於報告中間 Saccades 區塊，如 97>,
+  "saccadeTaRight": <Saccade Metrics 表格中 TA (mm) 欄位的 Right 數值，如 10.75，找不到填 null>,
+  "saccadeTaLeft": <Saccade Metrics 表格中 TA (mm) 欄位的 Left 數值，如 10.50，找不到填 null>
 }`;
   try {
     const response = await anthropic.messages.create({
@@ -373,7 +377,14 @@ app.post('/api/analyze-righteye', async (req, res) => {
    若報告以 Mean Latency 或 Average Latency 呈現，分別讀取左右眼數值。
    找不到則填 null。
 
-8. 數值提取：仔細讀取圖片中所有數字，包括小數點。找不到的欄位填 null。
+8. 【Fixation Score / Saccade Score / Saccade TA 提取】
+   - fixationScore：報告右上方 Fixations 區塊內的 Accuracy Score（0–100 整數），通常顯示為大數字如 "100"
+   - saccadeScore：報告中間 Saccades 區塊內的 Accuracy Score（0–100 整數），通常顯示為大數字如 "97"
+   - saccadeTaRight / saccadeTaLeft：Saccade Metrics 表格中 "TA (mm)" 欄位的 Right 和 Left 數值（小數，如 10.75）
+     若表格有 "Right" / "Left" 或 "OD" / "OS" 欄位，分別對應提取
+     找不到則填 null
+
+9. 數值提取：仔細讀取圖片中所有數字，包括小數點。找不到的欄位填 null。
 
 只回傳 JSON，不附加任何說明文字。`,
       messages: [{ role: 'user', content: [...imageBlocks, { type: 'text', text: userPrompt }] }],
