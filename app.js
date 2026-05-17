@@ -1,4 +1,5 @@
 'use strict';
+console.log('[BCF] app.js v20260517d loaded');
 
 // ===== DATA STORE =====
 const DB = {
@@ -2800,7 +2801,7 @@ function computeMuscleRx(muscleRec) {
   return { weakRegions, abnormalCount };
 }
 
-function computeEyeMachineRx(affectedBrainRegions, affectedItems, convMCodes) {
+function computeEyeMachineRx(affectedBrainRegions, affectedItems, convMCodes, opnsLoc = null) {
   const rec = [];
   const has = r => affectedBrainRegions.has(r);
 
@@ -3033,6 +3034,34 @@ function computeEyeMachineRx(affectedBrainRegions, affectedItems, convMCodes) {
   }
   if (hasRightSC) {
     rec.push({ mode: 'SC-R', name: 'Right SC 多感官整合', angle: '右視野側刺激', speed: '—', dist: '—', reps: '10–15', target: '聲音+閃光', bg: '—', notes: ['建議加入多感官整合訓練：在右視野側同時給予聲音+閃光刺激，強化 Right SC 空間地圖校正（往左 Missed — 對側整合啟動端不足）'] });
+  }
+
+  if (opnsLoc) {
+    if (opnsLoc.location === 'SC_suspected') {
+      rec.push({
+        mode: 'SC-INT',
+        name: 'SC 整合訓練（OPNs 定位）',
+        angle: '雙側周邊視野反射',
+        speed: 'S2',
+        dist: 'D4–5',
+        reps: '10–15',
+        target: '周邊閃光+聲音刺激',
+        bg: '—',
+        notes: ['OPNs 定位：SC_suspected（可信度中）。執行反射性掃視訓練：周邊視野光點突現，強化 SC 啟動迴路整合。配合雙側 PPRF 水平掃視整合訓練。'],
+      });
+    } else if (opnsLoc.location === 'OPNs_impaired') {
+      rec.push({
+        mode: 'OPNs-R',
+        name: 'OPNs 定位：建議臨床複查',
+        angle: '—',
+        speed: '—',
+        dist: '—',
+        reps: '—',
+        target: '—',
+        bg: '—',
+        notes: ['OPNs 定位：OPNs_impaired（可信度低）。建議先排除 FEF 共病，臨床確認記憶導向任務（Memory-guided Saccades）表現後再決定處方方向。'],
+      });
+    }
   }
 
   return { rec, positionNote, headPos };
@@ -3872,6 +3901,67 @@ function computeRightEyeRx(data) {
     weakRegions:   reWeakRegions,
     abnormalCount: reAbnormalCount,
   };
+}
+
+function computeOPNsLocalization(fixation_score, saccade_score, saccade_ta_right, saccade_ta_left) {
+  const DISCLAIMER = '⚠️ 本結果基於 RightEye Fixation Score + Saccade TA，未排除 FEF 共病，建議臨床確認記憶導向任務表現。';
+  if (fixation_score === null) return null;
+
+  const fixation_impaired = fixation_score < 85;
+
+  if (!fixation_impaired) {
+    return { location: 'normal', confidence: 'high', disclaimer: DISCLAIMER };
+  }
+
+  const ta_avg = (saccade_ta_right !== null && saccade_ta_left !== null)
+    ? (saccade_ta_right + saccade_ta_left) / 2
+    : null;
+  const hypometria = ta_avg !== null ? ta_avg > 12 : null;
+
+  if (hypometria === true) {
+    return { location: 'SC_suspected', confidence: 'medium', disclaimer: DISCLAIMER };
+  }
+  return { location: 'OPNs_impaired', confidence: 'low', disclaimer: DISCLAIMER };
+}
+
+function runOPNsLocalization() {
+  const parseNum = v => { const n = parseFloat(v); return isNaN(n) ? null : n; };
+  const fixScore  = parseNum(document.getElementById('re-fixation-score')?.value);
+  const saccScore = parseNum(document.getElementById('re-saccade-score')?.value);
+  const taRight   = parseNum(document.getElementById('re-saccade-ta-right')?.value);
+  const taLeft    = parseNum(document.getElementById('re-saccade-ta-left')?.value);
+  const outputEl  = document.getElementById('re-opns-output');
+  if (!outputEl) return;
+
+  if (fixScore === null) {
+    outputEl.style.display = 'block';
+    outputEl.innerHTML = '<div style="color:var(--danger);font-size:13px">⚠️ 請先填入 Fixation Score</div>';
+    return;
+  }
+
+  const loc = computeOPNsLocalization(fixScore, saccScore, taRight, taLeft);
+  if (!loc) { outputEl.style.display = 'none'; return; }
+
+  const LOC_LABEL = { normal: '正常（Normal）', SC_suspected: '懷疑上丘（SC Suspected）', OPNs_impaired: 'OPNs 異常（OPNs Impaired）' };
+  const LOC_COLOR = { normal: '#16a34a', SC_suspected: '#d97706', OPNs_impaired: '#dc2626' };
+  const CONF_ICON  = { high: '🟢', medium: '🟡', low: '🔴' };
+  const CONF_LABEL = { high: '高', medium: '中', low: '低' };
+
+  outputEl.style.display = 'block';
+  outputEl.innerHTML = `
+    <div style="background:var(--gray-50);padding:14px 16px;border-radius:var(--radius-sm);border-left:4px solid ${LOC_COLOR[loc.location]}">
+      <div style="display:flex;gap:32px;flex-wrap:wrap;margin-bottom:10px">
+        <div>
+          <div style="font-size:11px;color:var(--gray-500);margin-bottom:3px">定位結果</div>
+          <strong style="font-size:16px;color:${LOC_COLOR[loc.location]}">${LOC_LABEL[loc.location]}</strong>
+        </div>
+        <div>
+          <div style="font-size:11px;color:var(--gray-500);margin-bottom:3px">可信度</div>
+          <strong style="font-size:15px">${CONF_ICON[loc.confidence]} ${CONF_LABEL[loc.confidence]}</strong>
+        </div>
+      </div>
+      <div style="font-size:12px;color:var(--gray-700);background:#fffbeb;padding:8px 10px;border-radius:4px;border-left:3px solid #d97706;line-height:1.5">${loc.disclaimer}</div>
+    </div>`;
 }
 
 function renderRightEyeSection({ indicators, brainRegions, rx, priorityLines, ST_ICON, ST_LABEL }, standalone = false) {
@@ -4969,8 +5059,9 @@ function clearBCFForm() {
 // ===== RIGHT EYE TAB =====
 function renderRightEyeInterface() {
   const container = document.getElementById('righteye-interface');
-  if (!container) return;
-  if (container.querySelector("#re-spH")) { return; }
+  if (!container) { console.log('[BCF] renderRightEyeInterface: container not found'); return; }
+  if (container.querySelector("#re-opns-result")) { console.log('[BCF] renderRightEyeInterface: guard fired, already rendered'); return; }
+  console.log('[BCF] renderRightEyeInterface: setting innerHTML now');
 
   container.innerHTML = `
     <div class="card">
@@ -5142,6 +5233,18 @@ function renderRightEyeInterface() {
       </div>
     </div>
 
+    <div id="re-opns-result" class="card" style="margin-top:16px; padding:16px;">
+      <div class="card-header">🧠 OPNs 定位分析</div>
+      <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; margin-top:12px;">
+        <div><label>Fixation Score（正常 ≥85）</label><input type="number" id="re-fixation-score" class="input" placeholder="如 100"></div>
+        <div><label>Saccade Score（正常 ≥85）</label><input type="number" id="re-saccade-score" class="input" placeholder="如 97"></div>
+        <div><label>Saccade TA Right（mm）</label><input type="number" id="re-saccade-ta-right" class="input" placeholder="如 10.75"></div>
+        <div><label>Saccade TA Left（mm）</label><input type="number" id="re-saccade-ta-left" class="input" placeholder="如 10.50"></div>
+      </div>
+      <button class="btn btn-primary" onclick="runOPNsLocalization()" style="width:100%; margin-top:12px;">🔍 執行 OPNs 定位分析</button>
+      <div id="re-opns-output" style="display:none; margin-top:12px;"></div>
+    </div>
+
     <div class="card" style="margin-top:16px">
       <div class="card-header">
         <h3>🎯 功能訓練處方</h3>
@@ -5194,6 +5297,7 @@ function renderRightEyeInterface() {
 
     <div id="re-results" style="display:none"></div>`;
 
+  console.log('[BCF] renderRightEyeInterface: innerHTML set, #re-opns-result =', document.getElementById('re-opns-result'));
   const dropZone = document.getElementById('re-drop-zone');
   const fileInput = document.getElementById('re-file-input');
   dropZone.addEventListener('click', () => fileInput.click());
@@ -5689,6 +5793,28 @@ function analyzeRightEyeStandalone() {
   const resultsEl = document.getElementById('re-results');
   if (!resultsEl) return;
 
+  const fixScore  = parseNum(document.getElementById('re-fixation-score')?.value);
+  const saccScore = parseNum(document.getElementById('re-saccade-score')?.value);
+  const taRight   = parseNum(document.getElementById('re-saccade-ta-right')?.value);
+  const taLeft    = parseNum(document.getElementById('re-saccade-ta-left')?.value);
+  const opnsLoc   = computeOPNsLocalization(fixScore, saccScore, taRight, taLeft);
+
+  const LOC_LABEL = { normal: '正常（Normal）', SC_suspected: '懷疑上丘（SC Suspected）', OPNs_impaired: 'OPNs 異常（OPNs Impaired）' };
+  const LOC_COLOR = { normal: '#16a34a', SC_suspected: '#d97706', OPNs_impaired: '#dc2626' };
+  const CONF_ICON  = { high: '🟢', medium: '🟡', low: '🔴' };
+  const CONF_LABEL = { high: '高', medium: '中', low: '低' };
+  const opnsHtml = opnsLoc ? `
+    <div class="bcf-result-section" style="margin-top:12px">
+      <h4>🧠 OPNs 定位分析</h4>
+      <div style="background:var(--gray-50);padding:14px 16px;border-radius:var(--radius-sm);border-left:4px solid ${LOC_COLOR[opnsLoc.location]}">
+        <div style="display:flex;gap:24px;flex-wrap:wrap;margin-bottom:10px">
+          <div><span style="font-size:12px;color:var(--gray-500)">定位結果</span><br><strong style="font-size:15px;color:${LOC_COLOR[opnsLoc.location]}">${LOC_LABEL[opnsLoc.location]}</strong></div>
+          <div><span style="font-size:12px;color:var(--gray-500)">可信度</span><br><strong>${CONF_ICON[opnsLoc.confidence]} ${CONF_LABEL[opnsLoc.confidence]}</strong></div>
+        </div>
+        <div style="font-size:12px;color:var(--gray-700);background:#fffbeb;padding:8px 10px;border-radius:4px;border-left:3px solid #d97706">${opnsLoc.disclaimer}</div>
+      </div>
+    </div>` : '';
+
   const abnCount = reResult.indicators.filter(i => i.status === 'mild' || i.status === 'severe').length;
 
   if (!reResult.hasAbnormal) {
@@ -5699,7 +5825,8 @@ function analyzeRightEyeStandalone() {
         <div style="font-size:48px;margin-bottom:8px">✅</div>
         <h4 style="color:var(--success)">所有指標均在正常範圍</h4>
         <p style="color:var(--gray-500);margin-top:4px">無需眼動機處方介入</p>
-      </div>`;
+      </div>
+      ${opnsHtml ? '<div style="padding:0 20px 16px">' + opnsHtml + '</div>' : ''}`;
   } else {
     const imgSection = RE_IMAGES.length > 0 ? `
       <div class="bcf-result-section" style="margin-top:4px">
@@ -5747,6 +5874,7 @@ function analyzeRightEyeStandalone() {
       </div>
       <div class="bcf-results-body">
         ${renderRightEyeSection(reResult, true)}
+        ${opnsHtml}
         ${saccDirSection}
         ${imgSection}
       </div>`;
