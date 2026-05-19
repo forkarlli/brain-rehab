@@ -255,3 +255,64 @@
   - 姿勢觀察卡片（ML 偏移方向 + 診斷 + 目標 Canals）
   - 三階段飛行椅三軸指令表
   - PPG 監控建議（含 CNAP 必要提示）
+
+---
+
+## SP Lateralization Engine（追蹤偏側化引擎）
+
+### Data Fields
+| 欄位 | DOM ID | 說明 |
+|------|--------|------|
+| spHRight | re-spH-right | 右向追蹤% |
+| spHLeft  | re-spH-left  | 左向追蹤% |
+
+### Three-Rule Logic（lines 3385–3399）
+1. Both < 60% → `Bilateral_Cerebellar_or_Vermis`（red badge）
+2. spHRight < spHLeft − 15 → `Right_Cerebellar_Weakness`（yellow badge）
+3. spHLeft < spHRight − 15 → `Left_Cerebellar_Weakness`（yellow badge）
+
+### Prescription Output（dual-track）
+Each lateralization tag fires **two** `addRx` rows:
+
+| Track | 模式 | 訓練類型 | 角度 | 速度 | 目標 |
+|-------|------|---------|------|------|------|
+| CB track | M1 | Pursuit右向/左向 CB側性化 | R90/L90 | S2 | Right/Left CB Flocculus |
+| Cortical track | M1 | Pursuit右向/左向 皮質側性化 | R90/L90 | S1 | Right/Left Parietal MT/MST/PPC BA39-40 + FEF |
+
+Cortical rows carry extra metadata: `laser_guidance_target` = `Right/Left_Field_Slow_Rightward/Leftward`, `cortical_target` = `Right/Left_Parietal_MT_MST_FEF`.
+
+Angle strings are intentionally distinct per row (e.g. `R90（Right CB Flocculus）` vs `R90（Right Parietal MT/MST）`) to prevent deduplication by the `seenRx` Set.
+
+### `cerebellarLat` Object
+```js
+{
+  tag,                   // 'Right_Cerebellar_Weakness' | 'Left_Cerebellar_Weakness' | 'Bilateral_Cerebellar_or_Vermis'
+  vestibularChairRotation, // string or null
+  cbTarget,              // e.g. 'Right CB (Flocculus)'
+  corticalTarget,        // e.g. 'Right Parietal (MT/MST)'
+}
+```
+Stored on `reRec.cerebellarLat` at save time. Displayed in the history card as two coloured chips (blue = CB, purple = Parietal).
+
+### Neuroanatomy Reference
+| Deficit | CB Target | Cortical Target |
+|---------|-----------|----------------|
+| Right pursuit ↓ | Right CB Flocculus | Right Parietal MT/MST/FEF（ipsilateral control） |
+| Left pursuit ↓  | Left CB Flocculus  | Left Parietal MT/MST/FEF |
+| Bilateral ↓     | Cerebellar Vermis  | Bilateral Parietal MT/MST / MVN / Neural Integrator |
+
+### Vestibular Chair Rotation
+| Tag | 前庭椅建議 |
+|-----|----------|
+| Right_Cerebellar_Weakness | Leftward Decel or Rightward Accel |
+| Left_Cerebellar_Weakness  | Rightward Decel or Leftward Accel |
+| Bilateral_Cerebellar_or_Vermis | Both directions |
+
+### Call Sites（all updated — commits 68674aa + 56d27e1）
+| 函數 | 行號 | 說明 |
+|------|------|------|
+| `analyzeRightEyeStandalone` | ~5819 | 完整分析 button |
+| `generateBCFResults` | ~4263 | BCF 處方生成 |
+| `generateIntegratedPrescription` | ~4606 | 整合處方 |
+| `saveRightEyeAssessment` | ~6153 | 儲存評估 |
+| saved-record replay | ~8039 | 歷史記錄重播 |
