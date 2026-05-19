@@ -856,11 +856,17 @@ function showAssessmentDetail(aid) {
       ]) + `</div>`;
     }
     if (a.cerebellarLat) {
-      const clColors = a.cerebellarLat.tag === 'Bilateral_Cerebellar_or_Vermis' ? ['#fef2f2','#b91c1c'] : ['#fef3c7','#92400e'];
+      const isBilat = a.cerebellarLat.tag === 'Bilateral_Cerebellar_or_Vermis';
+      const clColors = isBilat ? ['#fef2f2','#b91c1c'] : ['#fef3c7','#92400e'];
+      const cbTag       = a.cerebellarLat.cbTarget      || a.cerebellarLat.tag.replace(/_/g,' ');
+      const cortTag     = a.cerebellarLat.corticalTarget || '';
       body += `<div style="padding:8px 10px;background:${clColors[0]};border-radius:6px;margin-top:6px">
-        <div style="font-size:11px;font-weight:700;color:${clColors[1]}">小腦側性定位</div>
-        <div style="font-size:13px;font-weight:700;color:${clColors[1]};margin-top:2px">${a.cerebellarLat.tag.replace(/_/g,' ')}</div>
-        ${a.cerebellarLat.vestibularChairRotation ? `<div style="font-size:11px;color:${clColors[1]};margin-top:3px">前庭椅旋轉建議：${a.cerebellarLat.vestibularChairRotation.replace(/_/g,' ')}</div>` : ''}
+        <div style="font-size:11px;font-weight:700;color:${clColors[1]};margin-bottom:5px">小腦側性定位 ／ 皮質目標</div>
+        <div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px">
+          <span style="background:#dbeafe;color:#1d4ed8;padding:2px 8px;border-radius:8px;font-size:12px;font-weight:600">${cbTag}</span>
+          ${cortTag ? `<span style="background:#ede9fe;color:#5b21b6;padding:2px 8px;border-radius:8px;font-size:12px;font-weight:600">${cortTag}</span>` : ''}
+        </div>
+        ${a.cerebellarLat.vestibularChairRotation ? `<div style="font-size:11px;color:${clColors[1]}">前庭椅旋轉建議：${a.cerebellarLat.vestibularChairRotation.replace(/_/g,' ')}</div>` : ''}
       </div>`;
     }
 
@@ -3760,13 +3766,34 @@ function computeRightEyeRx(data) {
   if (spHAbn) {
     addRx({ mode: 'M1', name: 'Pursuit均速', angle: 'R90/L90（水平SP異常）', speed: spHSev ? 'S4' : 'S2', dist: 'D1–6（可調）', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: Smooth Pursuit 水平異常'], priority: spHSev ? 2 : 4 });
   }
-  // SP 水平側性 → 單側 CB 訓練
+  // SP 水平側性 → 單側 CB + 皮質雙軌訓練
   if (cerebellarLatTag === 'Right_Cerebellar_Weakness') {
-    addRx({ mode: 'M1', name: 'Pursuit右向 CB側性', angle: 'R90（Right CB側性弱化）', speed: 'S2', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['SP 右向 < 左向 >15% → Right CB側性弱化，右向低速追蹤訓練；前庭椅建議 Leftward Decel / Rightward Accel'], priority: 2 });
+    addRx({ mode: 'M1', name: 'Pursuit右向 CB側性化', angle: 'R90（Right CB Flocculus）', speed: 'S2', dist: 'D4', reps: '15', target: '有', bg: '空白背板',
+      notes: ['SP 右向 < 左向 >15% → Right CB Flocculus weakness → Rightward pursuit reinforcement；前庭椅建議 Leftward Decel / Rightward Accel'],
+      priority: 2 });
+    addRx({ mode: 'M1', name: 'Pursuit右向 皮質側性化', angle: 'R90（Right Parietal MT/MST）', speed: 'S1', dist: 'D4', reps: '15', target: '有', bg: '空白背板',
+      notes: ['Right Parietal (MT/MST/PPC BA39-40) + Right FEF activation → slow rightward pursuit drives ipsilateral dorsal stream'],
+      laser_guidance_target: 'Right_Field_Slow_Rightward',
+      cortical_target: 'Right_Parietal_MT_MST_FEF',
+      priority: 2 });
   } else if (cerebellarLatTag === 'Left_Cerebellar_Weakness') {
-    addRx({ mode: 'M1', name: 'Pursuit左向 CB側性', angle: 'L90（Left CB側性弱化）', speed: 'S2', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['SP 左向 < 右向 >15% → Left CB側性弱化，左向低速追蹤訓練；前庭椅建議 Rightward Decel / Leftward Accel'], priority: 2 });
+    addRx({ mode: 'M1', name: 'Pursuit左向 CB側性化', angle: 'L90（Left CB Flocculus）', speed: 'S2', dist: 'D4', reps: '15', target: '有', bg: '空白背板',
+      notes: ['SP 左向 < 右向 >15% → Left CB Flocculus weakness → Leftward pursuit reinforcement；前庭椅建議 Rightward Decel / Leftward Accel'],
+      priority: 2 });
+    addRx({ mode: 'M1', name: 'Pursuit左向 皮質側性化', angle: 'L90（Left Parietal MT/MST）', speed: 'S1', dist: 'D4', reps: '15', target: '有', bg: '空白背板',
+      notes: ['Left Parietal (MT/MST/PPC BA39-40) + Left FEF activation → slow leftward pursuit drives ipsilateral dorsal stream'],
+      laser_guidance_target: 'Left_Field_Slow_Leftward',
+      cortical_target: 'Left_Parietal_MT_MST_FEF',
+      priority: 2 });
   } else if (cerebellarLatTag === 'Bilateral_Cerebellar_or_Vermis') {
-    addRx({ mode: 'M1', name: 'Pursuit均速雙向 CB/Vermis', angle: 'R90/L90（雙側CB/Vermis）', speed: 'S1', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['SP 右向+左向均 <60% → Bilateral CB/Vermis 弱化，極低速均衡訓練'], priority: 2 });
+    addRx({ mode: 'M1', name: 'Pursuit均速雙向 CB/Vermis', angle: 'R90/L90（Bilateral CB Vermis）', speed: 'S1', dist: 'D3', reps: '15', target: '有', bg: '空白背板',
+      notes: ['SP 右向+左向均 <60% → Bilateral CB/Vermis 弱化，極低速均衡訓練'],
+      priority: 2 });
+    addRx({ mode: 'M1', name: 'Pursuit雙向 皮質側性化', angle: 'R90/L90（Bilateral Parietal MT/MST）', speed: 'S1', dist: 'D3', reps: '15', target: '有', bg: '空白背板',
+      notes: ['Bilateral Parietal (MT/MST/PPC BA39-40) + Bilateral FEF activation → symmetric slow pursuit, dorsal stream bilateral reinforcement'],
+      laser_guidance_target: 'Bilateral_Field_Slow_Pursuit',
+      cortical_target: 'Bilateral_Parietal_MT_MST_FEF',
+      priority: 2 });
   }
   // Smooth Pursuit 垂直低 → M1 R0/L0
   if (spVAbn) {
@@ -3955,7 +3982,12 @@ function computeRightEyeRx(data) {
     indicators, brainRegions, rx, priorityLines, hasAbnormal, ST_ICON, ST_LABEL, velocityAbn,
     weakRegions:   reWeakRegions,
     abnormalCount: reAbnormalCount,
-    cerebellarLat: cerebellarLatTag ? { tag: cerebellarLatTag, vestibularChairRotation } : null,
+    cerebellarLat: cerebellarLatTag ? {
+      tag: cerebellarLatTag,
+      vestibularChairRotation,
+      cbTarget:      cerebellarLatTag === 'Right_Cerebellar_Weakness' ? 'Right CB (Flocculus)'      : cerebellarLatTag === 'Left_Cerebellar_Weakness' ? 'Left CB (Flocculus)'      : 'CB Vermis',
+      corticalTarget: cerebellarLatTag === 'Right_Cerebellar_Weakness' ? 'Right Parietal (MT/MST)' : cerebellarLatTag === 'Left_Cerebellar_Weakness' ? 'Left Parietal (MT/MST)'  : 'Bilateral Parietal (MT/MST)',
+    } : null,
   };
 }
 
