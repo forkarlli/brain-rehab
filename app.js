@@ -5822,6 +5822,8 @@ function analyzeRightEyeStandalone() {
     spH:       parseNum(document.getElementById('re-spH')?.value),
     spV:       parseNum(document.getElementById('re-spV')?.value),
     spC:       parseNum(document.getElementById('re-spC')?.value),
+    spHRight:  parseNum(document.getElementById('re-spH-right')?.value),
+    spHLeft:   parseNum(document.getElementById('re-spH-left')?.value),
     eso:       parseNum(document.getElementById('re-eso')?.value),
     svH:       parseNum(document.getElementById('re-svH')?.value),
     svV:       parseNum(document.getElementById('re-svV')?.value),
@@ -8036,6 +8038,7 @@ function runIntegratedAnalysis(patientId) {
   if (reRec) {
     reOut = computeRightEyeRx({
       spH: reRec.spH, spV: reRec.spV, spC: reRec.spC, eso: reRec.eso,
+      spHRight: reRec.spHRight ?? null, spHLeft: reRec.spHLeft ?? null,
       svH: reRec.svH, svV: reRec.svV, syncH: reRec.syncH, syncV: reRec.syncV,
       intrusion: reRec.intrusion || 'none', intrusionAmp: reRec.intrusionAmp || 'none',
       intrusionType: reRec.intrusionType || 'none',
