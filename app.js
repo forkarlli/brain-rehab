@@ -849,6 +849,20 @@ function showAssessmentDetail(aid) {
       field('垂直 SP', n(a.spV, '%'), spChip(a.spV)),
       field('圓形 SP', n(a.spC, '%'), spChip(a.spC)),
     ]);
+    if (a.spHRight != null || a.spHLeft != null) {
+      body += `<div style="margin-top:6px">` + grid2([
+        field('右向追蹤 SP', n(a.spHRight, '%'), spChip(a.spHRight)),
+        field('左向追蹤 SP', n(a.spHLeft, '%'), spChip(a.spHLeft)),
+      ]) + `</div>`;
+    }
+    if (a.cerebellarLat) {
+      const clColors = a.cerebellarLat.tag === 'Bilateral_Cerebellar_or_Vermis' ? ['#fef2f2','#b91c1c'] : ['#fef3c7','#92400e'];
+      body += `<div style="padding:8px 10px;background:${clColors[0]};border-radius:6px;margin-top:6px">
+        <div style="font-size:11px;font-weight:700;color:${clColors[1]}">小腦側性定位</div>
+        <div style="font-size:13px;font-weight:700;color:${clColors[1]};margin-top:2px">${a.cerebellarLat.tag.replace(/_/g,' ')}</div>
+        ${a.cerebellarLat.vestibularChairRotation ? `<div style="font-size:11px;color:${clColors[1]};margin-top:3px">前庭椅旋轉建議：${a.cerebellarLat.vestibularChairRotation.replace(/_/g,' ')}</div>` : ''}
+      </div>`;
+    }
 
     body += secTitle('ESO Average ｜ Synchronization SP');
     body += grid3([
@@ -3333,6 +3347,7 @@ function computeRightEyeRx(data) {
   const { spH, spV, spC, eso, svH, svV, syncH, syncV, intrusion, intrusionAmp, intrusionType,
           pldRight, pldLeft, orthRight, orthLeft,
           svRight, svLeft, svUp, svDown,
+          spHRight, spHLeft,
           hTotal, hOverR, hUnderR, hMissedR, hOverL, hUnderL, hMissedL,
           vTotal, vOverR, vUnderR, vMissedR, vOverL, vUnderL, vMissedL,
           hOverRGrade, hUnderRGrade, hOverLGrade, hUnderLGrade,
@@ -3365,6 +3380,23 @@ function computeRightEyeRx(data) {
   const svUSt   = svSt(svUp);
   const svDSt   = svSt(svDown);
   const orthAbn = r => r === 'up' || r === 'down';
+
+  // ── SP 水平側性 → 小腦側化定位 ──
+  const spHRSt = spSt(spHRight);
+  const spHLSt = spSt(spHLeft);
+  let cerebellarLatTag = null;
+  let vestibularChairRotation = null;
+  if (spHRight !== null && spHRight !== undefined && spHLeft !== null && spHLeft !== undefined) {
+    if (spHRight < 60 && spHLeft < 60) {
+      cerebellarLatTag = 'Bilateral_Cerebellar_or_Vermis';
+    } else if (spHRight < spHLeft - 15) {
+      cerebellarLatTag = 'Right_Cerebellar_Weakness';
+      vestibularChairRotation = 'Leftward_Decel_or_Rightward_Accel';
+    } else if (spHLeft < spHRight - 15) {
+      cerebellarLatTag = 'Left_Cerebellar_Weakness';
+      vestibularChairRotation = 'Rightward_Decel_or_Leftward_Accel';
+    }
+  }
 
   // ── Overshoot / Undershoot / Missed 判斷（四等級，均以百分比計算）──
   function overGrade(r) {
@@ -3452,6 +3484,21 @@ function computeRightEyeRx(data) {
       brain: (spCSt === 'mild' || spCSt === 'severe') ? ['CB Flocculus'] : [],
       note: spCSt === 'severe' ? 'CB Flocculus+FEF弱化' : spCSt === 'mild' ? 'CB Flocculus輕度弱化' : '',
     },
+    ...(spHRight !== null && spHRight !== undefined ? [{
+      label: 'SP 右向追蹤%', value: spHRight + '%', status: spHRSt,
+      brain: spHRSt === 'severe' ? ['Right CB', 'Right Flocculus'] : spHRSt === 'mild' ? ['Right CB'] : [],
+      note: spHRSt === 'severe' ? 'Right CB 右向追蹤嚴重弱化 ⚠️' : spHRSt === 'mild' ? 'Right CB 右向追蹤輕度弱化' : '',
+    }] : []),
+    ...(spHLeft !== null && spHLeft !== undefined ? [{
+      label: 'SP 左向追蹤%', value: spHLeft + '%', status: spHLSt,
+      brain: spHLSt === 'severe' ? ['Left CB', 'Left Flocculus'] : spHLSt === 'mild' ? ['Left CB'] : [],
+      note: spHLSt === 'severe' ? 'Left CB 左向追蹤嚴重弱化 ⚠️' : spHLSt === 'mild' ? 'Left CB 左向追蹤輕度弱化' : '',
+    }] : []),
+    ...(cerebellarLatTag ? [{
+      label: 'SP 水平側性定位', value: cerebellarLatTag.replace(/_/g, ' '), status: cerebellarLatTag === 'Bilateral_Cerebellar_or_Vermis' ? 'severe' : 'mild',
+      brain: cerebellarLatTag === 'Right_Cerebellar_Weakness' ? ['Right CB'] : cerebellarLatTag === 'Left_Cerebellar_Weakness' ? ['Left CB'] : ['CB Vermis'],
+      note: cerebellarLatTag === 'Right_Cerebellar_Weakness' ? `右小腦追蹤弱化 → 前庭椅旋轉建議：${vestibularChairRotation?.replace(/_/g,' ')}` : cerebellarLatTag === 'Left_Cerebellar_Weakness' ? `左小腦追蹤弱化 → 前庭椅旋轉建議：${vestibularChairRotation?.replace(/_/g,' ')}` : '雙側小腦/蚓部追蹤均弱化',
+    }] : []),
     {
       label: 'ESO Average', value: eso !== null ? eso.toFixed(2) : '—', status: esSt,
       brain: esSt === 'severe' ? ['Bilateral Midbrain']
@@ -3713,6 +3760,14 @@ function computeRightEyeRx(data) {
   if (spHAbn) {
     addRx({ mode: 'M1', name: 'Pursuit均速', angle: 'R90/L90（水平SP異常）', speed: spHSev ? 'S4' : 'S2', dist: 'D1–6（可調）', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: Smooth Pursuit 水平異常'], priority: spHSev ? 2 : 4 });
   }
+  // SP 水平側性 → 單側 CB 訓練
+  if (cerebellarLatTag === 'Right_Cerebellar_Weakness') {
+    addRx({ mode: 'M1', name: 'Pursuit右向 CB側性', angle: 'R90（Right CB側性弱化）', speed: 'S2', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['SP 右向 < 左向 >15% → Right CB側性弱化，右向低速追蹤訓練；前庭椅建議 Leftward Decel / Rightward Accel'], priority: 2 });
+  } else if (cerebellarLatTag === 'Left_Cerebellar_Weakness') {
+    addRx({ mode: 'M1', name: 'Pursuit左向 CB側性', angle: 'L90（Left CB側性弱化）', speed: 'S2', dist: 'D4', reps: '15', target: '有', bg: '空白背板', notes: ['SP 左向 < 右向 >15% → Left CB側性弱化，左向低速追蹤訓練；前庭椅建議 Rightward Decel / Leftward Accel'], priority: 2 });
+  } else if (cerebellarLatTag === 'Bilateral_Cerebellar_or_Vermis') {
+    addRx({ mode: 'M1', name: 'Pursuit均速雙向 CB/Vermis', angle: 'R90/L90（雙側CB/Vermis）', speed: 'S1', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['SP 右向+左向均 <60% → Bilateral CB/Vermis 弱化，極低速均衡訓練'], priority: 2 });
+  }
   // Smooth Pursuit 垂直低 → M1 R0/L0
   if (spVAbn) {
     addRx({ mode: 'M1', name: 'Pursuit均速', angle: 'R0/L0（垂直SP異常）', speed: spVSev ? 'S4' : 'S2', dist: 'D1–6（可調）', reps: '15', target: '有', bg: '空白背板', notes: ['RightEye: Smooth Pursuit 垂直異常'], priority: spVSev ? 2 : 4 });
@@ -3900,6 +3955,7 @@ function computeRightEyeRx(data) {
     indicators, brainRegions, rx, priorityLines, hasAbnormal, ST_ICON, ST_LABEL, velocityAbn,
     weakRegions:   reWeakRegions,
     abnormalCount: reAbnormalCount,
+    cerebellarLat: cerebellarLatTag ? { tag: cerebellarLatTag, vestibularChairRotation } : null,
   };
 }
 
@@ -4204,6 +4260,8 @@ function generateBCFResults() {
     spH:       parseNum(document.getElementById('re-spH')?.value),
     spV:       parseNum(document.getElementById('re-spV')?.value),
     spC:       parseNum(document.getElementById('re-spC')?.value),
+    spHRight:  parseNum(document.getElementById('re-spH-right')?.value),
+    spHLeft:   parseNum(document.getElementById('re-spH-left')?.value),
     eso:       parseNum(document.getElementById('re-eso')?.value),
     svH:       parseNum(document.getElementById('re-svH')?.value),
     svV:       parseNum(document.getElementById('re-svV')?.value),
@@ -4545,6 +4603,8 @@ function generateIntegratedPrescription() {
     spH:       parseNum(document.getElementById('re-spH')?.value),
     spV:       parseNum(document.getElementById('re-spV')?.value),
     spC:       parseNum(document.getElementById('re-spC')?.value),
+    spHRight:  parseNum(document.getElementById('re-spH-right')?.value),
+    spHLeft:   parseNum(document.getElementById('re-spH-left')?.value),
     eso:       parseNum(document.getElementById('re-eso')?.value),
     svH:       parseNum(document.getElementById('re-svH')?.value),
     svV:       parseNum(document.getElementById('re-svV')?.value),
@@ -5088,7 +5148,11 @@ function renderRightEyeInterface() {
           <div style="display:grid;grid-template-columns:1fr 1fr;gap:0 16px">
             <div>
               <div class="re-num-group">Smooth Pursuit (%)</div>
-              <div class="form-group" style="margin-bottom:8px"><label>水平</label><input type="number" id="re-spH" class="input" min="0" max="100" step="0.1" placeholder="正常 >90"></div>
+              <div class="form-group" style="margin-bottom:4px"><label>水平</label><input type="number" id="re-spH" class="input" min="0" max="100" step="0.1" placeholder="正常 >90"></div>
+              <div style="display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:8px">
+                <div class="form-group" style="margin-bottom:0"><label style="font-size:11px;color:#6b7280">↳ 右向追蹤%</label><input type="number" id="re-spH-right" class="input" min="0" max="100" step="0.1" placeholder="右向"></div>
+                <div class="form-group" style="margin-bottom:0"><label style="font-size:11px;color:#6b7280">↳ 左向追蹤%</label><input type="number" id="re-spH-left" class="input" min="0" max="100" step="0.1" placeholder="左向"></div>
+              </div>
               <div class="form-group" style="margin-bottom:8px"><label>垂直</label><input type="number" id="re-spV" class="input" min="0" max="100" step="0.1" placeholder="正常 >90"></div>
               <div class="form-group" style="margin-bottom:14px"><label>圓形</label><input type="number" id="re-spC" class="input" min="0" max="100" step="0.1" placeholder="正常 >90"></div>
               <div class="re-num-group">SP Pathway Length Diff（mm）</div>
@@ -5387,7 +5451,7 @@ function updateREImageLabel(id, label) {
 }
 
 function clearRightEyeForm() {
-  ['re-spH','re-spV','re-spC','re-eso','re-svH','re-svV','re-syncH','re-syncV',
+  ['re-spH','re-spH-right','re-spH-left','re-spV','re-spC','re-eso','re-svH','re-svV','re-syncH','re-syncV',
    're-sv-right','re-sv-left','re-sv-up','re-sv-down','re-pld-right','re-pld-left',
    're-vp-lateral-drift','re-vs-lateral-drift','re-lat-od','re-lat-os'].forEach(id => {
     const el = document.getElementById(id); if (el) el.value = '';
@@ -6083,9 +6147,11 @@ async function saveRightEyeAssessment() {
     therapist: document.getElementById('assess-therapist')?.value || '王小明',
     notes: document.getElementById('re-notes')?.value || '',
     // Smooth Pursuit
-    spH:  parseNum(document.getElementById('re-spH')?.value),
-    spV:  parseNum(document.getElementById('re-spV')?.value),
-    spC:  parseNum(document.getElementById('re-spC')?.value),
+    spH:      parseNum(document.getElementById('re-spH')?.value),
+    spV:      parseNum(document.getElementById('re-spV')?.value),
+    spC:      parseNum(document.getElementById('re-spC')?.value),
+    spHRight: parseNum(document.getElementById('re-spH-right')?.value),
+    spHLeft:  parseNum(document.getElementById('re-spH-left')?.value),
     // ESO
     eso:  parseNum(document.getElementById('re-eso')?.value),
     // Saccadic Velocity
@@ -6143,6 +6209,7 @@ async function saveRightEyeAssessment() {
     reRec.indicators   = rxResult.indicators.map(i => ({ label: i.label, value: i.value, status: i.status, brain: i.brain, note: i.note }));
     reRec.prescriptions = rxResult.rx;
     reRec.brainRegions  = [...rxResult.brainRegions];
+    reRec.cerebellarLat = rxResult.cerebellarLat || null;
   } catch(e) { console.warn('RightEye analysis storage failed', e); }
 
   console.log('saveRightEyeAssessment:', JSON.stringify(reRec));
