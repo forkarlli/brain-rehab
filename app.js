@@ -1252,13 +1252,12 @@ const ARM_LABELS = {
 // Brain region & training mapping per eye direction × arm response
 // left-long = 左長右短, right-long = 左短右長
 const EYE_BRAIN_MAP = {
-  // 右斜向（E1右上、E4右下）：橫向右分量決定弱化側，left-long → Right CB（右側弱化）
-  E1: v => v === 'left-long'  ? { brain: ['Right CB'], training: '訓練Right CB' } : v === 'right-long' ? { brain: ['Left CB'],  training: '訓練Left CB'  } : null,
-  // 左斜向（E2左下、E3左上）：橫向左分量決定弱化側，left-long → Left CB（左側弱化）
-  E2: v => v === 'left-long'  ? { brain: ['Left CB'],  training: '訓練Left CB'  } : v === 'right-long' ? { brain: ['Right CB'], training: '訓練Right CB' } : null,
-  E3: v => v === 'left-long'  ? { brain: ['Left CB'],  training: '訓練Left CB'  } : v === 'right-long' ? { brain: ['Right CB'], training: '訓練Right CB' } : null,
-  // 右斜向，同 E1 規則
-  E4: v => v === 'left-long'  ? { brain: ['Right CB'], training: '訓練Right CB' } : v === 'right-long' ? { brain: ['Left CB'],  training: '訓練Left CB'  } : null,
+  // E1/E2 diagonal（治療師視角左上↔右下）: Right Midbrain（同側）+ Left Cerebellum（對側）
+  E1: () => ({ brain: ['Right Midbrain', 'Left CB'], training: '訓練Right Midbrain（同側）+ Left CB（對側）' }),
+  E2: () => ({ brain: ['Right Midbrain', 'Left CB'], training: '訓練Right Midbrain（同側）+ Left CB（對側）' }),
+  // E3/E4 diagonal（治療師視角右上↔左下）: Left Midbrain（同側）+ Right Cerebellum（對側）
+  E3: () => ({ brain: ['Left Midbrain', 'Right CB'], training: '訓練Left Midbrain（同側）+ Right CB（對側）' }),
+  E4: () => ({ brain: ['Left Midbrain', 'Right CB'], training: '訓練Left Midbrain（同側）+ Right CB（對側）' }),
   E5: () => ({ brain: ['Right FEF', 'Right Mes', 'Left PPRF', 'Left CB'],  training: 'Right FEF+Right Mes+Left PPRF+Left CB弱化' }),
   E6: () => ({ brain: ['Left FEF',  'Left Mes',  'Right PPRF', 'Right CB'], training: 'Left FEF+Left Mes+Right PPRF+Right CB弱化' }),
   E7: v => v === 'left-long'  ? { brain: ['Bilateral Midbrain', 'Left CB'],  training: 'Downward OPK + 往上Pursuit + 訓練Left CB'  } : v === 'right-long' ? { brain: ['Bilateral Midbrain', 'Right CB'], training: 'Downward OPK + 往上Pursuit + 訓練Right CB' } : null,
@@ -1362,6 +1361,8 @@ const BRAIN_REGION_ALIASES = {
   'riMLF':                ['內側縱束嘴側間質核', '垂直眼動中樞', '中腦上視中樞',
                            'rostral interstitial MLF', 'Bilateral riMLF'],
   'Bilateral Midbrain':   ['雙側中腦', 'Midbrain', '中腦', 'Bilateral Midbrain（雙側）', '中腦上視中樞（雙側）'],
+  'Right Midbrain':       ['右側中腦', 'Right Mesencephalon', 'ipsilateral Midbrain（Right）'],
+  'Left Midbrain':        ['左側中腦', 'Left Mesencephalon',  'ipsilateral Midbrain（Left）'],
   'Superior Colliculus':  ['上丘', '上視丘', 'SC', 'Bilateral SC', '上直肌神經支配中樞', '動眼神經核上方'],
   'Left SC':              ['左上丘', 'Left Superior Colliculus'],
   'Right SC':             ['右上丘', 'Right Superior Colliculus'],
@@ -2832,7 +2833,9 @@ function computeEyeMachineRx(affectedBrainRegions, affectedItems, convMCodes, op
   const hasLeftCB    = has('Left CB');
   const hasFEF       = hasRightFEF  || hasLeftFEF;
   const hasCB        = hasRightCB   || hasLeftCB;
-  const hasMidbrain  = has('Bilateral Midbrain');
+  const hasRightMidbrain = has('Right Midbrain');
+  const hasLeftMidbrain  = has('Left Midbrain');
+  const hasMidbrain  = has('Bilateral Midbrain') || hasRightMidbrain || hasLeftMidbrain;
   const hasPons      = has('Bilateral Pons');
   const hasPPRF      = has('Left PPRF')  || has('Right PPRF');
   const hasMes       = has('Left Mes')   || has('Right Mes');
@@ -2959,12 +2962,17 @@ function computeEyeMachineRx(affectedBrainRegions, affectedItems, convMCodes, op
     const hasRightUp = hasRightCB || hasRightFEF;
     const hasLeftUp  = hasLeftCB  || hasLeftFEF;
     let angle, bg;
-    if (hasMidbrain || (hasRightUp && hasLeftUp)) {
-      angle = 'R0/L0（上下，雙側）';              bg = bgPlate(false, false);
+    if (has('Bilateral Midbrain') || (hasRightMidbrain && hasLeftMidbrain) ||
+        (!hasRightMidbrain && !hasLeftMidbrain && hasRightUp && hasLeftUp)) {
+      angle = 'R0/L0（上下，雙側）';                              bg = bgPlate(false, false);
+    } else if (hasRightMidbrain) {
+      angle = 'R45（Right Midbrain同側+Left CB對側，斜向）';      bg = bgPlate(true,  false);
+    } else if (hasLeftMidbrain) {
+      angle = 'L45（Left Midbrain同側+Right CB對側，斜向）';      bg = bgPlate(false, true);
     } else if (hasRightUp) {
-      angle = 'R45（Right CB+FEF+Parietal）';     bg = bgPlate(true,  false);
+      angle = 'R45（Right CB+FEF+Parietal）';                     bg = bgPlate(true,  false);
     } else {
-      angle = 'L45（Left CB+FEF+Parietal）';      bg = bgPlate(false, true);
+      angle = 'L45（Left CB+FEF+Parietal）';                      bg = bgPlate(false, true);
     }
     rec.push({ mode: 'M3', name: 'Saccade↓+Pursuit↑', angle, speed: 'S3', dist: 'D3', reps: '15', target: '有', bg, notes: headPos ? [headPos] : [] });
     m3Added = true;
