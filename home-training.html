@@ -331,21 +331,23 @@ function renderCalibPoint() {
 
   document.getElementById('calib-progress').textContent = `${calibIdx} / ${CALIB_POINTS.length}`;
 
-  canvas.onclick = async (e) => {
-    const rect = canvas.getBoundingClientRect();
-    const cx = e.clientX - rect.left;
-    const cy = e.clientY - rect.top;
+  const onCalibTap = async (e) => {
+    e.preventDefault();
+    const cx = e.touches ? e.touches[0].clientX : e.clientX;
+    const cy = e.touches ? e.touches[0].clientY : e.clientY;
     const dist = Math.hypot(cx - px, cy - py);
-    if (dist > 50) return; // must click near dot
+    if (dist > 60) return;
 
-    canvas.onclick = null;
-    // collect samples
+    canvas.removeEventListener('touchstart', onCalibTap);
+    canvas.removeEventListener('click',      onCalibTap);
     if (webgazerReady) {
       try { await webgazer.recordScreenPosition(px, py, 'click'); } catch {}
     }
     calibIdx++;
     renderCalibPoint();
   };
+  canvas.addEventListener('touchstart', onCalibTap, { passive: false });
+  canvas.addEventListener('click',      onCalibTap);
 }
 
 // ── training engine ──
