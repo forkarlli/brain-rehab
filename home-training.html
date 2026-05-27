@@ -4,6 +4,8 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BCF 居家眼動訓練</title>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/face_mesh.js" crossorigin="anonymous"></script>
+<script src="https://cdn.jsdelivr.net/npm/@mediapipe/camera_utils/camera_utils.js" crossorigin="anonymous"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#f1f5f9;min-height:100vh;overflow:hidden}
@@ -185,7 +187,7 @@ video{pointer-events:none!important}
   <!-- PAGE: CALIBRATION -->
   <div id="pg-calibration" class="page">
     <canvas id="calib-canvas"></canvas>
-    <div id="calib-instruction">請依序注視並點擊每個白點（共9點）</div>
+    <div id="calib-instruction">請注視並點擊每個白點，眼睛凝視該點 1.5 秒（共5點）</div>
     <div id="calib-progress">0 / 9</div>
   </div>
 
@@ -399,69 +401,103 @@ function renderLevelGrid(containerId) {
   });
 }
 
-// ── head-position estimator (replaces WebGazer) ──
-const HEAD_W = 64, HEAD_H = 48;
-let headCanvas, headCtx;
+// ── MediaPipe FaceMesh iris tracker ──
+let faceMesh      = null;
+let gazeCamera    = null;
+let latestGaze    = null;      // { gazeH: -1..1, gazeV: -1..1 } or null
+let gazeMapCoeffs = null;      // { ax, bx, ay, by } screen = a*gaze + b
+let calibGazeSamples = [];     // [samples per calib point]
 
-function initHeadCanvas() {
-  headCanvas = document.createElement('canvas');
-  headCanvas.width = HEAD_W; headCanvas.height = HEAD_H;
-  headCtx = headCanvas.getContext('2d', { willReadFrequently: true });
+function calcGaze(lm) {
+  // Iris centres (landmarks 468/473 — require refineLandmarks:true)
+  const iL = lm[468], iR = lm[473];
+  // Horizontal eye corners
+  const lOut = lm[33],  lIn = lm[133];
+  const rIn  = lm[362], rOut = lm[263];
+  // Vertical eyelid midpoints
+  const lUp = lm[159], lDn = lm[145];
+  const rUp = lm[386], rDn = lm[374];
+
+  const lw = (lIn.x  - lOut.x) || 0.01;
+  const rw = (rOut.x - rIn.x)  || 0.01;
+  const lh = (lDn.y  - lUp.y)  || 0.01;
+  const rh = (rDn.y  - rUp.y)  || 0.01;
+
+  const gazeH = (((iL.x - lOut.x)/lw - 0.5)*2 + ((iR.x - rIn.x)/rw - 0.5)*2) / 2;
+  const gazeV = (((iL.y - lUp.y)/lh  - 0.5)*2 + ((iR.y - rUp.y)/rh  - 0.5)*2) / 2;
+  return { gazeH, gazeV };
 }
 
-function findBrightCenter(data, W, H) {
-  // Weighted brightness centroid in the inner 80% of the frame.
-  const x0 = Math.floor(W*.1), x1 = Math.floor(W*.9);
-  const y0 = Math.floor(H*.1), y1 = Math.floor(H*.9);
-  const lums = [];
-  for (let y = y0; y < y1; y++)
-    for (let x = x0; x < x1; x++) {
-      const i = (y*W+x)*4;
-      lums.push(0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2]);
-    }
-  lums.sort((a,b) => a-b);
-  const thr = lums[Math.floor(lums.length*.55)] || 60;
-  let sx=0, sy=0, sw=0, cnt=0;
-  for (let y = y0; y < y1; y++)
-    for (let x = x0; x < x1; x++) {
-      const i = (y*W+x)*4;
-      const lum = 0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2];
-      if (lum >= thr) { const w=lum-thr; sx+=x*w; sy+=y*w; sw+=w; cnt++; }
-    }
-  if (!sw) return { cx:.5, cy:.5, detected:false };
-  return { cx:(sx/sw)/W, cy:(sy/sw)/H,
-           detected: cnt > (x1-x0)*(y1-y0)*.04 };
+function fitLinear(xs, ys) {
+  const n = xs.length;
+  if (n < 2) return { a:0, b: ys[0] ?? 0 };
+  const sx = xs.reduce((a,v)=>a+v,0), sy = ys.reduce((a,v)=>a+v,0);
+  const sxx = xs.reduce((a,v)=>a+v*v,0), sxy = xs.reduce((a,v,i)=>a+v*ys[i],0);
+  const d = n*sxx - sx*sx;
+  if (Math.abs(d) < 1e-10) return { a:0, b:sy/n };
+  const a = (n*sxy - sx*sy)/d;
+  return { a, b:(sy - a*sx)/n };
 }
 
-function captureHeadPos() {
-  if (!videoEl || !videoEl.videoWidth) return null;
-  headCtx.drawImage(videoEl, 0, 0, HEAD_W, HEAD_H);
-  return findBrightCenter(headCtx.getImageData(0,0,HEAD_W,HEAD_H).data, HEAD_W, HEAD_H);
+function buildGazeMap() {
+  const pts = CALIB_POINTS.map(([rx,ry], i) => {
+    const s = calibGazeSamples[i] || [];
+    if (!s.length) return null;
+    return { sx: rx*window.innerWidth, sy: ry*window.innerHeight,
+             gazeH: s.reduce((a,v)=>a+v.gazeH,0)/s.length,
+             gazeV: s.reduce((a,v)=>a+v.gazeV,0)/s.length };
+  }).filter(Boolean);
+  if (pts.length < 3) { console.warn('[Gaze] insufficient calib points:', pts.length); return; }
+  const fX = fitLinear(pts.map(p=>p.gazeH), pts.map(p=>p.sx));
+  const fY = fitLinear(pts.map(p=>p.gazeV), pts.map(p=>p.sy));
+  gazeMapCoeffs = { ax:fX.a, bx:fX.b, ay:fY.a, by:fY.b };
+  console.log('[Gaze] calibrated', gazeMapCoeffs);
+}
+
+function mapGaze() {
+  if (!latestGaze || !gazeMapCoeffs) return null;
+  const W = window.innerWidth, H = window.innerHeight;
+  return {
+    x: Math.max(0, Math.min(W, gazeMapCoeffs.ax * latestGaze.gazeH + gazeMapCoeffs.bx)),
+    y: Math.max(0, Math.min(H, gazeMapCoeffs.ay * latestGaze.gazeV + gazeMapCoeffs.by)),
+  };
+}
+
+function onFaceMeshResults(results) {
+  if (!results.multiFaceLandmarks?.length) { latestGaze = null; return; }
+  try { latestGaze = calcGaze(results.multiFaceLandmarks[0]); } catch { latestGaze = null; }
+}
+
+async function initFaceMesh() {
+  faceMesh = new FaceMesh({
+    locateFile: f => `https://cdn.jsdelivr.net/npm/@mediapipe/face_mesh/${f}`
+  });
+  faceMesh.setOptions({ maxNumFaces:1, refineLandmarks:true,
+    minDetectionConfidence:0.5, minTrackingConfidence:0.5 });
+  faceMesh.onResults(onFaceMeshResults);
+  await faceMesh.initialize();
 }
 
 function pollHeadPos() {
-  const pos = captureHeadPos();
-  if (!pos) return;
-  const W = window.innerWidth, H = window.innerHeight;
-  const sx = (1 - pos.cx) * W;
-  const sy = pos.cy * H;
+  const g = mapGaze();
+  if (!g) return;
+  const W = window.innerWidth;
   const tp = currentTargetPos;
-  const sample = { x:sx, y:sy, t:Date.now(),
-    tx: tp?.x ?? null, ty: tp?.y ?? null, detected: pos.detected };
-  trialGaze.push(sample);
-  gazeData.push(sample);
+  trialGaze.push({ x:g.x, y:g.y, t:Date.now(),
+    tx: tp?.x ?? null, ty: tp?.y ?? null, detected:true });
+  gazeData.push(trialGaze[trialGaze.length-1]);
 
-  // border warning: measure horizontal deviation from screen centre
-  const dev = Math.abs(sx - W/2) / W; // 0..0.5
+  // border warning: gaze deviation from screen centre
+  const dev = Math.abs(g.x - W/2) / W;
   const bw  = document.getElementById('border-warn');
-  if (dev > 0.20) {
+  if (dev > 0.38) {
     bw.className = 'warn-red';
     const now = Date.now();
     if (now - _lastVibrate > 2000) {
       if (navigator.vibrate) navigator.vibrate(200);
       _lastVibrate = now;
     }
-  } else if (dev > 0.10) {
+  } else if (dev > 0.25) {
     bw.className = 'warn-yellow';
   } else {
     bw.className = '';
@@ -513,7 +549,6 @@ function updateWelcomeStats() {
 // ── welcome ──
 window.addEventListener('DOMContentLoaded', () => {
   updateWelcomeStats();
-  initHeadCanvas();
   renderLevelGrid('choice-level-grid');
   const stored = getStore();
   if (stored.lastPatientId) document.getElementById('patient-id-input').value = stored.lastPatientId;
@@ -529,30 +564,37 @@ function startSetup() {
   initCamera();
 }
 
-// ── camera ──
+// ── camera + FaceMesh ──
 async function initCamera() {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia(
-      { video: { width:640, height:480, facingMode:'user' } });
+    showLoading('初始化眼動追蹤（FaceMesh）…');
+    await initFaceMesh();
     videoEl = document.getElementById('webcam-preview');
-    videoEl.srcObject = stream;
-    await new Promise(r => videoEl.addEventListener('loadedmetadata', r, { once:true }));
+    gazeCamera = new Camera(videoEl, {
+      onFrame: async () => { if (faceMesh) await faceMesh.send({ image: videoEl }); },
+      width: 640, height: 480
+    });
+    await gazeCamera.start();
     camReady = true;
+    hideLoading();
     document.getElementById('cam-status').innerHTML =
-      '<span class="status-dot dot-green"></span>相機已就緒';
+      '<span class="status-dot dot-green"></span>相機已就緒（虹膜追蹤）';
     document.getElementById('btn-go-calib').disabled = false;
   } catch(e) {
-    console.error('[camera error]', e);
+    hideLoading();
+    console.error('[FaceMesh init error]', e);
     document.getElementById('cam-status').innerHTML =
-      '<span class="status-dot dot-red"></span>相機授權失敗，請允許相機存取';
-    toast('相機啟動失敗：' + (e.message || String(e)));
+      '<span class="status-dot dot-red"></span>初始化失敗，請重新整理';
+    toast('初始化失敗：' + (e.message || String(e)));
   }
 }
 
-// ── calibration ──
-const XS = [.10, .37, .63, .90];
-const YS = [.10, .37, .63, .90];
-const CALIB_POINTS = YS.flatMap(y => XS.map(x => [x, y])); // 16 points, row-major
+// ── calibration ── (5-point for gaze mapping)
+const CALIB_POINTS = [
+  [.15, .15], [.85, .15],   // top-left, top-right
+  [.50, .50],               // centre
+  [.15, .85], [.85, .85],   // bottom-left, bottom-right
+];
 const CALIB_HOLD_MS   = 1500;
 const CALIB_RECORD_MS = 100;
 const completedCalib  = new Array(CALIB_POINTS.length).fill(false);
@@ -564,7 +606,8 @@ function goCalibration() {
   showPage('pg-calibration');
   calibIdx = 0;
   completedCalib.fill(false);
-  calibHolding = false;
+  calibHolding      = false;
+  calibGazeSamples  = CALIB_POINTS.map(() => []);
   renderCalibPoint();
 }
 
@@ -578,8 +621,10 @@ function renderCalibPoint() {
 
   if (calibIdx >= CALIB_POINTS.length) {
     drawCalibState(ctx, canvas.width, canvas.height, -1, 0);
-    document.getElementById('calib-instruction').textContent = '校準完成！🎉';
+    document.getElementById('calib-instruction').textContent = '校準完成，建立注視映射中…';
     document.getElementById('calib-progress').textContent = `已完成 ${CALIB_POINTS.length} / ${CALIB_POINTS.length} 個校準點`;
+    buildGazeMap();
+    document.getElementById('calib-instruction').textContent = '校準完成！🎉';
     setTimeout(showChoicePage, 1000);
     return;
   }
@@ -659,6 +704,12 @@ function startCalibHold(canvas, ctx, px, py) {
     drawCalibState(ctx, W, H, calibIdx, progress);
     document.getElementById('calib-progress').textContent =
       `已完成 ${calibIdx} / ${CALIB_POINTS.length} 個校準點`;
+
+    // record iris gaze for calibration mapping
+    if (latestGaze && elapsed - lastRecord >= CALIB_RECORD_MS) {
+      lastRecord = elapsed;
+      calibGazeSamples[calibIdx].push({ ...latestGaze });
+    }
 
     if (progress < 1) {
       calibAnimFrame = requestAnimationFrame(tick);
@@ -763,12 +814,11 @@ function runAssessTest(test) {
   let remaining = test.dur;
 
   assessPollerInterval = setInterval(() => {
-    const pos = captureHeadPos();
-    if (!pos) return;
-    const sx = (1 - pos.cx) * W, sy = pos.cy * H;
-    assessSamples.push({ x:sx, y:sy, t:Date.now(),
+    const g = mapGaze();
+    if (!g) return;
+    assessSamples.push({ x:g.x, y:g.y, t:Date.now(),
       tx: assessCurrentTarget?.x ?? null, ty: assessCurrentTarget?.y ?? null,
-      detected: pos.detected });
+      detected: true });
   }, 200);
 
   assessTimerInterval = setInterval(() => {
@@ -1278,22 +1328,28 @@ function startSaccadeAnim() {
 
 function moveGazeDot() {} // dot hidden — no distraction for patient
 
-// ── analysis ──
-// Scores are based on head-position data (no WebGazer):
-//   segmentScore = presence (face detected %) × 50 + stability × 50
-//   stability    = 100 − normalised position variance
+// ── analysis ── (iris gaze data)
 function analyzeSegment(samples) {
   if (samples.length < 3) return { segmentScore: 50, stability: 50, biasX: 0, biasY: 0 };
 
-  const detected  = samples.filter(s => s.detected !== false).length;
-  const presence  = detected / samples.length;           // 0..1
-
   const xs = samples.map(s => s.x);
   const ys = samples.map(s => s.y);
+
+  // Stability: gaze position variance (lower = more stable)
   const sd = Math.sqrt(variance(xs) + variance(ys));
-  // sd ≈ 20 px → 100, sd ≈ 200 px → 0
-  const stability    = Math.round(Math.max(0, Math.min(100, 100 - (sd - 20) / 180 * 100)));
-  const segmentScore = Math.round(presence * 50 + stability * 0.5);
+  const stability = Math.round(Math.max(0, Math.min(100, 100 - (sd - 20) / 180 * 100)));
+
+  // Tracking accuracy: gaze-to-target distance error
+  const withTgt = samples.filter(s => s.tx != null);
+  let trackingScore = 50;
+  if (withTgt.length >= 3) {
+    const W = window.innerWidth;
+    const avgErr = withTgt.reduce((a,s) => a + Math.hypot(s.x - s.tx, s.y - s.ty), 0) / withTgt.length;
+    // err < 4% screen width → 100,  err > 40% → 0
+    trackingScore = Math.round(Math.max(0, Math.min(100, 100 - (avgErr - 0.04*W) / (0.36*W) * 100)));
+  }
+
+  const segmentScore = Math.round(trackingScore * 0.6 + stability * 0.4);
 
   const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
   const biasX = xs.reduce((a,b)=>a+b,0)/xs.length - cx;
