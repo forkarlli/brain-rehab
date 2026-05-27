@@ -107,6 +107,10 @@ video{pointer-events:none!important}
 .rx-row{display:flex;justify-content:space-between;font-size:13px;color:#cbd5e1;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.06)}
 .rx-row:last-child{border-bottom:none}
 .rx-val{font-weight:600;color:#e2e8f0}
+.neuro-box{background:rgba(249,115,22,.07);border:1px solid rgba(249,115,22,.25);border-radius:12px;padding:16px;max-width:420px;width:100%;margin:12px 0;text-align:left}
+.neuro-label{font-size:11px;color:#fb923c;font-weight:700;margin-bottom:10px;letter-spacing:.5px}
+.neuro-region{font-size:14px;font-weight:600;color:#f1f5f9;margin-bottom:6px;line-height:1.5}
+.neuro-rx{font-size:13px;color:#94a3b8;line-height:1.6}
 
 /* ── loading overlay ── */
 #loading-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:999;align-items:center;justify-content:center;flex-direction:column;gap:16px}
@@ -269,6 +273,11 @@ video{pointer-events:none!important}
       <div class="rx-row"><span>起始速度</span><span class="rx-val" id="ar-speed">--</span></div>
       <div class="rx-row"><span>優先路徑</span><span class="rx-val" id="ar-path">--</span></div>
       <div class="rx-row"><span>偏側方向</span><span class="rx-val" id="ar-bias">--</span></div>
+    </div>
+    <div class="neuro-box" id="neuro-box" style="display:none">
+      <div class="neuro-label">🧠 神經解讀</div>
+      <div class="neuro-region" id="neuro-region">—</div>
+      <div class="neuro-rx" id="neuro-rx">—</div>
     </div>
     <div class="btn-row" style="margin-bottom:24px">
       <button class="btn btn-secondary" onclick="showPage('pg-choice')">重新選擇</button>
@@ -788,7 +797,68 @@ function finishAssessment() {
   document.getElementById('ar-path').textContent  = pathLabel[priorityPath] ?? priorityPath;
   document.getElementById('ar-bias').textContent  = biasH ?? biasV ?? '居中';
 
+  interpretAssessment(rx);
   showPage('pg-assessment-result');
+}
+
+// ── neural interpretation (ported from BCF app.js) ──
+function interpretAssessment(rx) {
+  const { fixationScore, hScore, vScore, saccadeScore, bHraw = 0, bVraw = 0 } = rx;
+
+  // Estimate directional SP scores from hScore + raw bias direction.
+  // bHraw > 0 → head drifts right → right-field pursuit is weaker.
+  const spHRight = bHraw > 0 ? Math.max(0, hScore - Math.min(20, Math.abs(bHraw)/8))
+                             : hScore;
+  const spHLeft  = bHraw < 0 ? Math.max(0, hScore - Math.min(20, Math.abs(bHraw)/8))
+                             : hScore;
+
+  const regions = [];
+  const rxLines = [];
+
+  // ── Rule 1: SP水平側性 → 小腦側化 ──
+  if (spHRight < 60 && spHLeft < 60) {
+    regions.push('雙側小腦／蚓部（Bilateral CB Vermis）弱化');
+    rxLines.push('左右向追蹤均弱化，優先進行雙側水平追蹤訓練');
+  } else if (spHRight < spHLeft - 15) {
+    regions.push('右側小腦／Flocculus（Right CB Flocculus）弱化');
+    rxLines.push('CB軌：加強右向追蹤（R90）；皮質軌：Right Parietal MT/MST + FEF；前庭椅建議 Leftward Decel / Rightward Accel');
+  } else if (spHLeft < spHRight - 15) {
+    regions.push('左側小腦／Flocculus（Left CB Flocculus）弱化');
+    rxLines.push('CB軌：加強左向追蹤（L90）；皮質軌：Left Parietal MT/MST + FEF；前庭椅建議 Rightward Decel / Leftward Accel');
+  } else if (hScore < 60) {
+    regions.push('水平追蹤迴路（Pons / PPRF）效率偏低');
+    rxLines.push('建議加強水平雙向追蹤訓練');
+  }
+
+  // ── Rule 2: 垂直追蹤異常 → Midbrain / CB Vermis ──
+  if (vScore < 60) {
+    regions.push('垂直追蹤迴路（Midbrain riMLF / CB Vermis）弱化');
+    rxLines.push('建議加強垂直追蹤訓練（V_UP / V_DOWN）');
+  }
+
+  // ── Rule 3: 固視差 → 小腦蚓部 ──
+  if (fixationScore < 60) {
+    regions.push('小腦蚓部（Vermis）弱化——固視穩定不足');
+    rxLines.push('優先進行固視穩定訓練，速度設為慢，頭部保持不動');
+  }
+
+  // ── Rule 4: 跳視差 → 額葉 FEF / 基底核 ──
+  if (saccadeScore < 60) {
+    regions.push('額葉眼動區（FEF）／基底核弱化——快速掃視啟動不足');
+    rxLines.push('加強跳視訓練（Saccade），刺激 FEF 自主性掃視迴路');
+  }
+
+  // fallback
+  if (regions.length === 0) {
+    regions.push('各項追蹤功能在正常範圍');
+    rxLines.push('維持現有訓練處方，可逐步提升速度與難度');
+  }
+
+  document.getElementById('neuro-region').innerHTML =
+    regions.map(r => `• ${r}`).join('<br>');
+  document.getElementById('neuro-rx').innerHTML =
+    rxLines.map(r => `→ ${r}`).join('<br>');
+  document.getElementById('neuro-box').style.display = 'block';
 }
 
 // ── PATH SYSTEM ──
