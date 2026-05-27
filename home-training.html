@@ -901,25 +901,51 @@ function runAssessTest(test) {
 
 function scoreAssessTest(test) {
   const n = assessSamples.length;
+  const W = window.innerWidth, H = window.innerHeight;
+  let score, biasX = 0, biasY = 0;
+
   if (n < 3) {
-    assessResults[test.id] = { score:50, biasX:0, biasY:0 };
+    score = 50;
   } else {
     const xs = assessSamples.map(s=>s.x);
     const ys = assessSamples.map(s=>s.y);
-    const sd = Math.sqrt(variance(xs) + variance(ys));
-    const [lo, rng] = test.id === 'fixation' ? [10,140] : [20,180];
-    const score = Math.round(Math.max(0, Math.min(100, 100 - (sd-lo)/rng*100)));
-    const W = window.innerWidth, H = window.innerHeight;
-    const biasX = xs.reduce((a,b)=>a+b,0)/n - W/2;
-    const biasY = ys.reduce((a,b)=>a+b,0)/n - H/2;
-    assessResults[test.id] = { score, biasX, biasY };
+    biasX = xs.reduce((a,b)=>a+b,0)/n - W/2;
+    biasY = ys.reduce((a,b)=>a+b,0)/n - H/2;
+
+    if (test.id === 'fixation') {
+      // Fixation: low variance = good (gaze should stay still)
+      const sd = Math.sqrt(variance(xs) + variance(ys));
+      score = Math.round(Math.max(0, Math.min(100, 100 - (sd-10)/140*100)));
+    } else {
+      // Pursuit & saccade: gaze-to-target distance is the right metric.
+      // Variance CANNOT be used here — gaze naturally moves to follow the target.
+      const withTgt = assessSamples.filter(s => s.tx != null);
+      if (withTgt.length >= 3) {
+        const avgErr = withTgt.reduce((a,s) => a + Math.hypot(s.x-s.tx, s.y-s.ty), 0) / withTgt.length;
+        // err < 4% screen width → 100,  err > 40% → 0
+        score = Math.round(Math.max(0, Math.min(100, 100 - (avgErr - 0.04*W) / (0.36*W) * 100)));
+      } else {
+        score = 50; // no target data — neutral
+      }
+    }
   }
+
+  assessResults[test.id] = { score, biasX, biasY, rawSamples: n };
+  console.log(`[ASSESS] ${test.id} n=${n} score=${score}`);
+  document.title = `評估 ${test.id}: ${n}樣本 → ${score}分`;
+
   assessTestIdx++;
   setTimeout(runNextAssessTest, 500);
 }
 
 function finishAssessment() {
   document.getElementById('assess-progress-fill').style.width = '100%';
+
+  // ── debug (console + title, Safari-safe) ──
+  const _tot  = calibGazeSamples.reduce((a,s)=>a+s.length,0);
+  const _dbg  = `fix=${assessResults['fixation']?.score??'?'} h=${assessResults['h-pursuit']?.score??'?'} v=${assessResults['v-pursuit']?.score??'?'} sac=${assessResults['saccade']?.score??'?'} | map=${gazeMapCoeffs?'OK':'NO'} calibSamps=${_tot}`;
+  console.log('[ASSESS FINAL]', _dbg, JSON.stringify(assessResults));
+  document.title = _dbg;
 
   const fix  = assessResults['fixation']?.score  ?? 50;
   const hSc  = assessResults['h-pursuit']?.score ?? 50;
