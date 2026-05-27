@@ -494,7 +494,7 @@ let currentSpeedMax = 0.3;
 let lastFatigueVar  = null;
 const metrics = { segments: [] };
 
-function startTraining() {
+async function startTraining() {
   if (!webgazerReady) {
     alert('WebGazer 未就緒，請重新整理頁面再試');
     return;
@@ -506,12 +506,16 @@ function startTraining() {
   gazeData = [];
   metrics.segments = [];
 
-  // Ensure prediction engine is running before registering listener.
+  // Ensure prediction engine is running; wait 500 ms for it to warm up.
   try { webgazer.resume(); } catch(e) {}
+  await new Promise(r => setTimeout(r, 500));
 
   // Register ONE global listener for the entire training session.
   // Replacing the listener per-segment caused silent failures on iPad Safari.
   webgazer.setGazeListener((data, elapsedTime) => {
+    if (trialGaze.length === 0) {
+      document.title = 'GAZE:' + (data ? data.x.toFixed(0) : 'null');
+    }
     if (!data) return;
     const tp = currentTargetPos;
     const sample = { x: data.x, y: data.y, t: Date.now(),
