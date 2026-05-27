@@ -98,7 +98,9 @@ video{pointer-events:none!important}
 /* ── assessment result ── */
 #pg-assessment-result{background:linear-gradient(135deg,#0f172a 0%,#1a2744 100%);overflow-y:auto;justify-content:flex-start;padding-top:32px}
 .assess-score-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%;max-width:420px;margin:16px 0}
-.assess-score-card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:14px;text-align:center}
+.assess-score-card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:14px;text-align:center;cursor:pointer;-webkit-tap-highlight-color:transparent}
+.assess-detail{font-size:11px;color:#94a3b8;margin-top:8px;line-height:1.8;text-align:left;border-top:1px solid rgba(255,255,255,.08);padding-top:8px;display:none}
+.assess-score-card.expanded .assess-detail{display:block}
 .assess-score-label{font-size:11px;color:#64748b;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
 .assess-score-val{font-size:28px;font-weight:800}
 .score-good{color:#4ade80}
@@ -278,25 +280,30 @@ video{pointer-events:none!important}
   <div id="pg-assessment-result" class="page">
     <div class="result-title">評估完成 📊</div>
     <div class="assess-score-grid">
-      <div class="assess-score-card">
+      <div class="assess-score-card" id="card-fixation">
         <div class="assess-score-label">固視穩定</div>
         <div class="assess-score-val" id="ar-fixation">--</div>
+        <div class="assess-detail" id="detail-fixation"></div>
       </div>
-      <div class="assess-score-card">
+      <div class="assess-score-card" id="card-h-pursuit">
         <div class="assess-score-label">水平追蹤</div>
         <div class="assess-score-val" id="ar-h">--</div>
+        <div class="assess-detail" id="detail-h-pursuit"></div>
       </div>
-      <div class="assess-score-card">
+      <div class="assess-score-card" id="card-v-pursuit">
         <div class="assess-score-label">垂直追蹤</div>
         <div class="assess-score-val" id="ar-v">--</div>
+        <div class="assess-detail" id="detail-v-pursuit"></div>
       </div>
-      <div class="assess-score-card">
+      <div class="assess-score-card" id="card-h-saccade">
         <div class="assess-score-label">水平跳視</div>
         <div class="assess-score-val" id="ar-h-saccade">--</div>
+        <div class="assess-detail" id="detail-h-saccade"></div>
       </div>
-      <div class="assess-score-card" style="grid-column:1/-1">
+      <div class="assess-score-card" id="card-v-saccade" style="grid-column:1/-1">
         <div class="assess-score-label">垂直跳視</div>
         <div class="assess-score-val" id="ar-v-saccade">--</div>
+        <div class="assess-detail" id="detail-v-saccade"></div>
       </div>
     </div>
     <div style="width:100%;max-width:420px;margin:4px 0 12px">
@@ -778,13 +785,14 @@ const ASSESS_TESTS = [
     instr:'目標上下跳動時\n快速用眼睛找到它' },
 ];
 
-let assessTestIdx       = 0;
-let assessSamples       = [];
-let assessResults       = {};
-let assessAnimFrame     = null;
-let assessTimerInterval = null;
+let assessTestIdx        = 0;
+let assessSamples        = [];
+let assessResults        = {};
+let assessAnimFrame      = null;
+let assessTimerInterval  = null;
 let assessPollerInterval = null;
-let assessCurrentTarget = null;
+let assessCurrentTarget  = null;
+let assessTargetJumps    = [];  // [{t,x,y}] saccade jump timestamps
 
 function startAssessment() {
   if (!camReady) { toast('相機未就緒'); return; }
@@ -808,6 +816,7 @@ function runNextAssessTest() {
   const test = ASSESS_TESTS[assessTestIdx];
   assessSamples = [];
   assessCurrentTarget = null;
+  assessTargetJumps = [];
 
   document.getElementById('assess-label').textContent     = test.label;
   document.getElementById('assess-step-chip').textContent = `${assessTestIdx+1}/${ASSESS_TESTS.length}`;
@@ -907,7 +916,12 @@ function runAssessTest(test) {
     const INTERVAL_MS = 1500;
     (function frame() {
       const now = Date.now();
-      if (now - lastSwitch >= INTERVAL_MS) { phase = 1 - phase; lastSwitch = now; }
+      if (now - lastSwitch >= INTERVAL_MS) {
+        phase = 1 - phase;
+        lastSwitch = now;
+        const jumpX = phase === 0 ? W*0.20 : W*0.80;
+        assessTargetJumps.push({ t: now, x: jumpX, y: cy });
+      }
       ctx.clearRect(0,0,W,H);
       ctx.strokeStyle='rgba(255,255,255,.08)'; ctx.lineWidth=1.5;
       ctx.beginPath(); ctx.moveTo(W*.1,cy); ctx.lineTo(W*.9,cy); ctx.stroke();
@@ -926,7 +940,12 @@ function runAssessTest(test) {
     const INTERVAL_MS = 1500;
     (function frame() {
       const now = Date.now();
-      if (now - lastSwitch >= INTERVAL_MS) { phase = 1 - phase; lastSwitch = now; }
+      if (now - lastSwitch >= INTERVAL_MS) {
+        phase = 1 - phase;
+        lastSwitch = now;
+        const jumpY = phase === 0 ? H*0.20 : H*0.80;
+        assessTargetJumps.push({ t: now, x: cx, y: jumpY });
+      }
       ctx.clearRect(0,0,W,H);
       ctx.strokeStyle='rgba(255,255,255,.08)'; ctx.lineWidth=1.5;
       ctx.beginPath(); ctx.moveTo(cx,H*.1); ctx.lineTo(cx,H*.9); ctx.stroke();
@@ -944,36 +963,55 @@ function runAssessTest(test) {
 function scoreAssessTest(test) {
   const n = assessSamples.length;
   const W = window.innerWidth, H = window.innerHeight;
-  let score, biasX = 0, biasY = 0;
+  let score = 50, biasX = 0, biasY = 0, details = {};
 
-  if (n < 3) {
-    score = 50;
-  } else {
-    const xs = assessSamples.map(s=>s.x);
-    const ys = assessSamples.map(s=>s.y);
+  if (n >= 3) {
+    const xs = assessSamples.map(s => s.x);
+    const ys = assessSamples.map(s => s.y);
     biasX = xs.reduce((a,b)=>a+b,0)/n - W/2;
     biasY = ys.reduce((a,b)=>a+b,0)/n - H/2;
 
     if (test.id === 'fixation') {
-      // Fixation: low variance = good (gaze should stay still)
-      const sd = Math.sqrt(variance(xs) + variance(ys));
-      score = Math.round(Math.max(0, Math.min(100, 100 - (sd-10)/140*100)));
-    } else {
-      // Pursuit & saccade: gaze-to-target distance is the right metric.
-      // Variance CANNOT be used here — gaze naturally moves to follow the target.
+      const bcea    = calcBCEA(assessSamples);
+      const entropy = calcSampleEntropy(xs);
+      const bceaNorm    = Math.min(1, Math.max(0, (bcea - 500) / 7500));
+      const entropyNorm = Math.min(1, Math.max(0, (entropy - 0.3) / 2.2));
+      score   = Math.round(Math.max(0, Math.min(100, 100 - bceaNorm*60 - entropyNorm*40)));
+      details = { bcea: Math.round(bcea), entropy: +entropy.toFixed(2) };
+
+    } else if (test.id === 'h-pursuit' || test.id === 'v-pursuit') {
       const withTgt = assessSamples.filter(s => s.tx != null);
       if (withTgt.length >= 3) {
-        const avgErr = withTgt.reduce((a,s) => a + Math.hypot(s.x-s.tx, s.y-s.ty), 0) / withTgt.length;
-        // err < 4% screen width → 100,  err > 40% → 0
-        score = Math.round(Math.max(0, Math.min(100, 100 - (avgErr - 0.04*W) / (0.36*W) * 100)));
+        const gazeArr = withTgt.map(s => ({x:s.x, y:s.y}));
+        const tgtArr  = withTgt.map(s => ({x:s.tx, y:s.ty}));
+        const rms     = calcRMSError(gazeArr, tgtArr);
+        const gain    = calcPursuitGain(gazeArr, tgtArr);
+        const catchup = countCatchupSaccades(gazeArr);
+        const gainScore = Math.round(Math.max(0, Math.min(100, 100 - Math.abs(gain-1)/0.7*100)));
+        const rmsScore  = Math.round(Math.max(0, Math.min(100, 100 - (rms-0.04*W)/(0.36*W)*100)));
+        const csScore   = Math.round(Math.max(0, Math.min(100, 100 - catchup*8)));
+        score   = Math.round(gainScore*0.4 + rmsScore*0.4 + csScore*0.2);
+        details = { gain: +gain.toFixed(2), rmsError: Math.round(rms), catchupCount: catchup };
       } else {
-        score = 50; // no target data — neutral
+        score = 50;
       }
+
+    } else if (test.id === 'h-saccade' || test.id === 'v-saccade') {
+      const latency = calcSaccadeLatency(assessSamples, assessTargetJumps);
+      const withTgt = assessSamples.filter(s => s.tx != null);
+      let accuracy = 50;
+      if (withTgt.length >= 3) {
+        const rms = calcRMSError(withTgt.map(s=>({x:s.x,y:s.y})), withTgt.map(s=>({x:s.tx,y:s.ty})));
+        accuracy = Math.round(Math.max(0, Math.min(100, 100 - (rms-0.04*W)/(0.36*W)*100)));
+      }
+      const latencyScore = Math.round(Math.max(0, Math.min(100, 100 - (latency-150)/250*100)));
+      score   = Math.round(latencyScore*0.5 + accuracy*0.5);
+      details = { latency: Math.round(latency), accuracy };
     }
   }
 
-  assessResults[test.id] = { score, biasX, biasY, rawSamples: n };
-  console.log(`[ASSESS] ${test.id} n=${n} score=${score}`);
+  assessResults[test.id] = { score, biasX, biasY, rawSamples: n, details };
+  console.log(`[ASSESS] ${test.id} n=${n} score=${score}`, details);
   document.title = `評估 ${test.id}: ${n}樣本 → ${score}分`;
 
   assessTestIdx++;
@@ -1007,8 +1045,16 @@ function finishAssessment() {
   const biasH = Math.abs(bHraw) < 40 ? null : bHraw > 0 ? '右偏' : '左偏';
   const biasV = Math.abs(bVraw) < 30 ? null : bVraw > 0 ? '下偏' : '上偏';
 
+  const assessmentMetrics = {
+    fixation:  { score: fix,  ...(assessResults['fixation']?.details  ?? {}) },
+    hPursuit:  { score: hSc,  ...(assessResults['h-pursuit']?.details ?? {}) },
+    vPursuit:  { score: vSc,  ...(assessResults['v-pursuit']?.details ?? {}) },
+    hSaccade:  { score: hSac, ...(assessResults['h-saccade']?.details ?? {}) },
+    vSaccade:  { score: vSac, ...(assessResults['v-saccade']?.details ?? {}) },
+  };
+
   const rx = { fixationScore:fix, hScore:hSc, vScore:vSc, hSaccadeScore:hSac, vSaccadeScore:vSac,
-               biasH, biasV, bHraw, bVraw, startSpeed, priorityPath,
+               biasH, biasV, bHraw, bVraw, startSpeed, priorityPath, assessmentMetrics,
                timestamp: new Date().toISOString() };
   const store = getStore();
   store.assessmentResult = rx;
@@ -1022,6 +1068,23 @@ function finishAssessment() {
     el.textContent = v;
     el.className = 'assess-score-val ' + scoreClass(v);
   });
+
+  // detail panels (click card to expand)
+  const DETAIL_FMT = {
+    'fixation':  d => d.bcea    != null ? `BCEA = ${d.bcea} px²　Entropy = ${d.entropy}` : '',
+    'h-pursuit': d => d.gain    != null ? `Gain = ${d.gain}　RMS = ${d.rmsError} px　Catch-up = ${d.catchupCount}次` : '',
+    'v-pursuit': d => d.gain    != null ? `Gain = ${d.gain}　RMS = ${d.rmsError} px　Catch-up = ${d.catchupCount}次` : '',
+    'h-saccade': d => d.latency != null ? `Latency = ${d.latency} ms　落點 = ${d.accuracy}分` : '',
+    'v-saccade': d => d.latency != null ? `Latency = ${d.latency} ms　落點 = ${d.accuracy}分` : '',
+  };
+  ['fixation','h-pursuit','v-pursuit','h-saccade','v-saccade'].forEach(id => {
+    const det = document.getElementById('detail-' + id);
+    if (det) det.textContent = DETAIL_FMT[id]?.(assessResults[id]?.details ?? {}) ?? '';
+  });
+  document.querySelectorAll('.assess-score-card').forEach(card => {
+    card.onclick = () => card.classList.toggle('expanded');
+  });
+
   const pathLabel = {H_RIGHT:'水平右',H_LEFT:'水平左',V_UP:'垂直上',V_DOWN:'垂直下'};
   document.getElementById('ar-speed').textContent = startSpeed;
   document.getElementById('ar-path').textContent  = pathLabel[priorityPath] ?? priorityPath;
@@ -1535,6 +1598,88 @@ function variance(arr) {
   return arr.reduce((s,v)=>s+(v-m)**2,0)/arr.length;
 }
 
+// ── Clinical metric helpers ──
+function stdDev(arr) {
+  return Math.sqrt(variance(arr));
+}
+
+function correlation(xs, ys) {
+  const mx = xs.reduce((a,b)=>a+b,0)/xs.length;
+  const my = ys.reduce((a,b)=>a+b,0)/ys.length;
+  const num = xs.reduce((a,b,i)=>a+(b-mx)*(ys[i]-my),0);
+  const den = Math.sqrt(xs.reduce((a,b)=>a+(b-mx)**2,0) * ys.reduce((a,b)=>a+(b-my)**2,0));
+  return den > 0 ? num/den : 0;
+}
+
+function calcRMSError(gazeArr, targetArr) {
+  const errors = gazeArr.map((g, i) => {
+    const dx = g.x - targetArr[i].x, dy = g.y - targetArr[i].y;
+    return Math.sqrt(dx*dx + dy*dy);
+  });
+  return Math.sqrt(errors.reduce((a,b) => a + b*b, 0) / errors.length);
+}
+
+function calcBCEA(gazeArr) {
+  if (gazeArr.length < 3) return 9999;
+  const xs = gazeArr.map(g => g.x), ys = gazeArr.map(g => g.y);
+  const sdX = stdDev(xs), sdY = stdDev(ys), r = correlation(xs, ys);
+  return 2 * Math.PI * 2.29 * sdX * sdY * Math.sqrt(1 - r*r);
+}
+
+function calcSampleEntropy(arr, m=2, r=0.2) {
+  if (arr.length < m + 2) return 0;
+  const sd = stdDev(arr);
+  if (sd === 0) return 0;
+  const tol = r * sd;
+  let A = 0, B = 0;
+  for (let i = 0; i < arr.length - m; i++) {
+    for (let j = i + 1; j < arr.length - m; j++) {
+      let matchM = true;
+      for (let k = 0; k < m; k++) {
+        if (Math.abs(arr[i+k] - arr[j+k]) > tol) { matchM = false; break; }
+      }
+      if (matchM) {
+        B++;
+        if (Math.abs(arr[i+m] - arr[j+m]) <= tol) A++;
+      }
+    }
+  }
+  return B > 0 ? -Math.log((A + 1e-9) / (B + 1e-9)) : 0;
+}
+
+function calcSaccadeLatency(gazeArr, targetJumps) {
+  if (!targetJumps.length) return 300;
+  const latencies = targetJumps.map(jump => {
+    const after = gazeArr.filter(g => g.t >= jump.t && g.t <= jump.t + 600);
+    for (let i = 1; i < after.length; i++) {
+      const vel = Math.hypot(after[i].x - after[i-1].x, after[i].y - after[i-1].y);
+      if (vel > 30) return after[i].t - jump.t;
+    }
+    return 400;
+  });
+  return latencies.reduce((a,b)=>a+b,0) / latencies.length;
+}
+
+function countCatchupSaccades(gazeArr) {
+  let count = 0;
+  for (let i = 1; i < gazeArr.length; i++) {
+    const vel = Math.hypot(gazeArr[i].x - gazeArr[i-1].x, gazeArr[i].y - gazeArr[i-1].y);
+    if (vel > 50) count++;
+  }
+  return count;
+}
+
+function calcPursuitGain(gazeArr, targetArr) {
+  const gazeVels = [], targetVels = [];
+  for (let i = 1; i < gazeArr.length; i++) {
+    gazeVels.push(Math.hypot(gazeArr[i].x - gazeArr[i-1].x, gazeArr[i].y - gazeArr[i-1].y));
+    targetVels.push(Math.hypot(targetArr[i].x - targetArr[i-1].x, targetArr[i].y - targetArr[i-1].y));
+  }
+  const avgGaze   = gazeVels.reduce((a,b)=>a+b,0) / gazeVels.length;
+  const avgTarget = targetVels.reduce((a,b)=>a+b,0) / targetVels.length;
+  return avgTarget > 0 ? Math.min(2, avgGaze / avgTarget) : 0;
+}
+
 // ── end training ──
 async function endTraining() {
   stopAnim();
@@ -1586,7 +1731,8 @@ async function endTraining() {
   store.sessions  = store.sessions || [];
   store.lastBias  = { h: biasH, v: biasV };
   const sessionData = { patientId, protocol: selectPursuitPlan().join('+'), difficulty:'adaptive',
-    duration, pursuitScore, stability:stabilityVal, bias:biasRaw, overallScore, date };
+    duration, pursuitScore, stability:stabilityVal, bias:biasRaw, overallScore, date,
+    assessmentMetrics: store.assessmentResult?.assessmentMetrics ?? null };
   store.sessions.push(sessionData);
   saveStore(store);
   updateWelcomeStats();
