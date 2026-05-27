@@ -289,30 +289,38 @@ async function initCamera() {
 }
 
 // ── calibration ──
-const CALIB_POINTS = [
-  [.1,.1],[.5,.1],[.9,.1],
-  [.1,.5],[.5,.5],[.9,.5],
-  [.1,.9],[.5,.9],[.9,.9]
-];
-let calibIdx = 0;
+const XS = [.10, .37, .63, .90];
+const YS = [.10, .37, .63, .90];
+const CALIB_POINTS = YS.flatMap(y => XS.map(x => [x, y])); // 16 points, row-major
+const CALIB_HOLD_MS   = 1500;
+const CALIB_RECORD_MS = 100;
+const completedCalib  = new Array(CALIB_POINTS.length).fill(false);
+let calibIdx          = 0;
+let calibAnimFrame    = null;
+let calibHolding      = false;
 
 function goCalibration() {
   showPage('pg-calibration');
   document.querySelectorAll('#webgazerVideoContainer, video')
     .forEach(el => el.style.pointerEvents = 'none');
   calibIdx = 0;
+  completedCalib.fill(false);
+  calibHolding = false;
   renderCalibPoint();
 }
 
 function renderCalibPoint() {
+  if (calibAnimFrame) { cancelAnimationFrame(calibAnimFrame); calibAnimFrame = null; }
+
   const canvas = document.getElementById('calib-canvas');
-  const ctx = canvas.getContext('2d');
+  const ctx    = canvas.getContext('2d');
   canvas.width  = window.innerWidth;
   canvas.height = window.innerHeight;
-  ctx.clearRect(0,0,canvas.width,canvas.height);
 
   if (calibIdx >= CALIB_POINTS.length) {
+    drawCalibState(ctx, canvas.width, canvas.height, -1, 0);
     document.getElementById('calib-instruction').textContent = '校準完成！開始訓練 🎉';
+    document.getElementById('calib-progress').textContent = `已完成 ${CALIB_POINTS.length} / ${CALIB_POINTS.length} 個校準點`;
     setTimeout(startTraining, 1000);
     return;
   }
@@ -321,38 +329,94 @@ function renderCalibPoint() {
   const px = rx * canvas.width;
   const py = ry * canvas.height;
 
-  // draw all remaining faint
-  CALIB_POINTS.forEach(([x,y],i) => {
-    if (i <= calibIdx) return;
-    ctx.beginPath(); ctx.arc(x*canvas.width, y*canvas.height, 10, 0, Math.PI*2);
-    ctx.strokeStyle='rgba(255,255,255,.2)'; ctx.lineWidth=1.5; ctx.stroke();
-  });
+  document.getElementById('calib-progress').textContent =
+    `已完成 ${calibIdx} / ${CALIB_POINTS.length} 個校準點`;
+  document.getElementById('calib-instruction').textContent =
+    calibHolding ? '凝視中，保持注視…' : '點擊白點，保持凝視 1.5 秒';
 
-  // active point
-  ctx.beginPath(); ctx.arc(px, py, 14, 0, Math.PI*2);
-  ctx.fillStyle='rgba(255,255,255,.15)'; ctx.fill();
-  ctx.beginPath(); ctx.arc(px, py, 8, 0, Math.PI*2);
-  ctx.fillStyle='#fff'; ctx.fill();
+  // static draw (waiting for tap)
+  drawCalibState(ctx, canvas.width, canvas.height, calibIdx, 0);
 
-  document.getElementById('calib-progress').textContent = `${calibIdx} / ${CALIB_POINTS.length}`;
-
-  const onCalibTap = async (e) => {
+  const onCalibTap = (e) => {
     e.preventDefault();
-    const cx = e.touches ? e.touches[0].clientX : e.clientX;
-    const cy = e.touches ? e.touches[0].clientY : e.clientY;
-    const dist = Math.hypot(cx - px, cy - py);
-    if (dist > 80) return;
+    if (calibHolding) return;
+    const ex = e.touches ? e.touches[0].clientX : e.clientX;
+    const ey = e.touches ? e.touches[0].clientY : e.clientY;
+    if (Math.hypot(ex - px, ey - py) > 80) return;
 
     canvas.removeEventListener('touchstart', onCalibTap);
     canvas.removeEventListener('click',      onCalibTap);
-    if (webgazerReady) {
-      try { await webgazer.recordScreenPosition(px, py, 'click'); } catch {}
-    }
-    calibIdx++;
-    renderCalibPoint();
+    startCalibHold(canvas, ctx, px, py);
   };
   canvas.addEventListener('touchstart', onCalibTap, { passive: false });
   canvas.addEventListener('click',      onCalibTap);
+}
+
+function drawCalibState(ctx, W, H, activeIdx, progress) {
+  ctx.clearRect(0, 0, W, H);
+
+  CALIB_POINTS.forEach(([x, y], i) => {
+    const px = x * W, py = y * H;
+    if (completedCalib[i]) {
+      // green checkmark ring
+      ctx.beginPath(); ctx.arc(px, py, 10, 0, Math.PI*2);
+      ctx.strokeStyle = '#22c55e'; ctx.lineWidth = 2; ctx.stroke();
+      ctx.fillStyle = '#22c55e'; ctx.font = 'bold 11px sans-serif';
+      ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText('✓', px, py);
+    } else if (i === activeIdx) {
+      // active: white dot + blue progress arc
+      ctx.beginPath(); ctx.arc(px, py, 14, 0, Math.PI*2);
+      ctx.fillStyle = 'rgba(255,255,255,.12)'; ctx.fill();
+      ctx.beginPath(); ctx.arc(px, py, 8, 0, Math.PI*2);
+      ctx.fillStyle = '#fff'; ctx.fill();
+
+      if (progress > 0) {
+        const startAngle = -Math.PI/2;
+        const endAngle   = startAngle + Math.PI*2*progress;
+        ctx.beginPath(); ctx.arc(px, py, 17, startAngle, endAngle);
+        ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 3;
+        ctx.lineCap = 'round'; ctx.stroke();
+      }
+    } else {
+      // pending: faint white circle
+      ctx.beginPath(); ctx.arc(px, py, 7, 0, Math.PI*2);
+      ctx.strokeStyle = 'rgba(255,255,255,.25)'; ctx.lineWidth = 1.5; ctx.stroke();
+    }
+  });
+}
+
+function startCalibHold(canvas, ctx, px, py) {
+  calibHolding = true;
+  document.getElementById('calib-instruction').textContent = '凝視中，保持注視…';
+  const W = canvas.width, H = canvas.height;
+  const startTime   = Date.now();
+  let   lastRecord  = 0;
+
+  function tick() {
+    const elapsed  = Date.now() - startTime;
+    const progress = Math.min(elapsed / CALIB_HOLD_MS, 1);
+
+    drawCalibState(ctx, W, H, calibIdx, progress);
+    document.getElementById('calib-progress').textContent =
+      `已完成 ${calibIdx} / ${CALIB_POINTS.length} 個校準點`;
+
+    // record gaze every 100 ms
+    if (webgazerReady && elapsed - lastRecord >= CALIB_RECORD_MS) {
+      lastRecord = elapsed;
+      webgazer.recordScreenPosition(px, py, 'click').catch(() => {});
+    }
+
+    if (progress < 1) {
+      calibAnimFrame = requestAnimationFrame(tick);
+    } else {
+      completedCalib[calibIdx] = true;
+      calibHolding = false;
+      calibIdx++;
+      renderCalibPoint();
+    }
+  }
+  calibAnimFrame = requestAnimationFrame(tick);
 }
 
 // ── PATH SYSTEM ──
