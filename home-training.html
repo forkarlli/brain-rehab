@@ -55,7 +55,7 @@ video{pointer-events:none!important}
 .hud-chip{background:rgba(0,0,0,.6);backdrop-filter:blur(8px);border:1px solid rgba(255,255,255,.1);border-radius:20px;padding:6px 16px;font-size:13px;color:#e2e8f0}
 #train-timer{color:#f59e0b;font-weight:700}
 #train-label{color:#38bdf8;font-weight:600}
-#gaze-dot{position:absolute;width:18px;height:18px;border-radius:50%;border:2px solid rgba(255,100,100,.7);background:rgba(255,100,100,.3);pointer-events:none;transform:translate(-50%,-50%);transition:left .05s,top .05s;display:none}
+#gaze-dot{display:none!important}
 
 /* ── results ── */
 #pg-results{background:linear-gradient(135deg,#0f172a 0%,#1a2744 100%)}
@@ -161,11 +161,11 @@ video{pointer-events:none!important}
     </div>
     <div class="result-cards">
       <div class="result-card">
-        <div class="result-card-label">追蹤準確度</div>
+        <div class="result-card-label">專注穩定度</div>
         <div class="result-card-val" id="res-pursuit">--</div>
       </div>
       <div class="result-card">
-        <div class="result-card-label">穩定度</div>
+        <div class="result-card-label">頭部控制</div>
         <div class="result-card-val" id="res-stability">--</div>
       </div>
       <div class="result-card">
@@ -742,13 +742,7 @@ function startSaccadeAnim() {
   animFrame = requestAnimationFrame(frame);
 }
 
-// ── gaze dot ──
-function moveGazeDot(x, y) {
-  const dot = document.getElementById('gaze-dot');
-  dot.style.display = 'block';
-  dot.style.left = x + 'px';
-  dot.style.top  = y + 'px';
-}
+function moveGazeDot() {} // dot hidden — no distraction for patient
 
 // ── analysis ──
 // Scores are based on head-position data (no WebGazer):
@@ -908,18 +902,18 @@ function generateFeedback(pursuit, stability, overall, biasH, biasV) {
   const el = document.getElementById('ai-feedback-text');
   let fb = '';
   if (biasH === '右偏')
-    fb = '偵測到右側偏移，本次訓練已自動加強左視野追蹤（H_LEFT 路徑）。Left CB 可能需要額外刺激，下次訓練將持續補強。';
+    fb = '偵測到頭部右側偏移，本次訓練已自動加強左視野追蹤（H_LEFT 路徑）。Left CB 可能需要額外刺激，下次訓練將持續補強。';
   else if (biasH === '左偏')
-    fb = '偵測到左側偏移，本次訓練已自動加強右視野追蹤（H_RIGHT 路徑）。Right CB 可能需要額外刺激，下次訓練將持續補強。';
+    fb = '偵測到頭部左側偏移，本次訓練已自動加強右視野追蹤（H_RIGHT 路徑）。Right CB 可能需要額外刺激，下次訓練將持續補強。';
   else if (biasV === '上偏')
-    fb = '偵測到上視野偏移，訓練已加入下視野補強（V_DOWN 路徑）。建議臨床複查 Midbrain 垂直追蹤控制。';
+    fb = '偵測到頭部偏上，訓練已加入下視野補強（V_DOWN 路徑）。建議臨床複查 Midbrain 垂直追蹤控制。';
   else if (biasV === '下偏')
-    fb = '偵測到下視野偏移，訓練已加入上視野補強（V_UP 路徑）。建議臨床複查 Pons/CB 垂直眼動。';
+    fb = '偵測到頭部偏下，訓練已加入上視野補強（V_UP 路徑）。建議臨床複查 Pons/CB 垂直眼動。';
   else
-    fb = '眼動路徑穩定，雙側控制均衡。持續每日訓練有助鞏固神經連結。';
+    fb = '頭部控制穩定，專注度良好，雙側均衡。持續每日訓練有助鞏固神經連結。';
 
-  if (overall >= 80) fb += ' 整體分數優異，明日可嘗試更高難度。';
-  else if (overall < 50) fb += ' 建議放慢速度，確保每次眼動都精準到位。';
+  if (overall >= 80) fb += ' 整體表現優異，明日可嘗試更高難度。';
+  else if (overall < 50) fb += ' 建議放慢速度，保持頭部穩定面向螢幕。';
   el.textContent = fb;
 }
 </script>
