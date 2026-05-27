@@ -2999,22 +2999,28 @@ function computeEyeMachineRx(affectedBrainRegions, affectedItems, convMCodes, op
 
   // === M4: Saccade↑+Pursuit↓ ===
   let m4Added = false;
-  if (hasDnVert && (hasPons || hasPPRF || hasCB || hasFEF)) {
+  if (hasDnVert && (hasMidbrain || hasPons || hasPPRF || hasCB || hasFEF)) {
     let angle, bg;
-    if (hasPons || hasPPRF) {
-      angle = 'R0/L0（Bilateral Pons/Vestibular）'; bg = bgPlate(false, false);
+    if (has('Bilateral Midbrain') || (hasRightMidbrain && hasLeftMidbrain)) {
+      angle = 'R0/L0（Bilateral Midbrain，下視雙側）';                      bg = bgPlate(false, false);
+    } else if (hasRightMidbrain) {
+      angle = 'L45（Right Midbrain同側+Left CB對側，下視左斜）';             bg = bgPlate(false, true);
+    } else if (hasLeftMidbrain) {
+      angle = 'R45（Left Midbrain同側+Right CB對側，下視右斜）';             bg = bgPlate(true,  false);
+    } else if (hasPons || hasPPRF) {
+      angle = 'R0/L0（Bilateral Pons/Vestibular）';                         bg = bgPlate(false, false);
     } else if (hasRightCB && hasLeftCB) {
-      angle = 'R45/L45（雙側 CB）';                bg = bgPlate(false, false);
+      angle = 'R45/L45（雙側 CB）';                                         bg = bgPlate(false, false);
     } else if (hasRightCB) {
-      angle = 'R45（Right CB，下視右斜）';          bg = bgPlate(true,  false);
+      angle = 'R45（Right CB，下視右斜）';                                   bg = bgPlate(true,  false);
     } else if (hasLeftCB) {
-      angle = 'L45（Left CB，下視左斜）';           bg = bgPlate(false, true);
+      angle = 'L45（Left CB，下視左斜）';                                    bg = bgPlate(false, true);
     } else if (hasLeftFEF && !hasRightFEF) {
-      angle = 'R90（Left FEF+Parietal）';           bg = bgPlate(false, true);
+      angle = 'R90（Left FEF+Parietal）';                                    bg = bgPlate(false, true);
     } else if (hasRightFEF && !hasLeftFEF) {
-      angle = 'L90（Right FEF+Parietal）';          bg = bgPlate(true,  false);
+      angle = 'L90（Right FEF+Parietal）';                                   bg = bgPlate(true,  false);
     } else {
-      angle = 'R0/L0（雙側）';                     bg = bgPlate(false, false);
+      angle = 'R0/L0（雙側）';                                               bg = bgPlate(false, false);
     }
     rec.push({ mode: 'M4', name: 'Saccade↑+Pursuit↓', angle, speed: 'S3', dist: 'D3', reps: '15', target: '有', bg, notes: headPos ? [headPos] : [] });
     m4Added = true;
