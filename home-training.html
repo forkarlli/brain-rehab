@@ -4,7 +4,6 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>BCF 居家眼動訓練</title>
-<script src="https://webgazer.cs.brown.edu/webgazer.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;background:#0f172a;color:#f1f5f9;min-height:100vh;overflow:hidden}
@@ -45,7 +44,7 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 /* ── calibration ── */
 #pg-calibration{background:#111827}
 #calib-canvas{position:absolute;top:0;left:0;width:100%;height:100%;cursor:crosshair;z-index:9999}
-#webgazerVideoContainer,#webgazerFaceOverlay,#webgazerVideoFeed,video{pointer-events:none!important}
+video{pointer-events:none!important}
 #calib-instruction{position:absolute;top:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.7);padding:12px 24px;border-radius:12px;font-size:15px;color:#e2e8f0;pointer-events:none;text-align:center}
 #calib-progress{position:absolute;bottom:30px;left:50%;transform:translateX(-50%);color:#94a3b8;font-size:13px}
 
@@ -208,12 +207,68 @@ const STORAGE_KEY = 'bcf_home_training';
 
 // ── state ──
 let patientId = '';
-let gazeData  = [];       // [{x,y,t,tx,ty}]
+let gazeData  = [];       // [{x,y,t,tx,ty,detected}]
 let trainStartTime = 0;
-let webgazerReady   = false;
-let webgazerStarted = false; // guards begin() — must only be called once
-let animFrame      = null;
-let currentTargetPos = null;
+let camReady          = false;
+let videoEl           = null;
+let gazePollerInterval = null;
+let animFrame         = null;
+let currentTargetPos  = null;
+
+// ── head-position estimator (replaces WebGazer) ──
+const HEAD_W = 64, HEAD_H = 48;
+let headCanvas, headCtx;
+
+function initHeadCanvas() {
+  headCanvas = document.createElement('canvas');
+  headCanvas.width = HEAD_W; headCanvas.height = HEAD_H;
+  headCtx = headCanvas.getContext('2d', { willReadFrequently: true });
+}
+
+function findBrightCenter(data, W, H) {
+  // Weighted brightness centroid in the inner 80% of the frame.
+  const x0 = Math.floor(W*.1), x1 = Math.floor(W*.9);
+  const y0 = Math.floor(H*.1), y1 = Math.floor(H*.9);
+  const lums = [];
+  for (let y = y0; y < y1; y++)
+    for (let x = x0; x < x1; x++) {
+      const i = (y*W+x)*4;
+      lums.push(0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2]);
+    }
+  lums.sort((a,b) => a-b);
+  const thr = lums[Math.floor(lums.length*.55)] || 60;
+  let sx=0, sy=0, sw=0, cnt=0;
+  for (let y = y0; y < y1; y++)
+    for (let x = x0; x < x1; x++) {
+      const i = (y*W+x)*4;
+      const lum = 0.299*data[i] + 0.587*data[i+1] + 0.114*data[i+2];
+      if (lum >= thr) { const w=lum-thr; sx+=x*w; sy+=y*w; sw+=w; cnt++; }
+    }
+  if (!sw) return { cx:.5, cy:.5, detected:false };
+  return { cx:(sx/sw)/W, cy:(sy/sw)/H,
+           detected: cnt > (x1-x0)*(y1-y0)*.04 };
+}
+
+function captureHeadPos() {
+  if (!videoEl || !videoEl.videoWidth) return null;
+  headCtx.drawImage(videoEl, 0, 0, HEAD_W, HEAD_H);
+  return findBrightCenter(headCtx.getImageData(0,0,HEAD_W,HEAD_H).data, HEAD_W, HEAD_H);
+}
+
+function pollHeadPos() {
+  const pos = captureHeadPos();
+  if (!pos) return;
+  // Video has CSS scaleX(-1), so flip cx for screen coords
+  const W = window.innerWidth, H = window.innerHeight;
+  const sx = (1 - pos.cx) * W;
+  const sy = pos.cy * H;
+  const tp = currentTargetPos;
+  const sample = { x:sx, y:sy, t:Date.now(),
+    tx: tp?.x ?? null, ty: tp?.y ?? null, detected: pos.detected };
+  trialGaze.push(sample);
+  gazeData.push(sample);
+  if (pos.detected) moveGazeDot(sx, sy);
+}
 
 // ── utils ──
 function showPage(id) {
@@ -260,6 +315,7 @@ function updateWelcomeStats() {
 // ── welcome ──
 window.addEventListener('DOMContentLoaded', () => {
   updateWelcomeStats();
+  initHeadCanvas();
   const stored = getStore();
   if (stored.lastPatientId) document.getElementById('patient-id-input').value = stored.lastPatientId;
 });
@@ -277,43 +333,19 @@ function startSetup() {
 // ── camera ──
 async function initCamera() {
   try {
-    const stream = await navigator.mediaDevices.getUserMedia({ video: { width:640, height:480, facingMode:'user' } });
-    const vid = document.getElementById('webcam-preview');
-    vid.srcObject = stream;
-    const camStatus = document.getElementById('cam-status');
-    camStatus.innerHTML = '<span class="status-dot dot-green"></span>相機已就緒';
+    const stream = await navigator.mediaDevices.getUserMedia(
+      { video: { width:640, height:480, facingMode:'user' } });
+    videoEl = document.getElementById('webcam-preview');
+    videoEl.srcObject = stream;
+    await new Promise(r => videoEl.addEventListener('loadedmetadata', r, { once:true }));
+    camReady = true;
+    document.getElementById('cam-status').innerHTML =
+      '<span class="status-dot dot-green"></span>相機已就緒';
     document.getElementById('btn-go-calib').disabled = false;
-    // init webgazer quietly
-    showLoading('初始化眼動追蹤…');
-    if (webgazerStarted) {
-      // already initialized (e.g. "再練一次") — just resume, don't call begin() again
-      try { webgazer.resume(); } catch(e) {}
-      console.log('[DBG] initCamera: webgazer already started → resume()');
-    } else {
-      webgazerStarted = true;
-      // clmtrackr is pure-JS and avoids TFjs crashes on iPad Safari
-      webgazer.setRegression('ridge');
-      webgazer.setTracker('clmtrackr');
-      webgazer.setGazeListener(null);
-      await webgazer.begin();
-      webgazer.showPredictionPoints(false);
-      // Do NOT call showVideoPreview(false) — on iPad Safari, display:none on the
-      // video element causes the browser to release the MediaStream. Hide it via
-      // CSS instead so the stream stays alive.
-      const _wgVid = document.getElementById('webgazerVideoContainer');
-      if (_wgVid) Object.assign(_wgVid.style, {
-        position:'fixed', width:'1px', height:'1px',
-        opacity:'0', pointerEvents:'none', zIndex:'-1'
-      });
-      webgazerReady = true;
-      console.log('[DBG] initCamera: webgazer.begin() done → webgazerReady=true');
-    }
-    hideLoading();
   } catch(e) {
-    webgazerStarted = false; // allow retry on error
-    console.error('[WebGazer init error]', e);
-    document.getElementById('cam-status').innerHTML = '<span class="status-dot dot-red"></span>相機授權失敗，請允許相機存取';
-    hideLoading();
+    console.error('[camera error]', e);
+    document.getElementById('cam-status').innerHTML =
+      '<span class="status-dot dot-red"></span>相機授權失敗，請允許相機存取';
     toast('相機啟動失敗：' + (e.message || String(e)));
   }
 }
@@ -331,8 +363,6 @@ let calibHolding      = false;
 
 function goCalibration() {
   showPage('pg-calibration');
-  document.querySelectorAll('#webgazerVideoContainer, video')
-    .forEach(el => el.style.pointerEvents = 'none');
   calibIdx = 0;
   completedCalib.fill(false);
   calibHolding = false;
@@ -351,10 +381,6 @@ function renderCalibPoint() {
     drawCalibState(ctx, canvas.width, canvas.height, -1, 0);
     document.getElementById('calib-instruction').textContent = '校準完成！開始訓練 🎉';
     document.getElementById('calib-progress').textContent = `已完成 ${CALIB_POINTS.length} / ${CALIB_POINTS.length} 個校準點`;
-    // ensure webgazer is running after calibration (may have been paused)
-    try { webgazer.resume(); } catch(e) {}
-    webgazerReady = true;
-    console.log('[DBG] calibration done → webgazer.resume() + webgazerReady=true');
     setTimeout(startTraining, 1000);
     return;
   }
@@ -435,12 +461,6 @@ function startCalibHold(canvas, ctx, px, py) {
     document.getElementById('calib-progress').textContent =
       `已完成 ${calibIdx} / ${CALIB_POINTS.length} 個校準點`;
 
-    // record gaze every 100 ms
-    if (webgazerReady && elapsed - lastRecord >= CALIB_RECORD_MS) {
-      lastRecord = elapsed;
-      webgazer.recordScreenPosition(px, py, 'click').catch(() => {});
-    }
-
     if (progress < 1) {
       calibAnimFrame = requestAnimationFrame(tick);
     } else {
@@ -501,9 +521,9 @@ let currentSpeedMax = 0.3;
 let lastFatigueVar  = null;
 const metrics = { segments: [] };
 
-async function startTraining() {
-  if (!webgazerReady) {
-    alert('WebGazer 未就緒，請重新整理頁面再試');
+function startTraining() {
+  if (!camReady) {
+    alert('相機未就緒，請重新整理頁面再試');
     return;
   }
   showPage('pg-training');
@@ -512,25 +532,11 @@ async function startTraining() {
   trainStartTime = Date.now();
   gazeData = [];
   metrics.segments = [];
+  document.title = 'BCF 居家眼動訓練';
 
-  // Ensure prediction engine is running; wait 500 ms for it to warm up.
-  try { webgazer.resume(); } catch(e) {}
-  await new Promise(r => setTimeout(r, 500));
-
-  // Register ONE global listener for the entire training session.
-  // Replacing the listener per-segment caused silent failures on iPad Safari.
-  webgazer.setGazeListener((data, elapsedTime) => {
-    if (trialGaze.length === 0) {
-      document.title = 'GAZE:' + (data ? data.x.toFixed(0) : 'null');
-    }
-    if (!data) return;
-    const tp = currentTargetPos;
-    const sample = { x: data.x, y: data.y, t: Date.now(),
-      tx: tp ? tp.x : null, ty: tp ? tp.y : null };
-    trialGaze.push(sample);
-    gazeData.push(sample);
-    moveGazeDot(data.x, data.y);
-  });
+  // Poll head position every 200 ms — no WebGazer needed
+  clearInterval(gazePollerInterval);
+  gazePollerInterval = setInterval(pollHeadPos, 200);
 
   runSegment();
 }
@@ -560,7 +566,7 @@ function runSegment() {
   document.getElementById('train-timer').textContent = segTimer + 's';
   setFatigueChip('green');
 
-  console.log(`[DBG] runSegment ${segIdx+1}/${segments.length}  webgazerReady=${webgazerReady}  seg.type=${seg.type}`);
+  console.log(`[DBG] runSegment ${segIdx+1}/${segments.length}  camReady=${camReady}  seg.type=${seg.type}`);
 
   let elapsed = 0;
   segInterval = setInterval(() => {
@@ -579,7 +585,6 @@ function runSegment() {
 function finishSegment() {
   stopAnim();
   currentTargetPos = null;
-  // global listener stays active — do NOT call setGazeListener(null) here
 
   // ── DEBUG segment summary ──
   const _n = trialGaze.length;
@@ -746,40 +751,27 @@ function moveGazeDot(x, y) {
 }
 
 // ── analysis ──
+// Scores are based on head-position data (no WebGazer):
+//   segmentScore = presence (face detected %) × 50 + stability × 50
+//   stability    = 100 − normalised position variance
 function analyzeSegment(samples) {
-  if (samples.length < 10) return { segmentScore: 50, stability: 50, biasX: 0, biasY: 0 };
+  if (samples.length < 3) return { segmentScore: 50, stability: 50, biasX: 0, biasY: 0 };
 
-  const tStart = samples[0].t;
-  const firstHalf  = samples.filter(s => s.t - tStart < 15000);
-  const secondHalf = samples.filter(s => s.t - tStart >= 15000);
-
-  const avgErrOf = (arr) => {
-    const valid = arr.filter(s => s.tx != null);
-    if (valid.length < 3) return null;
-    return valid.reduce((a, s) => a + Math.hypot(s.x - s.tx, s.y - s.ty), 0) / valid.length;
-  };
-
-  let segmentScore = 50;
-  const errFirst  = avgErrOf(firstHalf);
-  const errSecond = avgErrOf(secondHalf);
-  if (errFirst != null && errSecond != null && errFirst > 0) {
-    segmentScore = 50 + (errFirst - errSecond) / errFirst * 50;
-    segmentScore = Math.round(Math.max(0, Math.min(100, segmentScore)));
-  }
+  const detected  = samples.filter(s => s.detected !== false).length;
+  const presence  = detected / samples.length;           // 0..1
 
   const xs = samples.map(s => s.x);
   const ys = samples.map(s => s.y);
   const sd = Math.sqrt(variance(xs) + variance(ys));
-  const stability = Math.round(Math.max(0, Math.min(100, 100 - (sd - 50) / 150 * 100)));
+  // sd ≈ 20 px → 100, sd ≈ 200 px → 0
+  const stability    = Math.round(Math.max(0, Math.min(100, 100 - (sd - 20) / 180 * 100)));
+  const segmentScore = Math.round(presence * 50 + stability * 0.5);
 
   const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
-  const biasX = xs.reduce((a, b) => a + b, 0) / xs.length - cx;
-  const biasY = ys.reduce((a, b) => a + b, 0) / ys.length - cy;
+  const biasX = xs.reduce((a,b)=>a+b,0)/xs.length - cx;
+  const biasY = ys.reduce((a,b)=>a+b,0)/ys.length - cy;
 
-  return { segmentScore, stability, biasX, biasY,
-           rawSamples: samples.length,
-           errFirst:  errFirst  != null ? Math.round(errFirst)  : null,
-           errSecond: errSecond != null ? Math.round(errSecond) : null };
+  return { segmentScore, stability, biasX, biasY, rawSamples: samples.length };
 }
 
 function variance(arr) {
@@ -790,8 +782,9 @@ function variance(arr) {
 // ── end training ──
 async function endTraining() {
   stopAnim();
+  clearInterval(gazePollerInterval);
+  gazePollerInterval = null;
   document.getElementById('gaze-dot').style.display='none';
-  if (webgazerReady) { webgazer.setGazeListener(null); webgazer.pause(); }
 
   const duration = Math.round((Date.now() - trainStartTime)/1000);
   const allSegs = metrics.segments.length > 0 ? metrics.segments
@@ -829,21 +822,6 @@ async function endTraining() {
   document.getElementById('score-arc').style.strokeDashoffset = circ - (overallScore/100)*circ;
 
   drawSegmentChart(allSegs.map(s => s.segmentScore));
-
-  // ── DEBUG alert ──
-  const allSamples  = trialGaze.length;
-  const withTxCount = trialGaze.filter(s => s.tx != null).length;
-  const seg0 = metrics.segments[0];
-  alert(
-    '總樣本(最後段): ' + allSamples + '\n' +
-    '有tx數據: ' + withTxCount + '\n' +
-    '總段數: ' + metrics.segments.length + '\n' +
-    '段1樣本數: ' + (seg0?.rawSamples ?? 'N/A') + '\n' +
-    '段1前半誤差: ' + (seg0?.errFirst  ?? 'N/A') + 'px\n' +
-    '段1後半誤差: ' + (seg0?.errSecond ?? 'N/A') + 'px\n' +
-    '段1分數: '    + (seg0?.segmentScore ?? 'N/A') + '\n' +
-    'webgazerReady: ' + webgazerReady
-  );
 
   // persist lastBias so next session selects correct paths
   const store = getStore();
