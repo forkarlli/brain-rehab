@@ -472,8 +472,15 @@ function buildGazeMap() {
   if (pts.length < 3) { console.warn('[Gaze] insufficient calib points:', pts.length); return; }
   const fX = fitLinear(pts.map(p=>p.gazeH), pts.map(p=>p.sx));
   const fY = fitLinear(pts.map(p=>p.gazeV), pts.map(p=>p.sy));
-  gazeMapCoeffs = { ax:fX.a, bx:fX.b, ay:fY.a, by:fY.b };
-  console.log('[Gaze] calibrated', gazeMapCoeffs);
+
+  // Y-axis compensation: MediaPipe iris vertical sensitivity is lower than horizontal.
+  // Measure actual gazeV range across calibration points and boost if too small.
+  const gazeVs     = pts.map(p => p.gazeV);
+  const gazeVRange = Math.max(...gazeVs) - Math.min(...gazeVs);
+  const yComp      = gazeVRange < 0.05 ? 3.0 : 1.0;
+
+  gazeMapCoeffs = { ax:fX.a, bx:fX.b, ay:fY.a * yComp, by:fY.b };
+  console.log('[Gaze] calibrated', gazeMapCoeffs, `gazeVRange=${gazeVRange.toFixed(4)} yComp=${yComp}`);
 }
 
 function mapGaze() {
@@ -974,9 +981,9 @@ function scoreAssessTest(test) {
     if (test.id === 'fixation') {
       const bcea    = calcBCEA(assessSamples);
       const entropy = calcSampleEntropy(xs);
-      // BCEA:    500 px² → 100,  5000 px² → 0
+      // BCEA:    200 px² → 100,  8000 px² → 0
       // Entropy: 0.5     → 100,  3.0      → 0
-      const bceaNorm    = Math.min(1, Math.max(0, (bcea - 500) / 4500));
+      const bceaNorm    = Math.min(1, Math.max(0, (bcea - 200) / 7800));
       const entropyNorm = Math.min(1, Math.max(0, (entropy - 0.5) / 2.5));
       score   = Math.round(Math.max(0, Math.min(100, 100 - bceaNorm*60 - entropyNorm*40)));
       details = { bcea: Math.round(bcea), entropy: +entropy.toFixed(2) };
