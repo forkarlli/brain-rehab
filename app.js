@@ -2966,9 +2966,9 @@ function computeEyeMachineRx(affectedBrainRegions, affectedItems, convMCodes, op
         (!hasRightMidbrain && !hasLeftMidbrain && hasRightUp && hasLeftUp)) {
       angle = 'R0/L0（上下，雙側）';                              bg = bgPlate(false, false);
     } else if (hasRightMidbrain) {
-      angle = 'R45（Right Midbrain同側+Left CB對側，斜向）';      bg = bgPlate(true,  false);
+      angle = 'L45（眼左上↔右下，Right Midbrain同側+Left CB對側）';  bg = bgPlate(false, true);
     } else if (hasLeftMidbrain) {
-      angle = 'L45（Left Midbrain同側+Right CB對側，斜向）';      bg = bgPlate(false, true);
+      angle = 'R45（眼右上↔左下，Left Midbrain同側+Right CB對側）';  bg = bgPlate(true,  false);
     } else if (hasRightUp) {
       angle = 'R45（Right CB+FEF+Parietal）';                     bg = bgPlate(true,  false);
     } else {
