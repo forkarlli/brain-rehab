@@ -291,7 +291,9 @@ async function initCamera() {
       console.log('[DBG] initCamera: webgazer already started → resume()');
     } else {
       webgazerStarted = true;
-      // Split chain to avoid "t is not a function" error on some WebGazer builds
+      // clmtrackr is pure-JS and avoids TFjs crashes on iPad Safari
+      webgazer.setRegression('ridge');
+      webgazer.setTracker('clmtrackr');
       webgazer.setGazeListener(null);
       await webgazer.begin();
       webgazer.showPredictionPoints(false);
