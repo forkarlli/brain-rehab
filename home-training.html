@@ -210,7 +210,8 @@ const STORAGE_KEY = 'bcf_home_training';
 let patientId = '';
 let gazeData  = [];       // [{x,y,t,tx,ty}]
 let trainStartTime = 0;
-let webgazerReady  = false;
+let webgazerReady   = false;
+let webgazerStarted = false; // guards begin() — must only be called once
 let animFrame      = null;
 let currentTargetPos = null;
 
@@ -284,12 +285,15 @@ async function initCamera() {
     document.getElementById('btn-go-calib').disabled = false;
     // init webgazer quietly
     showLoading('初始化眼動追蹤…');
-    if (webgazerReady) {
+    if (webgazerStarted) {
       // already initialized (e.g. "再練一次") — just resume, don't call begin() again
       try { webgazer.resume(); } catch(e) {}
-      console.log('[DBG] initCamera: webgazer already ready → resume()');
+      console.log('[DBG] initCamera: webgazer already started → resume()');
     } else {
-      await webgazer.setGazeListener(null).begin();
+      webgazerStarted = true;
+      // Split chain to avoid "t is not a function" error on some WebGazer builds
+      webgazer.setGazeListener(null);
+      await webgazer.begin();
       webgazer.showPredictionPoints(false);
       // Do NOT call showVideoPreview(false) — on iPad Safari, display:none on the
       // video element causes the browser to release the MediaStream. Hide it via
@@ -304,10 +308,11 @@ async function initCamera() {
     }
     hideLoading();
   } catch(e) {
-    console.error(e);
+    webgazerStarted = false; // allow retry on error
+    console.error('[WebGazer init error]', e);
     document.getElementById('cam-status').innerHTML = '<span class="status-dot dot-red"></span>相機授權失敗，請允許相機存取';
     hideLoading();
-    toast('相機啟動失敗：' + e.message);
+    toast('相機啟動失敗：' + (e.message || String(e)));
   }
 }
 
