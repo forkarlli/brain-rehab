@@ -287,6 +287,7 @@ async function initCamera() {
     await webgazer.setGazeListener(null).begin();
     webgazer.showPredictionPoints(false).showVideoPreview(false);
     webgazerReady = true;
+    console.log('[DBG] initCamera: webgazer.begin() done → webgazerReady=true  (calibration has NOT started yet)');
     hideLoading();
   } catch(e) {
     console.error(e);
@@ -510,16 +511,29 @@ function runSegment() {
   document.getElementById('train-timer').textContent = segTimer + 's';
   setFatigueChip('green');
 
+  // ── DEBUG ──
+  console.log(`[DBG] runSegment ${segIdx+1}/${segments.length}  webgazerReady=${webgazerReady}  seg.type=${seg.type}`);
+
   if (webgazerReady) {
+    let _dbgCount = 0;
     webgazer.setGazeListener((data) => {
-      if (!data) return;
+      if (!data) {
+        if (_dbgCount < 10) { _dbgCount++; console.log(`[DBG] gaze callback: data=null (${_dbgCount})`); }
+        return;
+      }
       const tp = currentTargetPos;
       const sample = { x: data.x, y: data.y, t: Date.now(),
         tx: tp ? tp.x : null, ty: tp ? tp.y : null };
       trialGaze.push(sample);
       gazeData.push(sample);
       moveGazeDot(data.x, data.y);
+      if (_dbgCount < 10) {
+        _dbgCount++;
+        console.log(`[DBG] gaze #${_dbgCount}  x=${Math.round(data.x)} y=${Math.round(data.y)}  tx=${tp ? Math.round(tp.x) : 'null'}  trialGaze.len=${trialGaze.length}`);
+      }
     });
+  } else {
+    console.warn('[DBG] webgazerReady=false → gaze listener NOT registered for this segment');
   }
 
   let elapsed = 0;
@@ -540,7 +554,28 @@ function finishSegment() {
   stopAnim();
   currentTargetPos = null;
   if (webgazerReady) webgazer.setGazeListener(null);
-  metrics.segments.push({ ...analyzeSegment(trialGaze), type: segments[segIdx].type });
+
+  // ── DEBUG segment summary ──
+  const _n = trialGaze.length;
+  const _tStart = _n > 0 ? trialGaze[0].t : 0;
+  const _first  = trialGaze.filter(s => s.t - _tStart < 15000);
+  const _second = trialGaze.filter(s => s.t - _tStart >= 15000);
+  const _errOf  = (arr) => {
+    const v = arr.filter(s => s.tx != null);
+    if (!v.length) return 'N/A(no tx)';
+    return (v.reduce((a,s)=>a+Math.hypot(s.x-s.tx,s.y-s.ty),0)/v.length).toFixed(1)+'px';
+  };
+  const _withTx = trialGaze.filter(s => s.tx != null).length;
+  console.log(
+    `[DBG] finishSegment #${segIdx+1}` +
+    `  samples=${_n}  withTx=${_withTx}` +
+    `  firstHalf=${_first.length}  secondHalf=${_second.length}` +
+    `  errFirst=${_errOf(_first)}  errSecond=${_errOf(_second)}`
+  );
+
+  const _result = analyzeSegment(trialGaze);
+  console.log(`[DBG] → segmentScore=${_result.segmentScore}  stability=${_result.stability}`);
+  metrics.segments.push({ ..._result, type: segments[segIdx].type });
   segIdx++;
   setTimeout(runSegment, 600);
 }
@@ -715,7 +750,10 @@ function analyzeSegment(samples) {
   const biasX = xs.reduce((a, b) => a + b, 0) / xs.length - cx;
   const biasY = ys.reduce((a, b) => a + b, 0) / ys.length - cy;
 
-  return { segmentScore, stability, biasX, biasY };
+  return { segmentScore, stability, biasX, biasY,
+           rawSamples: samples.length,
+           errFirst:  errFirst  != null ? Math.round(errFirst)  : null,
+           errSecond: errSecond != null ? Math.round(errSecond) : null };
 }
 
 function variance(arr) {
@@ -765,6 +803,21 @@ async function endTraining() {
   document.getElementById('score-arc').style.strokeDashoffset = circ - (overallScore/100)*circ;
 
   drawSegmentChart(allSegs.map(s => s.segmentScore));
+
+  // ── DEBUG alert ──
+  const allSamples  = trialGaze.length;
+  const withTxCount = trialGaze.filter(s => s.tx != null).length;
+  const seg0 = metrics.segments[0];
+  alert(
+    '總樣本(最後段): ' + allSamples + '\n' +
+    '有tx數據: ' + withTxCount + '\n' +
+    '總段數: ' + metrics.segments.length + '\n' +
+    '段1樣本數: ' + (seg0?.rawSamples ?? 'N/A') + '\n' +
+    '段1前半誤差: ' + (seg0?.errFirst  ?? 'N/A') + 'px\n' +
+    '段1後半誤差: ' + (seg0?.errSecond ?? 'N/A') + 'px\n' +
+    '段1分數: '    + (seg0?.segmentScore ?? 'N/A') + '\n' +
+    'webgazerReady: ' + webgazerReady
+  );
 
   // persist lastBias so next session selects correct paths
   const store = getStore();
