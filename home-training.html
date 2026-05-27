@@ -365,6 +365,11 @@ function selectLevel(n) {
   });
 }
 
+function pickLevel(n) {
+  selectLevel(n);
+  startTraining();
+}
+
 function recommendLevelFromScore(avg) {
   return avg < 50 ? 1 : avg < 70 ? 2 : avg < 85 ? 3 : 4;
 }
@@ -379,7 +384,7 @@ function renderLevelGrid(containerId) {
   if (!grid) return;
   grid.innerHTML = Object.entries(TRAINING_LEVELS).map(([n, cfg]) => `
     <div class="level-card${+n === selectedLevel ? ' selected' : ''}" data-level="${n}"
-         onclick="selectLevel(${n})">
+         onclick="pickLevel(${n})">
       <div class="level-card-num">L${n}</div>
       <div class="level-card-name">${cfg.label}</div>
       <div class="level-card-segs">${cfg.desc}</div>
