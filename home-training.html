@@ -80,6 +80,34 @@ video{pointer-events:none!important}
 .feedback-label{font-size:11px;color:#0ea5e9;font-weight:700;margin-bottom:6px;letter-spacing:.5px}
 .btn-row{display:flex;gap:12px;margin-top:8px}
 
+/* ── choice ── */
+#pg-choice{background:linear-gradient(135deg,#0f172a 0%,#1e3a5f 100%)}
+.choice-btns{display:flex;flex-direction:column;gap:14px;width:100%;max-width:300px;margin-top:8px}
+.choice-last{font-size:12px;color:#475569;margin-top:16px;text-align:center}
+
+/* ── assessment ── */
+#pg-assessment{background:#0a0a0a;padding:0}
+#assess-canvas{position:absolute;top:0;left:0;width:100%;height:100%}
+#assess-hud{position:absolute;top:16px;left:50%;transform:translateX(-50%);display:flex;gap:12px;align-items:center;pointer-events:none}
+#assess-progress-bar{position:absolute;bottom:0;left:0;width:100%;height:4px;background:rgba(255,255,255,.1)}
+#assess-progress-fill{height:100%;background:#38bdf8;transition:width .6s}
+#assess-instruction{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.88);border:1px solid rgba(255,255,255,.15);border-radius:16px;padding:24px 36px;font-size:18px;color:#f1f5f9;text-align:center;pointer-events:none;display:none;max-width:340px;line-height:1.6}
+
+/* ── assessment result ── */
+#pg-assessment-result{background:linear-gradient(135deg,#0f172a 0%,#1a2744 100%);overflow-y:auto;justify-content:flex-start;padding-top:32px}
+.assess-score-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;width:100%;max-width:420px;margin:16px 0}
+.assess-score-card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:14px;text-align:center}
+.assess-score-label{font-size:11px;color:#64748b;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+.assess-score-val{font-size:28px;font-weight:800}
+.score-good{color:#4ade80}
+.score-mid{color:#fbbf24}
+.score-low{color:#f87171}
+.rx-box{background:rgba(14,165,233,.08);border:1px solid rgba(14,165,233,.2);border-radius:12px;padding:16px;max-width:420px;width:100%;margin:12px 0;text-align:left}
+.rx-label{font-size:11px;color:#0ea5e9;font-weight:700;margin-bottom:10px;letter-spacing:.5px}
+.rx-row{display:flex;justify-content:space-between;font-size:13px;color:#cbd5e1;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.06)}
+.rx-row:last-child{border-bottom:none}
+.rx-val{font-weight:600;color:#e2e8f0}
+
 /* ── loading overlay ── */
 #loading-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:999;align-items:center;justify-content:center;flex-direction:column;gap:16px}
 #loading-overlay.active{display:flex}
@@ -188,6 +216,63 @@ video{pointer-events:none!important}
     <div class="btn-row">
       <button class="btn btn-secondary" onclick="showPage('pg-welcome')">返回首頁</button>
       <button class="btn btn-primary" onclick="startSetup()">再練一次</button>
+    </div>
+  </div>
+
+  <!-- PAGE: CHOICE -->
+  <div id="pg-choice" class="page">
+    <div class="logo">🎯</div>
+    <div class="app-title" style="font-size:24px">開始訓練</div>
+    <div class="app-sub" style="text-align:center">校準完成！<br>建議先進行評估以產生個人化處方</div>
+    <div class="choice-btns">
+      <button class="btn btn-primary" onclick="startAssessment()">先進行評估</button>
+      <button class="btn btn-secondary" onclick="startTrainingDirect()">直接開始訓練</button>
+    </div>
+    <div class="choice-last" id="choice-last-rx"></div>
+  </div>
+
+  <!-- PAGE: ASSESSMENT -->
+  <div id="pg-assessment" class="page">
+    <canvas id="assess-canvas"></canvas>
+    <div id="assess-hud">
+      <div class="hud-chip" id="assess-label">評估中…</div>
+      <div class="hud-chip">⏱ <span id="assess-timer">0s</span></div>
+      <div class="hud-chip" id="assess-step-chip">1/4</div>
+    </div>
+    <div id="assess-instruction"></div>
+    <div id="assess-progress-bar"><div id="assess-progress-fill" style="width:0%"></div></div>
+  </div>
+
+  <!-- PAGE: ASSESSMENT RESULT -->
+  <div id="pg-assessment-result" class="page">
+    <div class="result-title">評估完成 📊</div>
+    <div class="assess-score-grid">
+      <div class="assess-score-card">
+        <div class="assess-score-label">固視穩定</div>
+        <div class="assess-score-val" id="ar-fixation">--</div>
+      </div>
+      <div class="assess-score-card">
+        <div class="assess-score-label">水平追蹤</div>
+        <div class="assess-score-val" id="ar-h">--</div>
+      </div>
+      <div class="assess-score-card">
+        <div class="assess-score-label">垂直追蹤</div>
+        <div class="assess-score-val" id="ar-v">--</div>
+      </div>
+      <div class="assess-score-card">
+        <div class="assess-score-label">快速跳視</div>
+        <div class="assess-score-val" id="ar-saccade">--</div>
+      </div>
+    </div>
+    <div class="rx-box">
+      <div class="rx-label">📋 個人化訓練處方</div>
+      <div class="rx-row"><span>起始速度</span><span class="rx-val" id="ar-speed">--</span></div>
+      <div class="rx-row"><span>優先路徑</span><span class="rx-val" id="ar-path">--</span></div>
+      <div class="rx-row"><span>偏側方向</span><span class="rx-val" id="ar-bias">--</span></div>
+    </div>
+    <div class="btn-row" style="margin-bottom:24px">
+      <button class="btn btn-secondary" onclick="showPage('pg-choice')">重新選擇</button>
+      <button class="btn btn-primary" onclick="startTrainingFromAssessment()">開始訓練</button>
     </div>
   </div>
 
@@ -379,9 +464,9 @@ function renderCalibPoint() {
 
   if (calibIdx >= CALIB_POINTS.length) {
     drawCalibState(ctx, canvas.width, canvas.height, -1, 0);
-    document.getElementById('calib-instruction').textContent = '校準完成！開始訓練 🎉';
+    document.getElementById('calib-instruction').textContent = '校準完成！🎉';
     document.getElementById('calib-progress').textContent = `已完成 ${CALIB_POINTS.length} / ${CALIB_POINTS.length} 個校準點`;
-    setTimeout(startTraining, 1000);
+    setTimeout(showChoicePage, 1000);
     return;
   }
 
@@ -473,6 +558,239 @@ function startCalibHold(canvas, ctx, px, py) {
   calibAnimFrame = requestAnimationFrame(tick);
 }
 
+// ── choice page ──
+function showChoicePage() {
+  const rx = getStore().assessmentResult;
+  const el = document.getElementById('choice-last-rx');
+  if (rx) {
+    const d = new Date(rx.timestamp).toLocaleDateString('zh-TW');
+    el.textContent = `上次評估：${d} · 速度${rx.startSpeed} · 路徑${rx.priorityPath}`;
+  } else {
+    el.textContent = '尚無評估記錄，建議先進行評估';
+  }
+  showPage('pg-choice');
+}
+
+function startTrainingDirect() { startTraining(); }
+function startTrainingFromAssessment() { startTraining(); }
+
+// ── assessment engine ──
+const ASSESS_TESTS = [
+  { id:'fixation',  label:'固視測試',   dur:15,
+    instr:'請凝視中央綠點\n保持頭部不動' },
+  { id:'h-pursuit', label:'H 水平追蹤', dur:20,
+    instr:'用眼睛追蹤移動的藍點\n頭部保持不動' },
+  { id:'v-pursuit', label:'V 垂直追蹤', dur:20,
+    instr:'用眼睛追蹤移動的藍點\n頭部保持不動' },
+  { id:'saccade',   label:'快速跳視',   dur:20,
+    instr:'目標每次跳動時\n快速用眼睛找到它' },
+];
+
+let assessTestIdx       = 0;
+let assessSamples       = [];
+let assessResults       = {};
+let assessAnimFrame     = null;
+let assessTimerInterval = null;
+let assessPollerInterval = null;
+let assessCurrentTarget = null;
+
+function startAssessment() {
+  if (!camReady) { toast('相機未就緒'); return; }
+  assessTestIdx = 0;
+  assessResults = {};
+  showPage('pg-assessment');
+  setTimeout(runNextAssessTest, 200);
+}
+
+function stopAssessAnim() {
+  if (assessAnimFrame) { cancelAnimationFrame(assessAnimFrame); assessAnimFrame = null; }
+}
+
+function runNextAssessTest() {
+  stopAssessAnim();
+  clearInterval(assessTimerInterval);
+  clearInterval(assessPollerInterval);
+
+  if (assessTestIdx >= ASSESS_TESTS.length) { finishAssessment(); return; }
+  const test = ASSESS_TESTS[assessTestIdx];
+  assessSamples = [];
+  assessCurrentTarget = null;
+
+  document.getElementById('assess-label').textContent     = test.label;
+  document.getElementById('assess-step-chip').textContent = `${assessTestIdx+1}/${ASSESS_TESTS.length}`;
+  document.getElementById('assess-timer').textContent     = test.dur + 's';
+  document.getElementById('assess-progress-fill').style.width =
+    (assessTestIdx / ASSESS_TESTS.length * 100) + '%';
+
+  const instr = document.getElementById('assess-instruction');
+  instr.style.whiteSpace = 'pre-line';
+  instr.textContent  = test.instr;
+  instr.style.display = 'block';
+  setTimeout(() => { instr.style.display = 'none'; runAssessTest(test); }, 2000);
+}
+
+function runAssessTest(test) {
+  const canvas = document.getElementById('assess-canvas');
+  const ctx    = canvas.getContext('2d');
+  canvas.width  = window.innerWidth;
+  canvas.height = window.innerHeight;
+  const W = canvas.width, H = canvas.height, cx = W/2, cy = H/2;
+
+  let remaining = test.dur;
+
+  assessPollerInterval = setInterval(() => {
+    const pos = captureHeadPos();
+    if (!pos) return;
+    const sx = (1 - pos.cx) * W, sy = pos.cy * H;
+    assessSamples.push({ x:sx, y:sy, t:Date.now(),
+      tx: assessCurrentTarget?.x ?? null, ty: assessCurrentTarget?.y ?? null,
+      detected: pos.detected });
+  }, 200);
+
+  assessTimerInterval = setInterval(() => {
+    remaining--;
+    document.getElementById('assess-timer').textContent = remaining + 's';
+    if (remaining <= 0) {
+      clearInterval(assessTimerInterval);
+      clearInterval(assessPollerInterval);
+      stopAssessAnim();
+      scoreAssessTest(test);
+    }
+  }, 1000);
+
+  if (test.id === 'fixation') {
+    ctx.clearRect(0,0,W,H);
+    ctx.beginPath(); ctx.arc(cx,cy,28,0,Math.PI*2);
+    ctx.fillStyle='rgba(34,197,94,.12)'; ctx.fill();
+    ctx.beginPath(); ctx.arc(cx,cy,10,0,Math.PI*2);
+    ctx.fillStyle='#22c55e'; ctx.fill();
+    assessCurrentTarget = {x:cx, y:cy};
+
+  } else if (test.id === 'h-pursuit') {
+    let t = 0;
+    (function frame() {
+      ctx.clearRect(0,0,W,H);
+      ctx.strokeStyle='rgba(255,255,255,.06)'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(W*.12,cy); ctx.lineTo(W*.88,cy); ctx.stroke();
+      const tx = cx + W*0.38*Math.sin(t);
+      assessCurrentTarget = {x:tx, y:cy};
+      ctx.beginPath(); ctx.arc(tx,cy,20,0,Math.PI*2);
+      ctx.fillStyle='rgba(56,189,248,.12)'; ctx.fill();
+      ctx.beginPath(); ctx.arc(tx,cy,10,0,Math.PI*2);
+      ctx.fillStyle='#38bdf8'; ctx.fill();
+      t += 0.025;
+      assessAnimFrame = requestAnimationFrame(frame);
+    })();
+
+  } else if (test.id === 'v-pursuit') {
+    let t = 0;
+    (function frame() {
+      ctx.clearRect(0,0,W,H);
+      ctx.strokeStyle='rgba(255,255,255,.06)'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(cx,H*.18); ctx.lineTo(cx,H*.82); ctx.stroke();
+      const ty = cy + H*0.32*Math.sin(t);
+      assessCurrentTarget = {x:cx, y:ty};
+      ctx.beginPath(); ctx.arc(cx,ty,20,0,Math.PI*2);
+      ctx.fillStyle='rgba(167,139,250,.12)'; ctx.fill();
+      ctx.beginPath(); ctx.arc(cx,ty,10,0,Math.PI*2);
+      ctx.fillStyle='#a78bfa'; ctx.fill();
+      t += 0.025;
+      assessAnimFrame = requestAnimationFrame(frame);
+    })();
+
+  } else if (test.id === 'saccade') {
+    const grid = [];
+    for (const fy of [.22,.5,.78])
+      for (const fx of [.22,.5,.78])
+        grid.push({x:W*fx, y:H*fy});
+    let curIdx = 0, fc = 0;
+    const HOLD = Math.round(1.5 * 60);
+    (function frame() {
+      ctx.clearRect(0,0,W,H);
+      ctx.strokeStyle='rgba(255,255,255,.18)'; ctx.lineWidth=1;
+      ctx.beginPath(); ctx.moveTo(cx-10,cy); ctx.lineTo(cx+10,cy); ctx.stroke();
+      ctx.beginPath(); ctx.moveTo(cx,cy-10); ctx.lineTo(cx,cy+10); ctx.stroke();
+      const tgt = grid[curIdx];
+      assessCurrentTarget = tgt;
+      ctx.beginPath(); ctx.arc(tgt.x,tgt.y,18,0,Math.PI*2);
+      ctx.fillStyle='rgba(251,191,36,.15)'; ctx.fill();
+      ctx.beginPath(); ctx.arc(tgt.x,tgt.y,9,0,Math.PI*2);
+      ctx.fillStyle='#fbbf24'; ctx.fill();
+      if (++fc >= HOLD) {
+        fc = 0;
+        curIdx = (curIdx + 1 + Math.floor(Math.random()*7)) % grid.length;
+      }
+      assessAnimFrame = requestAnimationFrame(frame);
+    })();
+  }
+}
+
+function scoreAssessTest(test) {
+  const n = assessSamples.length;
+  if (n < 3) {
+    assessResults[test.id] = { score:50, biasX:0, biasY:0 };
+  } else {
+    const xs = assessSamples.map(s=>s.x);
+    const ys = assessSamples.map(s=>s.y);
+    const sd = Math.sqrt(variance(xs) + variance(ys));
+    const [lo, rng] = test.id === 'fixation' ? [10,140] : [20,180];
+    const score = Math.round(Math.max(0, Math.min(100, 100 - (sd-lo)/rng*100)));
+    const W = window.innerWidth, H = window.innerHeight;
+    const biasX = xs.reduce((a,b)=>a+b,0)/n - W/2;
+    const biasY = ys.reduce((a,b)=>a+b,0)/n - H/2;
+    assessResults[test.id] = { score, biasX, biasY };
+  }
+  assessTestIdx++;
+  setTimeout(runNextAssessTest, 500);
+}
+
+function finishAssessment() {
+  document.getElementById('assess-progress-fill').style.width = '100%';
+
+  const fix  = assessResults['fixation']?.score  ?? 50;
+  const hSc  = assessResults['h-pursuit']?.score ?? 50;
+  const vSc  = assessResults['v-pursuit']?.score ?? 50;
+  const sac  = assessResults['saccade']?.score   ?? 50;
+  const bHraw = assessResults['h-pursuit']?.biasX ?? 0;
+  const bVraw = assessResults['v-pursuit']?.biasY ?? 0;
+
+  const avg = (fix + hSc + vSc + sac) / 4;
+  const startSpeed = avg < 50 ? '慢' : avg < 75 ? '中' : '快';
+
+  // lowest pursuit score → priority path, correcting for bias direction
+  const lowest = hSc <= vSc && hSc <= sac ? 'h'
+               : vSc <= sac              ? 'v' : 'saccade';
+  let priorityPath;
+  if      (lowest === 'h')      priorityPath = bHraw > 0 ? 'H_LEFT'  : 'H_RIGHT';
+  else if (lowest === 'v')      priorityPath = bVraw > 0 ? 'V_DOWN'  : 'V_UP';
+  else                          priorityPath = 'SACCADE';
+
+  const biasH = Math.abs(bHraw) < 40 ? null : bHraw > 0 ? '右偏' : '左偏';
+  const biasV = Math.abs(bVraw) < 30 ? null : bVraw > 0 ? '下偏' : '上偏';
+
+  const rx = { fixationScore:fix, hScore:hSc, vScore:vSc, saccadeScore:sac,
+               biasH, biasV, bHraw, bVraw, startSpeed, priorityPath,
+               timestamp: new Date().toISOString() };
+  const store = getStore();
+  store.assessmentResult = rx;
+  store.lastBias = { h: biasH, v: biasV };
+  saveStore(store);
+
+  // render
+  const scoreClass = v => v>=75?'score-good':v>=50?'score-mid':'score-low';
+  [['ar-fixation',fix],['ar-h',hSc],['ar-v',vSc],['ar-saccade',sac]].forEach(([id,v]) => {
+    const el = document.getElementById(id);
+    el.textContent = v;
+    el.className = 'assess-score-val ' + scoreClass(v);
+  });
+  const pathLabel = {H_RIGHT:'水平右',H_LEFT:'水平左',V_UP:'垂直上',V_DOWN:'垂直下',SACCADE:'跳視'};
+  document.getElementById('ar-speed').textContent = startSpeed;
+  document.getElementById('ar-path').textContent  = pathLabel[priorityPath] ?? priorityPath;
+  document.getElementById('ar-bias').textContent  = biasH ?? biasV ?? '居中';
+
+  showPage('pg-assessment-result');
+}
+
 // ── PATH SYSTEM ──
 const PURSUIT_LEVELS = [
   { speed: 0.3, amplitude: 0.30, label: '慢' },
@@ -491,7 +809,15 @@ const PATH_META = {
 };
 
 function selectPursuitPlan() {
-  const lb = getStore().lastBias || {};
+  const store = getStore();
+  const rx = store.assessmentResult;
+  if (rx?.priorityPath) {
+    const p = rx.priorityPath;
+    if (p === 'SACCADE') return ['H_RIGHT', 'V_UP', 'FIGURE8'];
+    const rest = ['H_RIGHT','H_LEFT','V_UP','V_DOWN','FIGURE8'].filter(x => x !== p);
+    return [p, rest[0], rest[1]];
+  }
+  const lb = store.lastBias || {};
   if (lb.h === '左偏') return ['H_RIGHT', 'V_UP',    'FIGURE8'];
   if (lb.h === '右偏') return ['H_LEFT',  'V_UP',    'FIGURE8'];
   if (lb.v === '上偏') return ['V_DOWN',  'H_RIGHT', 'FIGURE8'];
@@ -500,12 +826,17 @@ function selectPursuitPlan() {
 }
 
 function buildSegments() {
+  const rx = getStore().assessmentResult;
+  const speedLimit = rx?.startSpeed ?? null; // '慢'|'中'|'快'|null
   const segs = [];
   for (const pathId of selectPursuitPlan()) {
     for (const lv of PURSUIT_LEVELS) {
+      if (speedLimit === '慢' && lv.label !== '慢') continue;
+      if (speedLimit === '中' && lv.label === '快') continue;
       segs.push({ type: 'pursuit', pathId, level: lv });
     }
   }
+  if (segs.length === 0) segs.push({ type:'pursuit', pathId:'H_RIGHT', level:PURSUIT_LEVELS[0] });
   segs.push({ type: 'saccade' });
   return segs;
 }
