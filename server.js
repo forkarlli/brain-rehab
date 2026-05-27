@@ -227,6 +227,22 @@ app.post('/api/home-training', async (req, res) => {
   }
 });
 
+app.get('/api/home-training/:patientId', async (req, res) => {
+  if (!HomeTraining || !dbReady) {
+    return res.status(503).json({ error: 'Database not ready' });
+  }
+  try {
+    const docs = await HomeTraining.find({ patientId: req.params.patientId })
+      .sort({ date: -1 })
+      .limit(30)
+      .lean();
+    res.json(docs);
+  } catch (e) {
+    console.error('home-training GET 失敗:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // ===== AI ENDPOINTS =====
 const PARSE_VOICE_SYSTEM = `你是功能神經學診所助理，將語音紀錄解析為肌肉張力評估數據。
 辨識中英混合輸入（如 upper trap、SCM、hamstring、E1、V3、conv-up 等術語）。
