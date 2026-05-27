@@ -301,7 +301,13 @@ video{pointer-events:none!important}
     </div>
     <div style="width:100%;max-width:420px;margin:4px 0 12px">
       <div class="chart-label">眼球軌跡記錄</div>
-      <canvas id="gaze-trail-canvas" style="width:100%;height:200px;border-radius:8px;display:block;background:rgba(255,255,255,.03)"></canvas>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
+        <canvas id="trail-fixation"  style="grid-column:1/-1;width:100%;height:150px;border-radius:8px;display:block"></canvas>
+        <canvas id="trail-h-pursuit" style="width:100%;height:150px;border-radius:8px;display:block"></canvas>
+        <canvas id="trail-v-pursuit" style="width:100%;height:150px;border-radius:8px;display:block"></canvas>
+        <canvas id="trail-h-saccade" style="width:100%;height:150px;border-radius:8px;display:block"></canvas>
+        <canvas id="trail-v-saccade" style="width:100%;height:150px;border-radius:8px;display:block"></canvas>
+      </div>
     </div>
     <div class="rx-box">
       <div class="rx-label">📋 個人化訓練處方</div>
@@ -1099,13 +1105,26 @@ function interpretAssessment(rx) {
   document.getElementById('neuro-box').style.display = 'block';
 }
 
-// ── Gaze trail chart ──
+// ── Gaze trail charts (5 individual) ──
 function drawGazeTrail() {
-  const canvas = document.getElementById('gaze-trail-canvas');
+  const TEST_CFG = [
+    { id:'fixation',  label:'固視穩定', color:'#e2e8f0' },
+    { id:'h-pursuit', label:'H 追蹤',   color:'#38bdf8' },
+    { id:'v-pursuit', label:'V 追蹤',   color:'#4ade80' },
+    { id:'h-saccade', label:'H 跳視',   color:'#fb923c' },
+    { id:'v-saccade', label:'V 跳視',   color:'#c084fc' },
+  ];
+  for (const { id, label, color } of TEST_CFG) {
+    drawTrailChart(id, label, color);
+  }
+}
+
+function drawTrailChart(testId, label, color) {
+  const canvas = document.getElementById('trail-' + testId);
   if (!canvas) return;
   const DPR = window.devicePixelRatio || 1;
-  const W = canvas.offsetWidth || 400;
-  const H = 200;
+  const W = canvas.offsetWidth || 200;
+  const H = 150;
   canvas.width  = W * DPR;
   canvas.height = H * DPR;
   const ctx = canvas.getContext('2d');
@@ -1114,9 +1133,9 @@ function drawGazeTrail() {
   ctx.fillStyle = '#0f172a';
   ctx.fillRect(0, 0, W, H);
 
+  // aspect-ratio-preserved coordinate mapping
   const sW = window.innerWidth, sH = window.innerHeight;
-  const screenAspect = sW / sH;
-  const canvasAspect = W / H;
+  const screenAspect = sW / sH, canvasAspect = W / H;
   let sx, sy, ox, oy;
   if (canvasAspect > screenAspect) {
     sy = H / sH; sx = sy; ox = (W - sW * sx) / 2; oy = 0;
@@ -1126,21 +1145,12 @@ function drawGazeTrail() {
   const toX = v => ox + v * sx;
   const toY = v => oy + v * sy;
 
-  const TEST_CFG = [
-    { id:'fixation',  label:'固視',  color:'#e2e8f0' },
-    { id:'h-pursuit', label:'H追蹤', color:'#38bdf8' },
-    { id:'v-pursuit', label:'V追蹤', color:'#4ade80' },
-    { id:'h-saccade', label:'H跳視', color:'#fb923c' },
-    { id:'v-saccade', label:'V跳視', color:'#c084fc' },
-  ];
+  const pts = trailData[testId];
 
-  for (const { id, color } of TEST_CFG) {
-    const pts = trailData[id];
-    if (!pts || pts.length < 2) continue;
-
-    // target path dashed
+  if (pts && pts.length >= 2) {
+    // target path (dashed)
     ctx.save();
-    ctx.setLineDash([4, 5]);
+    ctx.setLineDash([3, 4]);
     ctx.strokeStyle = color;
     ctx.globalAlpha = 0.35;
     ctx.lineWidth = 1;
@@ -1154,11 +1164,11 @@ function drawGazeTrail() {
     ctx.stroke();
     ctx.restore();
 
-    // actual gaze path solid
+    // gaze path (solid)
     ctx.save();
     ctx.setLineDash([]);
     ctx.strokeStyle = color;
-    ctx.globalAlpha = 0.85;
+    ctx.globalAlpha = 0.9;
     ctx.lineWidth = 1.5;
     ctx.lineJoin = 'round';
     ctx.beginPath();
@@ -1168,21 +1178,32 @@ function drawGazeTrail() {
     }
     ctx.stroke();
     ctx.restore();
+  } else {
+    ctx.fillStyle = 'rgba(255,255,255,.12)';
+    ctx.font = '11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText('無資料', W / 2, H / 2);
   }
 
-  // legend (top-right)
-  ctx.font = `${10 * (DPR > 1 ? 1 : 1)}px sans-serif`;
-  TEST_CFG.forEach(({ id, label, color }, i) => {
-    const lx = W - 52, ly = 12 + i * 16;
-    ctx.fillStyle = color;
-    ctx.globalAlpha = 0.9;
-    ctx.fillRect(lx - 14, ly - 2, 10, 3);
-    ctx.globalAlpha = 1;
-    ctx.fillStyle = '#94a3b8';
-    ctx.textAlign = 'left';
-    ctx.textBaseline = 'middle';
-    ctx.fillText(label, lx - 1, ly);
-  });
+  // title (top-left)
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = color;
+  ctx.font = 'bold 11px sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'top';
+  ctx.fillText(label, 8, 7);
+
+  // score (top-right)
+  const score = assessResults[testId]?.score;
+  if (score != null) {
+    const sc = score >= 75 ? '#4ade80' : score >= 50 ? '#fbbf24' : '#f87171';
+    ctx.fillStyle = sc;
+    ctx.font = 'bold 14px sans-serif';
+    ctx.textAlign = 'right';
+    ctx.textBaseline = 'top';
+    ctx.fillText(score, W - 8, 6);
+  }
 }
 
 // ── PATH SYSTEM ──
