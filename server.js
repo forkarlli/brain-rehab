@@ -33,9 +33,10 @@ app.use(express.static(path.join(__dirname)));
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // ===== MONGODB =====
-let Patient    = null;
-let Assessment = null;
-let dbReady    = false;
+let Patient      = null;
+let Assessment   = null;
+let HomeTraining = null;
+let dbReady      = false;
 
 if (process.env.MONGODB_URI) {
   const mongoose = require('mongoose');
@@ -49,8 +50,22 @@ if (process.env.MONGODB_URI) {
     { strict: false, versionKey: false }
   );
 
-  Patient    = mongoose.model('Patient',    patientSchema,    'patients');
-  Assessment = mongoose.model('Assessment', assessmentSchema, 'assessments');
+  const homeTrainingSchema = new mongoose.Schema({
+    patientId:    { type: String, index: true },
+    protocol:     String,
+    difficulty:   String,
+    duration:     Number,
+    pursuitScore: Number,
+    stability:    Number,
+    bias:         Number,
+    overallScore: Number,
+    date:         String,
+    createdAt:    { type: Date, default: Date.now },
+  }, { versionKey: false });
+
+  Patient     = mongoose.model('Patient',     patientSchema,     'patients');
+  Assessment  = mongoose.model('Assessment',  assessmentSchema,  'assessments');
+  HomeTraining = mongoose.model('HomeTraining', homeTrainingSchema, 'home_training_sessions');
 
   mongoose.connect(process.env.MONGODB_URI)
     .then(async () => {
@@ -195,6 +210,21 @@ app.post('/api/assessments/bulk', async (req, res) => {
     }
   }
   res.json({ ok: true, stored: false });
+});
+
+// ===== HOME TRAINING ENDPOINT =====
+app.post('/api/home-training', async (req, res) => {
+  const { patientId, protocol, difficulty, duration, pursuitScore, stability, bias, overallScore, date } = req.body;
+  if (!HomeTraining || !dbReady) {
+    return res.status(503).json({ error: 'Database not ready' });
+  }
+  try {
+    const doc = await HomeTraining.create({ patientId, protocol, difficulty, duration, pursuitScore, stability, bias, overallScore, date });
+    res.json({ success: true, sessionId: doc._id });
+  } catch (e) {
+    console.error('home-training POST 失敗:', e.message);
+    res.status(500).json({ error: e.message });
+  }
 });
 
 // ===== AI ENDPOINTS =====
