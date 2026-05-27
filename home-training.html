@@ -497,6 +497,19 @@ function startTraining() {
   trainStartTime = Date.now();
   gazeData = [];
   metrics.segments = [];
+
+  // Register ONE global listener for the entire training session.
+  // Replacing the listener per-segment caused silent failures on iPad Safari.
+  webgazer.setGazeListener((data, elapsedTime) => {
+    if (!data) return;
+    const tp = currentTargetPos;
+    const sample = { x: data.x, y: data.y, t: Date.now(),
+      tx: tp ? tp.x : null, ty: tp ? tp.y : null };
+    trialGaze.push(sample);
+    gazeData.push(sample);
+    moveGazeDot(data.x, data.y);
+  });
+
   runSegment();
 }
 
@@ -527,29 +540,7 @@ function runSegment() {
 
   // ── DEBUG ──
   console.log(`[DBG] runSegment ${segIdx+1}/${segments.length}  webgazerReady=${webgazerReady}  seg.type=${seg.type}`);
-  if (segIdx === 0) alert(`段1開始\nwebgazerReady=${webgazerReady}\nseg.type=${seg.type}`);
-
-  if (webgazerReady) {
-    let _dbgCount = 0;
-    webgazer.setGazeListener((data) => {
-      if (!data) {
-        if (_dbgCount < 10) { _dbgCount++; console.log(`[DBG] gaze callback: data=null (${_dbgCount})`); }
-        return;
-      }
-      const tp = currentTargetPos;
-      const sample = { x: data.x, y: data.y, t: Date.now(),
-        tx: tp ? tp.x : null, ty: tp ? tp.y : null };
-      trialGaze.push(sample);
-      gazeData.push(sample);
-      moveGazeDot(data.x, data.y);
-      if (_dbgCount < 10) {
-        _dbgCount++;
-        console.log(`[DBG] gaze #${_dbgCount}  x=${Math.round(data.x)} y=${Math.round(data.y)}  tx=${tp ? Math.round(tp.x) : 'null'}  trialGaze.len=${trialGaze.length}`);
-      }
-    });
-  } else {
-    console.warn('[DBG] webgazerReady=false → gaze listener NOT registered for this segment');
-  }
+  if (segIdx === 0) alert(`段1開始\nwebgazerReady=${webgazerReady}\nseg.type=${seg.type}\n(全局listener已在startTraining設定)`);
 
   let elapsed = 0;
   segInterval = setInterval(() => {
@@ -568,7 +559,7 @@ function runSegment() {
 function finishSegment() {
   stopAnim();
   currentTargetPos = null;
-  if (webgazerReady) webgazer.setGazeListener(null);
+  // global listener stays active — do NOT call setGazeListener(null) here
 
   // ── DEBUG segment summary ──
   const _n = trialGaze.length;
