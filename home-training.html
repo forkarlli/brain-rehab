@@ -974,8 +974,10 @@ function scoreAssessTest(test) {
     if (test.id === 'fixation') {
       const bcea    = calcBCEA(assessSamples);
       const entropy = calcSampleEntropy(xs);
-      const bceaNorm    = Math.min(1, Math.max(0, (bcea - 500) / 7500));
-      const entropyNorm = Math.min(1, Math.max(0, (entropy - 0.3) / 2.2));
+      // BCEA:    500 px² → 100,  5000 px² → 0
+      // Entropy: 0.5     → 100,  3.0      → 0
+      const bceaNorm    = Math.min(1, Math.max(0, (bcea - 500) / 4500));
+      const entropyNorm = Math.min(1, Math.max(0, (entropy - 0.5) / 2.5));
       score   = Math.round(Math.max(0, Math.min(100, 100 - bceaNorm*60 - entropyNorm*40)));
       details = { bcea: Math.round(bcea), entropy: +entropy.toFixed(2) };
 
@@ -987,11 +989,15 @@ function scoreAssessTest(test) {
         const rms     = calcRMSError(gazeArr, tgtArr);
         const gain    = calcPursuitGain(gazeArr, tgtArr);
         const catchup = countCatchupSaccades(gazeArr);
+        // Gain:   deviation from 1.0; ±0.7 tolerance → 0 (range 0.3–1.7)
         const gainScore = Math.round(Math.max(0, Math.min(100, 100 - Math.abs(gain-1)/0.7*100)));
-        const rmsScore  = Math.round(Math.max(0, Math.min(100, 100 - (rms-0.04*W)/(0.36*W)*100)));
-        const csScore   = Math.round(Math.max(0, Math.min(100, 100 - catchup*8)));
+        // RMS:    30 px → 100,  200 px → 0
+        const rmsScore  = Math.round(Math.max(0, Math.min(100, 100 - (rms-30)/170*100)));
+        // Catch-up: 0 → 100,  15+ → 0
+        const csScore   = Math.round(Math.max(0, Math.min(100, 100 - catchup/15*100)));
         score   = Math.round(gainScore*0.4 + rmsScore*0.4 + csScore*0.2);
         details = { gain: +gain.toFixed(2), rmsError: Math.round(rms), catchupCount: catchup };
+        console.log(`[SCORE] ${test.id} gainScore=${gainScore} rmsScore=${rmsScore} csScore=${csScore} → ${score}`);
       } else {
         score = 50;
       }
@@ -1002,11 +1008,14 @@ function scoreAssessTest(test) {
       let accuracy = 50;
       if (withTgt.length >= 3) {
         const rms = calcRMSError(withTgt.map(s=>({x:s.x,y:s.y})), withTgt.map(s=>({x:s.tx,y:s.ty})));
-        accuracy = Math.round(Math.max(0, Math.min(100, 100 - (rms-0.04*W)/(0.36*W)*100)));
+        // RMS:  30 px → 100,  200 px → 0
+        accuracy = Math.round(Math.max(0, Math.min(100, 100 - (rms-30)/170*100)));
       }
-      const latencyScore = Math.round(Math.max(0, Math.min(100, 100 - (latency-150)/250*100)));
+      // Latency: 150 ms → 100,  500 ms → 0
+      const latencyScore = Math.round(Math.max(0, Math.min(100, 100 - (latency-150)/350*100)));
       score   = Math.round(latencyScore*0.5 + accuracy*0.5);
       details = { latency: Math.round(latency), accuracy };
+      console.log(`[SCORE] ${test.id} latencyScore=${latencyScore} accuracy=${accuracy} → ${score}`);
     }
   }
 
@@ -1670,14 +1679,19 @@ function countCatchupSaccades(gazeArr) {
 }
 
 function calcPursuitGain(gazeArr, targetArr) {
-  const gazeVels = [], targetVels = [];
-  for (let i = 1; i < gazeArr.length; i++) {
-    gazeVels.push(Math.hypot(gazeArr[i].x - gazeArr[i-1].x, gazeArr[i].y - gazeArr[i-1].y));
-    targetVels.push(Math.hypot(targetArr[i].x - targetArr[i-1].x, targetArr[i].y - targetArr[i-1].y));
-  }
-  const avgGaze   = gazeVels.reduce((a,b)=>a+b,0) / gazeVels.length;
-  const avgTarget = targetVels.reduce((a,b)=>a+b,0) / targetVels.length;
-  return avgTarget > 0 ? Math.min(2, avgGaze / avgTarget) : 0;
+  // Velocity-based gain is unreliable at 200ms polling (noise dominates).
+  // Use variance-ratio on the dominant target axis instead:
+  // gain = sd(gaze on dominant axis) / sd(target on dominant axis)
+  if (gazeArr.length < 3) return 0;
+  const gxs = gazeArr.map(p => p.x),  gys = gazeArr.map(p => p.y);
+  const txs = targetArr.map(p => p.x), tys = targetArr.map(p => p.y);
+  const varTX = variance(txs), varTY = variance(tys);
+  const sdT = Math.sqrt(Math.max(varTX, varTY));
+  if (sdT < 1) return 0;  // target not moving — skip
+  const sdG = varTX >= varTY ? Math.sqrt(variance(gxs)) : Math.sqrt(variance(gys));
+  const gain = Math.min(2.5, sdG / sdT);
+  console.log(`[GAIN] n=${gazeArr.length} varTX=${varTX.toFixed(0)} varTY=${varTY.toFixed(0)} sdT=${sdT.toFixed(1)} sdG=${sdG.toFixed(1)} gain=${gain.toFixed(2)}`);
+  return gain;
 }
 
 // ── end training ──
