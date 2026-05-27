@@ -510,6 +510,19 @@ function startTraining() {
     moveGazeDot(data.x, data.y);
   });
 
+  // DEBUG: verify getCurrentPrediction() works on iPad (remove after diagnosis)
+  let _testCount = 0;
+  const _testInterval = setInterval(() => {
+    webgazer.getCurrentPrediction().then(pred => {
+      _testCount++;
+      if (_testCount === 1) {
+        alert('WebGazer 預測測試:\n' +
+          (pred ? 'x=' + pred.x.toFixed(0) + ' y=' + pred.y.toFixed(0) : 'null'));
+        clearInterval(_testInterval);
+      }
+    });
+  }, 1000);
+
   runSegment();
 }
 
