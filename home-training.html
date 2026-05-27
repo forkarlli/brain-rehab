@@ -44,7 +44,8 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 /* ── calibration ── */
 #pg-calibration{background:#111827}
-#calib-canvas{position:absolute;top:0;left:0;width:100%;height:100%;cursor:crosshair}
+#calib-canvas{position:absolute;top:0;left:0;width:100%;height:100%;cursor:crosshair;z-index:9999}
+#webgazerVideoContainer,#webgazerFaceOverlay,#webgazerVideoFeed,video{pointer-events:none!important}
 #calib-instruction{position:absolute;top:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,.7);padding:12px 24px;border-radius:12px;font-size:15px;color:#e2e8f0;pointer-events:none;text-align:center}
 #calib-progress{position:absolute;bottom:30px;left:50%;transform:translateX(-50%);color:#94a3b8;font-size:13px}
 
@@ -295,6 +296,8 @@ let calibIdx = 0;
 
 function goCalibration() {
   showPage('pg-calibration');
+  document.querySelectorAll('#webgazerVideoContainer, video')
+    .forEach(el => el.style.pointerEvents = 'none');
   calibIdx = 0;
   renderCalibPoint();
 }
@@ -336,7 +339,7 @@ function renderCalibPoint() {
     const cx = e.touches ? e.touches[0].clientX : e.clientX;
     const cy = e.touches ? e.touches[0].clientY : e.clientY;
     const dist = Math.hypot(cx - px, cy - py);
-    if (dist > 60) return;
+    if (dist > 80) return;
 
     canvas.removeEventListener('touchstart', onCalibTap);
     canvas.removeEventListener('click',      onCalibTap);
