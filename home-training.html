@@ -136,7 +136,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
     <div id="train-hud">
       <div class="hud-chip" id="train-label">準備中…</div>
       <div class="hud-chip">⏱ <span id="train-timer">0s</span></div>
-      <div class="hud-chip" id="train-phase-chip">回合 1/2</div>
+      <div class="hud-chip" id="train-phase-chip">1/10</div>
+      <div class="hud-chip" id="train-speed-chip">速度：慢</div>
+      <div class="hud-chip" id="train-fatigue-chip" style="color:#4ade80">疲勞：良好</div>
     </div>
     <div id="gaze-dot"></div>
   </div>
@@ -353,40 +355,89 @@ function renderCalibPoint() {
   canvas.addEventListener('click',      onCalibTap);
 }
 
-// ── training engine ──
-const PHASES = [
-  { id:'pursuit', label:'Smooth Pursuit 追蹤', duration:30 },
-  { id:'saccade', label:'Saccade 快速眼動',    duration:30 },
+// ── PATH SYSTEM ──
+const PURSUIT_LEVELS = [
+  { speed: 0.3, amplitude: 0.30, label: '慢' },
+  { speed: 0.6, amplitude: 0.65, label: '中' },
+  { speed: 1.0, amplitude: 0.90, label: '快' },
 ];
-let phaseIdx = 0;
-let phaseTimer = 0;
-let phaseInterval = null;
-let trialGaze = [];  // gaze samples for current phase
 
-// per-phase metrics
-const metrics = { pursuit: null, saccade: null };
+const PATH_META = {
+  H_RIGHT:       { label: 'H水平右', color: '#38bdf8' },
+  H_LEFT:        { label: 'H水平左', color: '#38bdf8' },
+  V_UP:          { label: 'V垂直上',  color: '#a78bfa' },
+  V_DOWN:        { label: 'V垂直下',  color: '#a78bfa' },
+  FIGURE8:       { label: '圖8',      color: '#4ade80' },
+  DIAGONAL_RALH: { label: '對角右前', color: '#fbbf24' },
+  DIAGONAL_LARP: { label: '對角左前', color: '#fbbf24' },
+};
+
+function selectPursuitPlan() {
+  const lb = getStore().lastBias || {};
+  if (lb.h === '左偏') return ['H_RIGHT', 'V_UP',    'FIGURE8'];
+  if (lb.h === '右偏') return ['H_LEFT',  'V_UP',    'FIGURE8'];
+  if (lb.v === '上偏') return ['V_DOWN',  'H_RIGHT', 'FIGURE8'];
+  if (lb.v === '下偏') return ['V_UP',    'H_RIGHT', 'FIGURE8'];
+  return ['H_RIGHT', 'V_UP', 'FIGURE8'];
+}
+
+function buildSegments() {
+  const segs = [];
+  for (const pathId of selectPursuitPlan()) {
+    for (const lv of PURSUIT_LEVELS) {
+      segs.push({ type: 'pursuit', pathId, level: lv });
+    }
+  }
+  segs.push({ type: 'saccade' });
+  return segs;
+}
+
+// ── training engine ──
+let segments    = [];
+let segIdx      = 0;
+let segTimer    = 0;
+let segInterval = null;
+let trialGaze   = [];
+let currentSpeed    = 0.3;
+let currentSpeedMax = 0.3;
+let lastFatigueVar  = null;
+const metrics = { pursuit: [], saccade: null };
 
 function startTraining() {
   showPage('pg-training');
-  phaseIdx = 0;
+  segments = buildSegments();
+  segIdx = 0;
   trainStartTime = Date.now();
   gazeData = [];
-  metrics.pursuit = null;
+  metrics.pursuit = [];
   metrics.saccade = null;
-  runPhase();
+  runSegment();
 }
 
-function runPhase() {
-  if (phaseIdx >= PHASES.length) { endTraining(); return; }
-  const ph = PHASES[phaseIdx];
-  phaseTimer = ph.duration;
-  trialGaze  = [];
+function runSegment() {
+  if (segIdx >= segments.length) { endTraining(); return; }
+  const seg = segments[segIdx];
+  segTimer = 30;
+  trialGaze = [];
+  lastFatigueVar = null;
 
-  document.getElementById('train-label').textContent = ph.label;
-  document.getElementById('train-phase-chip').textContent = `回合 ${phaseIdx+1}/${PHASES.length}`;
-  document.getElementById('train-timer').textContent = phaseTimer + 's';
+  const isPursuit = seg.type === 'pursuit';
+  if (isPursuit) {
+    currentSpeed    = seg.level.speed;
+    currentSpeedMax = seg.level.speed;
+    const meta = PATH_META[seg.pathId];
+    document.getElementById('train-label').textContent = meta.label;
+    document.getElementById('train-label').style.color = meta.color;
+    document.getElementById('train-speed-chip').textContent = '速度：' + seg.level.label;
+  } else {
+    document.getElementById('train-label').textContent = 'Saccade';
+    document.getElementById('train-label').style.color = '#fbbf24';
+    document.getElementById('train-speed-chip').textContent = '速度：標準';
+  }
+  document.getElementById('train-phase-chip').textContent = `${segIdx+1}/${segments.length}`;
+  document.getElementById('train-timer').textContent = segTimer + 's';
+  setFatigueChip('green');
 
-  // start gaze listener
   if (webgazerReady) {
     webgazer.setGazeListener((data) => {
       if (!data) return;
@@ -397,71 +448,113 @@ function runPhase() {
     });
   }
 
-  // countdown
-  phaseInterval = setInterval(() => {
-    phaseTimer--;
-    document.getElementById('train-timer').textContent = phaseTimer + 's';
-    if (phaseTimer <= 0) {
-      clearInterval(phaseInterval);
-      finishPhase();
-    }
+  let elapsed = 0;
+  segInterval = setInterval(() => {
+    elapsed++;
+    segTimer--;
+    document.getElementById('train-timer').textContent = segTimer + 's';
+    if (isPursuit && elapsed % 5 === 0) adaptFatigue(currentSpeedMax);
+    if (segTimer <= 0) { clearInterval(segInterval); finishSegment(); }
   }, 1000);
 
-  // draw training animation
-  if (ph.id === 'pursuit')  startPursuitAnim();
-  if (ph.id === 'saccade')  startSaccadeAnim();
+  stopAnim();
+  if (isPursuit) startPursuitAnim(seg.pathId, seg.level.amplitude);
+  else           startSaccadeAnim();
 }
 
-function finishPhase() {
-  const ph = PHASES[phaseIdx];
+function finishSegment() {
   stopAnim();
   if (webgazerReady) webgazer.setGazeListener(null);
-
-  if (ph.id === 'pursuit') metrics.pursuit = analyzePursuit(trialGaze);
-  if (ph.id === 'saccade') metrics.saccade = analyzeSaccade(trialGaze);
-
-  phaseIdx++;
-  setTimeout(runPhase, 800);
+  const seg = segments[segIdx];
+  if (seg.type === 'pursuit') metrics.pursuit.push(analyzePursuit(trialGaze));
+  else                        metrics.saccade = analyzeSaccade(trialGaze);
+  segIdx++;
+  setTimeout(runSegment, 600);
 }
 
 function stopAnim() {
   if (animFrame) { cancelAnimationFrame(animFrame); animFrame = null; }
 }
 
-// ── Smooth Pursuit: figure-8 path ──
-function startPursuitAnim() {
+// ── fatigue adaptation ──
+function setFatigueChip(level) {
+  const chip = document.getElementById('train-fatigue-chip');
+  const map = { green: ['#4ade80','良好'], yellow: ['#fbbf24','正常'], red: ['#f87171','疲勞'] };
+  const [color, label] = map[level] || map.green;
+  chip.style.color = color;
+  chip.textContent = '疲勞：' + label;
+}
+
+function adaptFatigue(levelMax) {
+  const now = Date.now();
+  const recent = trialGaze.filter(s => s.t >= now - 5000);
+  if (recent.length < 3) return;
+  const curVar = variance(recent.map(s=>s.x)) + variance(recent.map(s=>s.y));
+  if (lastFatigueVar !== null) {
+    const δ = (curVar - lastFatigueVar) / (lastFatigueVar || 1);
+    if (δ > 0.20) {
+      currentSpeed = Math.max(0.1, currentSpeed * 0.85);
+      setFatigueChip('red');
+    } else if (δ < -0.15) {
+      currentSpeed = Math.min(levelMax, currentSpeed * 1.10);
+      setFatigueChip('green');
+    } else {
+      setFatigueChip('yellow');
+    }
+  }
+  lastFatigueVar = curVar;
+}
+
+// ── Pursuit animation ──
+function getPathTarget(pathId, t, amp, W, H) {
+  const cx = W/2, cy = H/2;
+  const rx = W * amp * 0.44;
+  const ry = H * amp * 0.36;
+  switch (pathId) {
+    case 'H_RIGHT':       return { x: cx + W*0.10 + rx*Math.sin(t),  y: cy };
+    case 'H_LEFT':        return { x: cx - W*0.10 + rx*Math.sin(t),  y: cy };
+    case 'V_UP':          return { x: cx, y: cy - H*0.08 + ry*Math.sin(t) };
+    case 'V_DOWN':        return { x: cx, y: cy + H*0.08 + ry*Math.sin(t) };
+    case 'FIGURE8':       return { x: cx + rx*Math.sin(t),           y: cy + ry*Math.sin(2*t)/2 };
+    case 'DIAGONAL_RALH': return { x: cx + rx*Math.cos(t),           y: cy + ry*Math.sin(t) };
+    case 'DIAGONAL_LARP': return { x: cx + rx*Math.cos(t),           y: cy - ry*Math.sin(t) };
+    default:              return { x: cx + rx*Math.sin(t),           y: cy };
+  }
+}
+
+function startPursuitAnim(pathId, amplitude) {
   const canvas = document.getElementById('train-canvas');
-  const ctx = canvas.getContext('2d');
+  const ctx    = canvas.getContext('2d');
   canvas.width  = window.innerWidth;
   canvas.height = window.innerHeight;
   const W = canvas.width, H = canvas.height;
-  const cx = W/2, cy = H/2;
-  const rx = W * .35, ry = H * .28;
+  const color = PATH_META[pathId]?.color || '#38bdf8';
   let t = 0;
 
   function frame() {
-    ctx.clearRect(0,0,W,H);
-    // path ghost
+    ctx.clearRect(0, 0, W, H);
+
+    // ghost path (draw one full cycle at base amplitude)
     ctx.beginPath();
-    for (let i=0; i<=360; i++) {
-      const a = (i/180)*Math.PI;
-      const x = cx + rx*Math.sin(a);
-      const y = cy + ry*Math.sin(2*a)/2;
-      i===0 ? ctx.moveTo(x,y) : ctx.lineTo(x,y);
+    const steps = 120;
+    for (let i = 0; i <= steps; i++) {
+      const { x, y } = getPathTarget(pathId, (i/steps)*2*Math.PI, amplitude, W, H);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
     }
-    ctx.strokeStyle='rgba(255,255,255,.08)'; ctx.lineWidth=2; ctx.stroke();
+    ctx.strokeStyle = 'rgba(255,255,255,.07)';
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
 
-    // target dot
-    const a = (t/180)*Math.PI;
-    const tx2 = cx + rx*Math.sin(a);
-    const ty2 = cy + ry*Math.sin(2*a)/2;
+    // moving target
+    const { x: tx, y: ty } = getPathTarget(pathId, t, amplitude, W, H);
+    ctx.beginPath(); ctx.arc(tx, ty, 22, 0, Math.PI*2);
+    ctx.fillStyle = color.replace(')', ',.12)').replace('rgb(', 'rgba(').replace('#', 'rgba(').replace(/rgba\(([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/, (_, r, g, b) => `rgba(${parseInt(r,16)},${parseInt(g,16)},${parseInt(b,16)}`);
+    // simpler approach for fill:
+    ctx.fillStyle = 'rgba(255,255,255,.08)'; ctx.fill();
+    ctx.beginPath(); ctx.arc(tx, ty, 11, 0, Math.PI*2);
+    ctx.fillStyle = color; ctx.fill();
 
-    ctx.beginPath(); ctx.arc(tx2, ty2, 18, 0, Math.PI*2);
-    ctx.fillStyle='rgba(56,189,248,.15)'; ctx.fill();
-    ctx.beginPath(); ctx.arc(tx2, ty2, 10, 0, Math.PI*2);
-    ctx.fillStyle='#38bdf8'; ctx.fill();
-
-    t = (t + 0.6) % 360;
+    t += currentSpeed * 0.025;
     animFrame = requestAnimationFrame(frame);
   }
   animFrame = requestAnimationFrame(frame);
@@ -471,42 +564,37 @@ function startPursuitAnim() {
 const SACCADE_DIRS = [0,45,90,135,180,225,270,315];
 function startSaccadeAnim() {
   const canvas = document.getElementById('train-canvas');
-  const ctx = canvas.getContext('2d');
+  const ctx    = canvas.getContext('2d');
   canvas.width  = window.innerWidth;
   canvas.height = window.innerHeight;
   const W = canvas.width, H = canvas.height;
   const cx = W/2, cy = H/2;
   const R = Math.min(W,H) * .32;
-
-  let dirIdx = 0, phase2 = 'center', frameCount = 0;
-  const HOLD = 40; // frames at each position
+  let dirIdx = 0, atCenter = true, frameCount = 0;
+  const HOLD = 40;
 
   function frame() {
-    ctx.clearRect(0,0,W,H);
-    // center cross
-    ctx.strokeStyle='rgba(255,255,255,.15)'; ctx.lineWidth=1;
+    ctx.clearRect(0, 0, W, H);
+    ctx.strokeStyle = 'rgba(255,255,255,.15)'; ctx.lineWidth = 1;
     ctx.beginPath(); ctx.moveTo(cx-12,cy); ctx.lineTo(cx+12,cy); ctx.stroke();
     ctx.beginPath(); ctx.moveTo(cx,cy-12); ctx.lineTo(cx,cy+12); ctx.stroke();
 
     let tx, ty;
-    if (phase2 === 'center') { tx=cx; ty=cy; }
+    if (atCenter) { tx=cx; ty=cy; }
     else {
       const rad = SACCADE_DIRS[dirIdx] * Math.PI/180;
       tx = cx + R*Math.cos(rad);
       ty = cy + R*Math.sin(rad);
     }
-
-    // target
     ctx.beginPath(); ctx.arc(tx, ty, 16, 0, Math.PI*2);
-    ctx.fillStyle='rgba(251,191,36,.15)'; ctx.fill();
-    ctx.beginPath(); ctx.arc(tx, ty, 8, 0, Math.PI*2);
-    ctx.fillStyle='#fbbf24'; ctx.fill();
+    ctx.fillStyle = 'rgba(251,191,36,.15)'; ctx.fill();
+    ctx.beginPath(); ctx.arc(tx, ty, 8,  0, Math.PI*2);
+    ctx.fillStyle = '#fbbf24'; ctx.fill();
 
-    frameCount++;
-    if (frameCount >= HOLD) {
+    if (++frameCount >= HOLD) {
       frameCount = 0;
-      if (phase2 === 'center') { phase2='target'; }
-      else { phase2='center'; dirIdx=(dirIdx+1)%SACCADE_DIRS.length; }
+      if (atCenter) { atCenter = false; }
+      else { atCenter = true; dirIdx = (dirIdx+1) % SACCADE_DIRS.length; }
     }
     animFrame = requestAnimationFrame(frame);
   }
@@ -523,25 +611,19 @@ function moveGazeDot(x, y) {
 
 // ── analysis ──
 function analyzePursuit(samples) {
-  if (samples.length < 10) return { score:50, stability:50, biasX:0 };
+  if (samples.length < 10) return { score:50, stability:50, biasX:0, biasY:0 };
   const W = window.innerWidth, H = window.innerHeight;
   const cx = W/2, cy = H/2;
-  // normalized distance from center avg
   const dists = samples.map(s => Math.hypot(s.x-cx, s.y-cy));
   const avgDist = dists.reduce((a,b)=>a+b,0)/dists.length;
   const maxDist = Math.min(W,H)*0.4;
   const score = Math.round(Math.min(100, (avgDist/maxDist)*100));
-
-  // stability = inverse variance
   const xs = samples.map(s=>s.x);
-  const varX = variance(xs);
-  const stability = Math.round(Math.max(0, 100 - varX/50));
-
-  // bias: mean x offset from center
-  const meanX = xs.reduce((a,b)=>a+b,0)/xs.length;
-  const biasX = meanX - cx;
-
-  return { score, stability, biasX };
+  const ys = samples.map(s=>s.y);
+  const stability = Math.round(Math.max(0, 100 - (variance(xs)+variance(ys))/80));
+  const biasX = xs.reduce((a,b)=>a+b,0)/xs.length - cx;
+  const biasY = ys.reduce((a,b)=>a+b,0)/ys.length - cy;
+  return { score, stability, biasX, biasY };
 }
 
 function analyzeSaccade(samples) {
@@ -568,76 +650,70 @@ async function endTraining() {
   if (webgazerReady) { webgazer.setGazeListener(null); webgazer.pause(); }
 
   const duration = Math.round((Date.now() - trainStartTime)/1000);
-  const p = metrics.pursuit || { score:50, stability:50, biasX:0 };
-  const s = metrics.saccade || { score:50, stability:50, biasX:0 };
+  const pArr = metrics.pursuit.length > 0 ? metrics.pursuit : [{ score:50, stability:50, biasX:0, biasY:0 }];
+  const avg  = arr => Math.round(arr.reduce((a,b)=>a+b,0)/arr.length);
 
-  const pursuitScore  = p.score;
-  const stabilityVal  = Math.round((p.stability + s.stability)/2);
-  const biasRaw       = (p.biasX + s.biasX)/2;
-  const overallScore  = Math.round((pursuitScore + s.score + stabilityVal)/3);
-  const date          = new Date().toISOString();
+  const pursuitScore = avg(pArr.map(m=>m.score));
+  const saccadeScore = metrics.saccade?.score || 50;
+  const stabilityVal = avg([...pArr.map(m=>m.stability), metrics.saccade?.stability || 50]);
+  const biasRaw  = pArr.reduce((a,m)=>a+m.biasX,0)/pArr.length;
+  const biasRawY = pArr.reduce((a,m)=>a+m.biasY,0)/pArr.length;
+  const overallScore = avg([pursuitScore, saccadeScore, stabilityVal]);
+  const date = new Date().toISOString();
 
-  const biasDir = Math.abs(biasRaw) < 30 ? 'center'
-                : biasRaw > 0 ? 'right' : 'left';
-  const biasLabel = biasDir==='center' ? '居中 ✓'
-                  : biasDir==='right'  ? '右側偏移' : '左側偏移';
-  const biasClass = `bias-${biasDir}`;
+  // classify bias for next session path selection
+  const biasH = Math.abs(biasRaw)  < 30 ? null : biasRaw  > 0 ? '右偏' : '左偏';
+  const biasV = Math.abs(biasRawY) < 25 ? null : biasRawY > 0 ? '下偏' : '上偏';
 
-  // update UI
+  const biasLabel = biasH ? (biasH==='右偏' ? '右側偏移' : '左側偏移')
+                  : biasV ? biasV : '居中 ✓';
+  const biasClass = biasH==='右偏' ? 'bias-right' : biasH==='左偏' ? 'bias-left' : 'bias-center';
+
   showPage('pg-results');
   document.getElementById('score-display').textContent = overallScore;
   document.getElementById('res-pursuit').textContent   = pursuitScore + '%';
   document.getElementById('res-stability').textContent = stabilityVal + '%';
   document.getElementById('res-duration').textContent  = duration + 's';
-  document.getElementById('res-bias').innerHTML =
-    `<span class="bias-tag ${biasClass}">${biasLabel}</span>`;
+  document.getElementById('res-bias').innerHTML = `<span class="bias-tag ${biasClass}">${biasLabel}</span>`;
 
-  // animate score ring
   const circ = 364.4;
-  document.getElementById('score-arc').style.strokeDashoffset =
-    circ - (overallScore/100)*circ;
+  document.getElementById('score-arc').style.strokeDashoffset = circ - (overallScore/100)*circ;
 
-  // save local
+  // persist lastBias so next session selects correct paths
   const store = getStore();
-  store.sessions = store.sessions || [];
-  const sessionData = { patientId, protocol:'pursuit+saccade', difficulty:'standard',
+  store.sessions  = store.sessions || [];
+  store.lastBias  = { h: biasH, v: biasV };
+  const sessionData = { patientId, protocol: selectPursuitPlan().join('+'), difficulty:'adaptive',
     duration, pursuitScore, stability:stabilityVal, bias:biasRaw, overallScore, date };
   store.sessions.push(sessionData);
   saveStore(store);
   updateWelcomeStats();
 
-  // POST to server
   try {
     await fetch(`${BCF_API}/api/home-training`, {
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
+      method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify(sessionData),
     });
   } catch(e) { console.warn('server save failed, local backup ok', e.message); }
 
-  // AI feedback
-  generateFeedback(pursuitScore, stabilityVal, biasDir, overallScore);
+  generateFeedback(pursuitScore, stabilityVal, overallScore, biasH, biasV);
 }
 
-async function generateFeedback(pursuit, stability, bias, overall) {
+function generateFeedback(pursuit, stability, overall, biasH, biasV) {
   const el = document.getElementById('ai-feedback-text');
-  const msgs = {
-    center: [
-      '眼動路徑穩定，雙側控制均衡。持續每日訓練有助鞏固神經連結。',
-      '本次訓練表現良好，無明顯側化偏移，繼續保持！',
-    ],
-    right: [
-      '偵測到輕微右側偏移，建議加強向左追蹤訓練。Left CB 可能需要額外刺激。',
-      '右側視野控制稍強，可適度增加 L45 方向眼動練習。',
-    ],
-    left: [
-      '偵測到輕微左側偏移，建議加強向右追蹤訓練。Right CB 可能需要額外刺激。',
-      '左側視野控制稍強，可適度增加 R45 方向眼動練習。',
-    ],
-  };
-  const pool = msgs[bias] || msgs.center;
-  let fb = pool[Math.floor(Math.random()*pool.length)];
-  if (overall >= 80) fb += ' 整體分數優異，建議挑戰進階難度。';
+  let fb = '';
+  if (biasH === '右偏')
+    fb = '偵測到右側偏移，本次訓練已自動加強左視野追蹤（H_LEFT 路徑）。Left CB 可能需要額外刺激，下次訓練將持續補強。';
+  else if (biasH === '左偏')
+    fb = '偵測到左側偏移，本次訓練已自動加強右視野追蹤（H_RIGHT 路徑）。Right CB 可能需要額外刺激，下次訓練將持續補強。';
+  else if (biasV === '上偏')
+    fb = '偵測到上視野偏移，訓練已加入下視野補強（V_DOWN 路徑）。建議臨床複查 Midbrain 垂直追蹤控制。';
+  else if (biasV === '下偏')
+    fb = '偵測到下視野偏移，訓練已加入上視野補強（V_UP 路徑）。建議臨床複查 Pons/CB 垂直眼動。';
+  else
+    fb = '眼動路徑穩定，雙側控制均衡。持續每日訓練有助鞏固神經連結。';
+
+  if (overall >= 80) fb += ' 整體分數優異，明日可嘗試更高難度。';
   else if (overall < 50) fb += ' 建議放慢速度，確保每次眼動都精準到位。';
   el.textContent = fb;
 }
