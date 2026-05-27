@@ -284,10 +284,16 @@ async function initCamera() {
     document.getElementById('btn-go-calib').disabled = false;
     // init webgazer quietly
     showLoading('初始化眼動追蹤…');
-    await webgazer.setGazeListener(null).begin();
-    webgazer.showPredictionPoints(false).showVideoPreview(false);
-    webgazerReady = true;
-    console.log('[DBG] initCamera: webgazer.begin() done → webgazerReady=true  (calibration has NOT started yet)');
+    if (webgazerReady) {
+      // already initialized (e.g. "再練一次") — just resume, don't call begin() again
+      try { webgazer.resume(); } catch(e) {}
+      console.log('[DBG] initCamera: webgazer already ready → resume()');
+    } else {
+      await webgazer.setGazeListener(null).begin();
+      webgazer.showPredictionPoints(false).showVideoPreview(false);
+      webgazerReady = true;
+      console.log('[DBG] initCamera: webgazer.begin() done → webgazerReady=true');
+    }
     hideLoading();
   } catch(e) {
     console.error(e);
@@ -330,6 +336,10 @@ function renderCalibPoint() {
     drawCalibState(ctx, canvas.width, canvas.height, -1, 0);
     document.getElementById('calib-instruction').textContent = '校準完成！開始訓練 🎉';
     document.getElementById('calib-progress').textContent = `已完成 ${CALIB_POINTS.length} / ${CALIB_POINTS.length} 個校準點`;
+    // ensure webgazer is running after calibration (may have been paused)
+    try { webgazer.resume(); } catch(e) {}
+    webgazerReady = true;
+    console.log('[DBG] calibration done → webgazer.resume() + webgazerReady=true');
     setTimeout(startTraining, 1000);
     return;
   }
@@ -477,6 +487,10 @@ let lastFatigueVar  = null;
 const metrics = { segments: [] };
 
 function startTraining() {
+  if (!webgazerReady) {
+    alert('WebGazer 未就緒，請重新整理頁面再試');
+    return;
+  }
   showPage('pg-training');
   segments = buildSegments();
   segIdx = 0;
@@ -513,6 +527,7 @@ function runSegment() {
 
   // ── DEBUG ──
   console.log(`[DBG] runSegment ${segIdx+1}/${segments.length}  webgazerReady=${webgazerReady}  seg.type=${seg.type}`);
+  if (segIdx === 0) alert(`段1開始\nwebgazerReady=${webgazerReady}\nseg.type=${seg.type}`);
 
   if (webgazerReady) {
     let _dbgCount = 0;
