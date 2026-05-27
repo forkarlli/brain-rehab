@@ -290,7 +290,15 @@ async function initCamera() {
       console.log('[DBG] initCamera: webgazer already ready → resume()');
     } else {
       await webgazer.setGazeListener(null).begin();
-      webgazer.showPredictionPoints(false).showVideoPreview(false);
+      webgazer.showPredictionPoints(false);
+      // Do NOT call showVideoPreview(false) — on iPad Safari, display:none on the
+      // video element causes the browser to release the MediaStream. Hide it via
+      // CSS instead so the stream stays alive.
+      const _wgVid = document.getElementById('webgazerVideoContainer');
+      if (_wgVid) Object.assign(_wgVid.style, {
+        position:'fixed', width:'1px', height:'1px',
+        opacity:'0', pointerEvents:'none', zIndex:'-1'
+      });
       webgazerReady = true;
       console.log('[DBG] initCamera: webgazer.begin() done → webgazerReady=true');
     }
@@ -498,6 +506,9 @@ function startTraining() {
   gazeData = [];
   metrics.segments = [];
 
+  // Ensure prediction engine is running before registering listener.
+  try { webgazer.resume(); } catch(e) {}
+
   // Register ONE global listener for the entire training session.
   // Replacing the listener per-segment caused silent failures on iPad Safari.
   webgazer.setGazeListener((data, elapsedTime) => {
@@ -509,19 +520,6 @@ function startTraining() {
     gazeData.push(sample);
     moveGazeDot(data.x, data.y);
   });
-
-  // DEBUG: verify getCurrentPrediction() works on iPad (remove after diagnosis)
-  let _testCount = 0;
-  const _testInterval = setInterval(() => {
-    webgazer.getCurrentPrediction().then(pred => {
-      _testCount++;
-      if (_testCount === 1) {
-        alert('WebGazer 預測測試:\n' +
-          (pred ? 'x=' + pred.x.toFixed(0) + ' y=' + pred.y.toFixed(0) : 'null'));
-        clearInterval(_testInterval);
-      }
-    });
-  }, 1000);
 
   runSegment();
 }
@@ -551,9 +549,7 @@ function runSegment() {
   document.getElementById('train-timer').textContent = segTimer + 's';
   setFatigueChip('green');
 
-  // ── DEBUG ──
   console.log(`[DBG] runSegment ${segIdx+1}/${segments.length}  webgazerReady=${webgazerReady}  seg.type=${seg.type}`);
-  if (segIdx === 0) alert(`段1開始\nwebgazerReady=${webgazerReady}\nseg.type=${seg.type}\n(全局listener已在startTraining設定)`);
 
   let elapsed = 0;
   segInterval = setInterval(() => {
