@@ -112,6 +112,31 @@ video{pointer-events:none!important}
 .neuro-region{font-size:14px;font-weight:600;color:#f1f5f9;margin-bottom:6px;line-height:1.5}
 .neuro-rx{font-size:13px;color:#94a3b8;line-height:1.6}
 
+/* ── level selection ── */
+.level-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;width:100%;max-width:360px;margin:14px 0}
+.level-card{background:rgba(255,255,255,.06);border:2px solid rgba(255,255,255,.1);border-radius:12px;padding:12px;text-align:center;cursor:pointer;transition:all .18s;-webkit-tap-highlight-color:transparent}
+.level-card.selected{border-color:#38bdf8;background:rgba(56,189,248,.1)}
+.level-card-num{font-size:22px;font-weight:800;color:#38bdf8}
+.level-card-name{font-size:12px;font-weight:600;color:#e2e8f0;margin:3px 0}
+.level-card-segs{font-size:11px;color:#64748b}
+.level-rec-box{background:rgba(56,189,248,.08);border:1px solid rgba(56,189,248,.2);border-radius:12px;padding:14px;max-width:420px;width:100%;margin:10px 0;text-align:center}
+.level-rec-label{font-size:11px;color:#64748b;margin-bottom:4px}
+.level-rec-val{font-size:16px;font-weight:700;color:#38bdf8;margin-bottom:12px}
+.level-rec-btns{display:flex;gap:10px;justify-content:center}
+.btn-sm{padding:8px 20px;border-radius:10px;font-size:14px;font-weight:600;border:none;cursor:pointer;transition:all .18s}
+.btn-sm-primary{background:linear-gradient(135deg,#0ea5e9,#2563eb);color:#fff}
+.btn-sm-secondary{background:rgba(255,255,255,.1);color:#cbd5e1;border:1px solid rgba(255,255,255,.15)}
+
+/* ── border warning ── */
+#border-warn{position:fixed;inset:0;pointer-events:none;z-index:500;border:5px solid transparent;transition:border-color .15s;border-radius:0}
+#border-warn.warn-yellow{border-color:rgba(251,191,36,.65)}
+#border-warn.warn-red{border-color:rgba(239,68,68,.85)}
+
+/* ── segment summary overlay ── */
+#seg-summary{position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);background:rgba(0,0,0,.88);border:1px solid rgba(255,255,255,.15);border-radius:18px;padding:26px 44px;text-align:center;z-index:600;display:none;pointer-events:none}
+#seg-summary-label{font-size:13px;color:#94a3b8;margin-bottom:4px}
+#seg-summary-val{font-size:42px;font-weight:800;line-height:1.1}
+
 /* ── loading overlay ── */
 #loading-overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.7);z-index:999;align-items:center;justify-content:center;flex-direction:column;gap:16px}
 #loading-overlay.active{display:flex}
@@ -230,8 +255,8 @@ video{pointer-events:none!important}
     <div class="app-sub" style="text-align:center">校準完成！<br>建議先進行評估以產生個人化處方</div>
     <div class="choice-btns">
       <button class="btn btn-primary" onclick="startAssessment()">先進行評估</button>
-      <button class="btn btn-secondary" onclick="startTrainingDirect()">直接開始訓練</button>
     </div>
+    <div class="level-grid" id="choice-level-grid"></div>
     <div class="choice-last" id="choice-last-rx"></div>
   </div>
 
@@ -279,12 +304,25 @@ video{pointer-events:none!important}
       <div class="neuro-region" id="neuro-region">—</div>
       <div class="neuro-rx" id="neuro-rx">—</div>
     </div>
+    <div class="level-rec-box" id="level-rec-box" style="display:none">
+      <div class="level-rec-label">系統建議訓練強度</div>
+      <div class="level-rec-val" id="level-rec-val">—</div>
+      <div class="level-rec-btns">
+        <button class="btn-sm btn-sm-primary" id="btn-use-rec" onclick="useRecommendedLevel()">使用建議</button>
+        <button class="btn-sm btn-sm-secondary" onclick="showPage('pg-choice')">自行選擇</button>
+      </div>
+    </div>
     <div class="btn-row" style="margin-bottom:24px">
-      <button class="btn btn-secondary" onclick="showPage('pg-choice')">重新選擇</button>
-      <button class="btn btn-primary" onclick="startTrainingFromAssessment()">開始訓練</button>
+      <button class="btn btn-secondary" onclick="showPage('pg-choice')">返回</button>
     </div>
   </div>
 
+</div>
+
+<div id="border-warn"></div>
+<div id="seg-summary">
+  <div id="seg-summary-label">這段穩定度</div>
+  <div id="seg-summary-val">--</div>
 </div>
 
 <!-- Loading overlay -->
@@ -308,6 +346,45 @@ let videoEl           = null;
 let gazePollerInterval = null;
 let animFrame         = null;
 let currentTargetPos  = null;
+
+let selectedLevel   = 2;   // 1-4
+let _recommendedLevel = 2;
+let _lastVibrate    = 0;
+
+const TRAINING_LEVELS = {
+  1: { label:'基礎訓練', segs:6,  speeds:['慢'],      desc:'6段・全程慢・適合初期復健' },
+  2: { label:'標準訓練', segs:10, speeds:['慢','中'],  desc:'10段・慢→中・適合穩定期' },
+  3: { label:'進階訓練', segs:14, speeds:['中','快'],  desc:'14段・中→快・適合進階復健' },
+  4: { label:'強化訓練', segs:20, speeds:['快'],       desc:'20段・全程快・適合維持期' },
+};
+
+function selectLevel(n) {
+  selectedLevel = n;
+  document.querySelectorAll('.level-card').forEach(el => {
+    el.classList.toggle('selected', +el.dataset.level === n);
+  });
+}
+
+function recommendLevelFromScore(avg) {
+  return avg < 50 ? 1 : avg < 70 ? 2 : avg < 85 ? 3 : 4;
+}
+
+function useRecommendedLevel() {
+  selectLevel(_recommendedLevel);
+  startTraining();
+}
+
+function renderLevelGrid(containerId) {
+  const grid = document.getElementById(containerId);
+  if (!grid) return;
+  grid.innerHTML = Object.entries(TRAINING_LEVELS).map(([n, cfg]) => `
+    <div class="level-card${+n === selectedLevel ? ' selected' : ''}" data-level="${n}"
+         onclick="selectLevel(${n})">
+      <div class="level-card-num">L${n}</div>
+      <div class="level-card-name">${cfg.label}</div>
+      <div class="level-card-segs">${cfg.desc}</div>
+    </div>`).join('');
+}
 
 // ── head-position estimator (replaces WebGazer) ──
 const HEAD_W = 64, HEAD_H = 48;
@@ -352,7 +429,6 @@ function captureHeadPos() {
 function pollHeadPos() {
   const pos = captureHeadPos();
   if (!pos) return;
-  // Video has CSS scaleX(-1), so flip cx for screen coords
   const W = window.innerWidth, H = window.innerHeight;
   const sx = (1 - pos.cx) * W;
   const sy = pos.cy * H;
@@ -361,7 +437,22 @@ function pollHeadPos() {
     tx: tp?.x ?? null, ty: tp?.y ?? null, detected: pos.detected };
   trialGaze.push(sample);
   gazeData.push(sample);
-  if (pos.detected) moveGazeDot(sx, sy);
+
+  // border warning: measure horizontal deviation from screen centre
+  const dev = Math.abs(sx - W/2) / W; // 0..0.5
+  const bw  = document.getElementById('border-warn');
+  if (dev > 0.20) {
+    bw.className = 'warn-red';
+    const now = Date.now();
+    if (now - _lastVibrate > 2000) {
+      if (navigator.vibrate) navigator.vibrate(200);
+      _lastVibrate = now;
+    }
+  } else if (dev > 0.10) {
+    bw.className = 'warn-yellow';
+  } else {
+    bw.className = '';
+  }
 }
 
 // ── utils ──
@@ -410,6 +501,7 @@ function updateWelcomeStats() {
 window.addEventListener('DOMContentLoaded', () => {
   updateWelcomeStats();
   initHeadCanvas();
+  renderLevelGrid('choice-level-grid');
   const stored = getStore();
   if (stored.lastPatientId) document.getElementById('patient-id-input').value = stored.lastPatientId;
 });
@@ -577,11 +669,12 @@ function showChoicePage() {
   } else {
     el.textContent = '尚無評估記錄，建議先進行評估';
   }
+  renderLevelGrid('choice-level-grid');
   showPage('pg-choice');
 }
 
 function startTrainingDirect() { startTraining(); }
-function startTrainingFromAssessment() { startTraining(); }
+function startTrainingFromAssessment() { useRecommendedLevel(); }
 
 // ── assessment engine ──
 const ASSESS_TESTS = [
@@ -798,6 +891,14 @@ function finishAssessment() {
   document.getElementById('ar-bias').textContent  = biasH ?? biasV ?? '居中';
 
   interpretAssessment(rx);
+
+  // level recommendation
+  _recommendedLevel = recommendLevelFromScore((fix + hSc + vSc + sac) / 4);
+  const lvRec = TRAINING_LEVELS[_recommendedLevel];
+  document.getElementById('level-rec-val').textContent =
+    `Level ${_recommendedLevel} — ${lvRec.label}（${lvRec.desc}）`;
+  document.getElementById('level-rec-box').style.display = 'block';
+
   showPage('pg-assessment-result');
 }
 
@@ -896,18 +997,18 @@ function selectPursuitPlan() {
 }
 
 function buildSegments() {
-  const rx = getStore().assessmentResult;
-  const speedLimit = rx?.startSpeed ?? null; // '慢'|'中'|'快'|null
+  const lvCfg = TRAINING_LEVELS[selectedLevel] ?? TRAINING_LEVELS[2];
+  const paths  = selectPursuitPlan();
+  const allowedLvs = PURSUIT_LEVELS.filter(lv => lvCfg.speeds.includes(lv.label));
+  const targetPursuit = lvCfg.segs - 1;
   const segs = [];
-  for (const pathId of selectPursuitPlan()) {
-    for (const lv of PURSUIT_LEVELS) {
-      if (speedLimit === '慢' && lv.label !== '慢') continue;
-      if (speedLimit === '中' && lv.label === '快') continue;
-      segs.push({ type: 'pursuit', pathId, level: lv });
-    }
+  let pi = 0, li = 0;
+  while (segs.length < targetPursuit) {
+    segs.push({ type:'pursuit', pathId: paths[pi % paths.length], level: allowedLvs[li % allowedLvs.length] });
+    li++;
+    if (li >= allowedLvs.length) { li = 0; pi++; }
   }
-  if (segs.length === 0) segs.push({ type:'pursuit', pathId:'H_RIGHT', level:PURSUIT_LEVELS[0] });
-  segs.push({ type: 'saccade' });
+  segs.push({ type:'saccade' });
   return segs;
 }
 
@@ -1009,7 +1110,17 @@ function finishSegment() {
   console.log(`[DBG] → segmentScore=${_result.segmentScore}  stability=${_result.stability}`);
   metrics.segments.push({ ..._result, type: segments[segIdx].type });
   segIdx++;
-  setTimeout(runSegment, 600);
+
+  // segment summary overlay
+  const stab = _result.stability;
+  const sumVal = document.getElementById('seg-summary-val');
+  sumVal.textContent = stab + '%';
+  sumVal.style.color = stab >= 80 ? '#4ade80' : stab >= 60 ? '#fbbf24' : '#f87171';
+  document.getElementById('seg-summary').style.display = 'block';
+  setTimeout(() => {
+    document.getElementById('seg-summary').style.display = 'none';
+    runSegment();
+  }, 2500);
 }
 
 function stopAnim() {
@@ -1179,7 +1290,9 @@ async function endTraining() {
   stopAnim();
   clearInterval(gazePollerInterval);
   gazePollerInterval = null;
-  document.getElementById('gaze-dot').style.display='none';
+  document.getElementById('gaze-dot').style.display = 'none';
+  document.getElementById('border-warn').className  = '';
+  document.getElementById('seg-summary').style.display = 'none';
 
   const duration = Math.round((Date.now() - trainStartTime)/1000);
   const allSegs = metrics.segments.length > 0 ? metrics.segments
