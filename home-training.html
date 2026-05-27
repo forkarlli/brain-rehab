@@ -268,7 +268,7 @@ video{pointer-events:none!important}
     <div id="assess-hud">
       <div class="hud-chip" id="assess-label">評估中…</div>
       <div class="hud-chip">⏱ <span id="assess-timer">0s</span></div>
-      <div class="hud-chip" id="assess-step-chip">1/4</div>
+      <div class="hud-chip" id="assess-step-chip">1/5</div>
     </div>
     <div id="assess-instruction"></div>
     <div id="assess-progress-bar"><div id="assess-progress-fill" style="width:0%"></div></div>
@@ -291,9 +291,17 @@ video{pointer-events:none!important}
         <div class="assess-score-val" id="ar-v">--</div>
       </div>
       <div class="assess-score-card">
-        <div class="assess-score-label">快速跳視</div>
-        <div class="assess-score-val" id="ar-saccade">--</div>
+        <div class="assess-score-label">水平跳視</div>
+        <div class="assess-score-val" id="ar-h-saccade">--</div>
       </div>
+      <div class="assess-score-card" style="grid-column:1/-1">
+        <div class="assess-score-label">垂直跳視</div>
+        <div class="assess-score-val" id="ar-v-saccade">--</div>
+      </div>
+    </div>
+    <div style="width:100%;max-width:420px;margin:4px 0 12px">
+      <div class="chart-label">眼球軌跡記錄</div>
+      <canvas id="gaze-trail-canvas" style="width:100%;height:200px;border-radius:8px;display:block;background:rgba(255,255,255,.03)"></canvas>
     </div>
     <div class="rx-box">
       <div class="rx-label">📋 個人化訓練處方</div>
@@ -349,6 +357,7 @@ let gazePollerInterval = null;
 let animFrame         = null;
 let currentTargetPos  = null;
 
+let trailData       = {};  // { testId: [{x,y,tx,ty}] }
 let selectedLevel   = 2;   // 1-4
 let _recommendedLevel = 2;
 let _lastVibrate    = 0;
@@ -757,8 +766,10 @@ const ASSESS_TESTS = [
     instr:'用眼睛追蹤移動的藍點\n頭部保持不動' },
   { id:'v-pursuit', label:'V 垂直追蹤', dur:20,
     instr:'用眼睛追蹤移動的藍點\n頭部保持不動' },
-  { id:'saccade',   label:'快速跳視',   dur:20,
-    instr:'目標每次跳動時\n快速用眼睛找到它' },
+  { id:'h-saccade', label:'H 水平跳視', dur:15,
+    instr:'目標左右跳動時\n快速用眼睛找到它' },
+  { id:'v-saccade', label:'V 垂直跳視', dur:15,
+    instr:'目標上下跳動時\n快速用眼睛找到它' },
 ];
 
 let assessTestIdx       = 0;
@@ -773,6 +784,7 @@ function startAssessment() {
   if (!camReady) { toast('相機未就緒'); return; }
   assessTestIdx = 0;
   assessResults = {};
+  trailData = {};
   showPage('pg-assessment');
   setTimeout(runNextAssessTest, 200);
 }
@@ -805,6 +817,9 @@ function runNextAssessTest() {
 }
 
 function runAssessTest(test) {
+  console.log('[ASSESS] TEST START', test.id,
+    { latestGaze, gazeMapCoeffs: gazeMapCoeffs ? gazeMapCoeffs : 'NULL' });
+
   const canvas = document.getElementById('assess-canvas');
   const ctx    = canvas.getContext('2d');
   canvas.width  = window.innerWidth;
@@ -812,13 +827,21 @@ function runAssessTest(test) {
   const W = canvas.width, H = canvas.height, cx = W/2, cy = H/2;
 
   let remaining = test.dur;
+  let _pollerCount = 0;
 
   assessPollerInterval = setInterval(() => {
     const g = mapGaze();
+    _pollerCount++;
+    if (_pollerCount % 5 === 1) {
+      console.log(`[GAZE] ${test.id} #${_pollerCount} mapped=${g ? `(${g.x.toFixed(0)},${g.y.toFixed(0)})` : 'null'} tgt=${assessCurrentTarget ? `(${assessCurrentTarget.x.toFixed(0)},${assessCurrentTarget.y.toFixed(0)})` : 'null'} latestGaze=${latestGaze ? JSON.stringify(latestGaze) : 'null'}`);
+    }
     if (!g) return;
-    assessSamples.push({ x:g.x, y:g.y, t:Date.now(),
+    const pt = { x:g.x, y:g.y, t:Date.now(),
       tx: assessCurrentTarget?.x ?? null, ty: assessCurrentTarget?.y ?? null,
-      detected: true });
+      detected: true };
+    assessSamples.push(pt);
+    if (!trailData[test.id]) trailData[test.id] = [];
+    trailData[test.id].push({ x:g.x, y:g.y, tx:pt.tx, ty:pt.ty });
   }, 200);
 
   assessTimerInterval = setInterval(() => {
@@ -865,35 +888,48 @@ function runAssessTest(test) {
       const ty = cy + H*0.32*Math.sin(t);
       assessCurrentTarget = {x:cx, y:ty};
       ctx.beginPath(); ctx.arc(cx,ty,20,0,Math.PI*2);
-      ctx.fillStyle='rgba(167,139,250,.12)'; ctx.fill();
+      ctx.fillStyle='rgba(74,222,128,.12)'; ctx.fill();
       ctx.beginPath(); ctx.arc(cx,ty,10,0,Math.PI*2);
-      ctx.fillStyle='#a78bfa'; ctx.fill();
+      ctx.fillStyle='#4ade80'; ctx.fill();
       t += 0.025;
       assessAnimFrame = requestAnimationFrame(frame);
     })();
 
-  } else if (test.id === 'saccade') {
-    const grid = [];
-    for (const fy of [.22,.5,.78])
-      for (const fx of [.22,.5,.78])
-        grid.push({x:W*fx, y:H*fy});
-    let curIdx = 0, fc = 0;
-    const HOLD = Math.round(1.5 * 60);
+  } else if (test.id === 'h-saccade') {
+    let phase = 0;
+    let lastSwitch = Date.now();
+    const INTERVAL_MS = 1500;
     (function frame() {
+      const now = Date.now();
+      if (now - lastSwitch >= INTERVAL_MS) { phase = 1 - phase; lastSwitch = now; }
       ctx.clearRect(0,0,W,H);
-      ctx.strokeStyle='rgba(255,255,255,.18)'; ctx.lineWidth=1;
-      ctx.beginPath(); ctx.moveTo(cx-10,cy); ctx.lineTo(cx+10,cy); ctx.stroke();
-      ctx.beginPath(); ctx.moveTo(cx,cy-10); ctx.lineTo(cx,cy+10); ctx.stroke();
-      const tgt = grid[curIdx];
-      assessCurrentTarget = tgt;
-      ctx.beginPath(); ctx.arc(tgt.x,tgt.y,18,0,Math.PI*2);
-      ctx.fillStyle='rgba(251,191,36,.15)'; ctx.fill();
-      ctx.beginPath(); ctx.arc(tgt.x,tgt.y,9,0,Math.PI*2);
-      ctx.fillStyle='#fbbf24'; ctx.fill();
-      if (++fc >= HOLD) {
-        fc = 0;
-        curIdx = (curIdx + 1 + Math.floor(Math.random()*7)) % grid.length;
-      }
+      ctx.strokeStyle='rgba(255,255,255,.08)'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(W*.1,cy); ctx.lineTo(W*.9,cy); ctx.stroke();
+      const tx = phase === 0 ? W*0.20 : W*0.80;
+      assessCurrentTarget = {x:tx, y:cy};
+      ctx.beginPath(); ctx.arc(tx,cy,20,0,Math.PI*2);
+      ctx.fillStyle='rgba(251,146,60,.12)'; ctx.fill();
+      ctx.beginPath(); ctx.arc(tx,cy,10,0,Math.PI*2);
+      ctx.fillStyle='#fb923c'; ctx.fill();
+      assessAnimFrame = requestAnimationFrame(frame);
+    })();
+
+  } else if (test.id === 'v-saccade') {
+    let phase = 0;
+    let lastSwitch = Date.now();
+    const INTERVAL_MS = 1500;
+    (function frame() {
+      const now = Date.now();
+      if (now - lastSwitch >= INTERVAL_MS) { phase = 1 - phase; lastSwitch = now; }
+      ctx.clearRect(0,0,W,H);
+      ctx.strokeStyle='rgba(255,255,255,.08)'; ctx.lineWidth=1.5;
+      ctx.beginPath(); ctx.moveTo(cx,H*.1); ctx.lineTo(cx,H*.9); ctx.stroke();
+      const ty = phase === 0 ? H*0.20 : H*0.80;
+      assessCurrentTarget = {x:cx, y:ty};
+      ctx.beginPath(); ctx.arc(cx,ty,20,0,Math.PI*2);
+      ctx.fillStyle='rgba(192,132,252,.12)'; ctx.fill();
+      ctx.beginPath(); ctx.arc(cx,ty,10,0,Math.PI*2);
+      ctx.fillStyle='#c084fc'; ctx.fill();
       assessAnimFrame = requestAnimationFrame(frame);
     })();
   }
@@ -941,34 +977,31 @@ function scoreAssessTest(test) {
 function finishAssessment() {
   document.getElementById('assess-progress-fill').style.width = '100%';
 
-  // ── debug (console + title, Safari-safe) ──
-  const _tot  = calibGazeSamples.reduce((a,s)=>a+s.length,0);
-  const _dbg  = `fix=${assessResults['fixation']?.score??'?'} h=${assessResults['h-pursuit']?.score??'?'} v=${assessResults['v-pursuit']?.score??'?'} sac=${assessResults['saccade']?.score??'?'} | map=${gazeMapCoeffs?'OK':'NO'} calibSamps=${_tot}`;
+  const fix    = assessResults['fixation']?.score   ?? 50;
+  const hSc    = assessResults['h-pursuit']?.score  ?? 50;
+  const vSc    = assessResults['v-pursuit']?.score  ?? 50;
+  const hSac   = assessResults['h-saccade']?.score  ?? 50;
+  const vSac   = assessResults['v-saccade']?.score  ?? 50;
+  const bHraw  = assessResults['h-pursuit']?.biasX  ?? 0;
+  const bVraw  = assessResults['v-pursuit']?.biasY  ?? 0;
+
+  const _tot = calibGazeSamples.reduce((a,s)=>a+s.length,0);
+  const _dbg = `fix=${fix} h=${hSc} v=${vSc} hSac=${hSac} vSac=${vSac} | map=${gazeMapCoeffs?'OK':'NO'} calibSamps=${_tot}`;
   console.log('[ASSESS FINAL]', _dbg, JSON.stringify(assessResults));
   document.title = _dbg;
 
-  const fix  = assessResults['fixation']?.score  ?? 50;
-  const hSc  = assessResults['h-pursuit']?.score ?? 50;
-  const vSc  = assessResults['v-pursuit']?.score ?? 50;
-  const sac  = assessResults['saccade']?.score   ?? 50;
-  const bHraw = assessResults['h-pursuit']?.biasX ?? 0;
-  const bVraw = assessResults['v-pursuit']?.biasY ?? 0;
-
-  const avg = (fix + hSc + vSc + sac) / 4;
+  const avg = (fix + hSc + vSc + hSac + vSac) / 5;
   const startSpeed = avg < 50 ? '慢' : avg < 75 ? '中' : '快';
 
-  // lowest pursuit score → priority path, correcting for bias direction
-  const lowest = hSc <= vSc && hSc <= sac ? 'h'
-               : vSc <= sac              ? 'v' : 'saccade';
-  let priorityPath;
-  if      (lowest === 'h')      priorityPath = bHraw > 0 ? 'H_LEFT'  : 'H_RIGHT';
-  else if (lowest === 'v')      priorityPath = bVraw > 0 ? 'V_DOWN'  : 'V_UP';
-  else                          priorityPath = 'SACCADE';
+  const lowest = hSc <= vSc ? 'h' : 'v';
+  const priorityPath = lowest === 'h'
+    ? (bHraw > 0 ? 'H_LEFT' : 'H_RIGHT')
+    : (bVraw > 0 ? 'V_DOWN' : 'V_UP');
 
   const biasH = Math.abs(bHraw) < 40 ? null : bHraw > 0 ? '右偏' : '左偏';
   const biasV = Math.abs(bVraw) < 30 ? null : bVraw > 0 ? '下偏' : '上偏';
 
-  const rx = { fixationScore:fix, hScore:hSc, vScore:vSc, saccadeScore:sac,
+  const rx = { fixationScore:fix, hScore:hSc, vScore:vSc, hSaccadeScore:hSac, vSaccadeScore:vSac,
                biasH, biasV, bHraw, bVraw, startSpeed, priorityPath,
                timestamp: new Date().toISOString() };
   const store = getStore();
@@ -976,33 +1009,33 @@ function finishAssessment() {
   store.lastBias = { h: biasH, v: biasV };
   saveStore(store);
 
-  // render
   const scoreClass = v => v>=75?'score-good':v>=50?'score-mid':'score-low';
-  [['ar-fixation',fix],['ar-h',hSc],['ar-v',vSc],['ar-saccade',sac]].forEach(([id,v]) => {
+  [['ar-fixation',fix],['ar-h',hSc],['ar-v',vSc],['ar-h-saccade',hSac],['ar-v-saccade',vSac]].forEach(([id,v]) => {
     const el = document.getElementById(id);
+    if (!el) return;
     el.textContent = v;
     el.className = 'assess-score-val ' + scoreClass(v);
   });
-  const pathLabel = {H_RIGHT:'水平右',H_LEFT:'水平左',V_UP:'垂直上',V_DOWN:'垂直下',SACCADE:'跳視'};
+  const pathLabel = {H_RIGHT:'水平右',H_LEFT:'水平左',V_UP:'垂直上',V_DOWN:'垂直下'};
   document.getElementById('ar-speed').textContent = startSpeed;
   document.getElementById('ar-path').textContent  = pathLabel[priorityPath] ?? priorityPath;
   document.getElementById('ar-bias').textContent  = biasH ?? biasV ?? '居中';
 
   interpretAssessment(rx);
 
-  // level recommendation
-  _recommendedLevel = recommendLevelFromScore((fix + hSc + vSc + sac) / 4);
+  _recommendedLevel = recommendLevelFromScore((fix + hSc + vSc + hSac + vSac) / 5);
   const lvRec = TRAINING_LEVELS[_recommendedLevel];
   document.getElementById('level-rec-val').textContent =
     `Level ${_recommendedLevel} — ${lvRec.label}（${lvRec.desc}）`;
   document.getElementById('level-rec-box').style.display = 'block';
 
   showPage('pg-assessment-result');
+  setTimeout(drawGazeTrail, 100);
 }
 
 // ── neural interpretation (ported from BCF app.js) ──
 function interpretAssessment(rx) {
-  const { fixationScore, hScore, vScore, saccadeScore, bHraw = 0, bVraw = 0 } = rx;
+  const { fixationScore, hScore, vScore, hSaccadeScore = 50, vSaccadeScore = 50, bHraw = 0, bVraw = 0 } = rx;
 
   // Estimate directional SP scores from hScore + raw bias direction.
   // bHraw > 0 → head drifts right → right-field pursuit is weaker.
@@ -1041,10 +1074,16 @@ function interpretAssessment(rx) {
     rxLines.push('優先進行固視穩定訓練，速度設為慢，頭部保持不動');
   }
 
-  // ── Rule 4: 跳視差 → 額葉 FEF / 基底核 ──
-  if (saccadeScore < 60) {
-    regions.push('額葉眼動區（FEF）／基底核弱化——快速掃視啟動不足');
-    rxLines.push('加強跳視訓練（Saccade），刺激 FEF 自主性掃視迴路');
+  // ── Rule 4: H跳視差 → FEF / 基底核 ──
+  if (hSaccadeScore < 60) {
+    regions.push('額葉眼動區（FEF）／基底核弱化——水平掃視啟動不足');
+    rxLines.push('加強水平跳視訓練（H-Saccade），刺激 FEF 水平掃視迴路');
+  }
+
+  // ── Rule 5: V跳視差 → riMLF / 上丘 ──
+  if (vSaccadeScore < 60) {
+    regions.push('riMLF／上丘（SC）弱化——垂直掃視啟動不足');
+    rxLines.push('加強垂直跳視訓練（V-Saccade），刺激 riMLF / 上丘垂直掃視迴路');
   }
 
   // fallback
@@ -1058,6 +1097,92 @@ function interpretAssessment(rx) {
   document.getElementById('neuro-rx').innerHTML =
     rxLines.map(r => `→ ${r}`).join('<br>');
   document.getElementById('neuro-box').style.display = 'block';
+}
+
+// ── Gaze trail chart ──
+function drawGazeTrail() {
+  const canvas = document.getElementById('gaze-trail-canvas');
+  if (!canvas) return;
+  const DPR = window.devicePixelRatio || 1;
+  const W = canvas.offsetWidth || 400;
+  const H = 200;
+  canvas.width  = W * DPR;
+  canvas.height = H * DPR;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(DPR, DPR);
+
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(0, 0, W, H);
+
+  const sW = window.innerWidth, sH = window.innerHeight;
+  const screenAspect = sW / sH;
+  const canvasAspect = W / H;
+  let sx, sy, ox, oy;
+  if (canvasAspect > screenAspect) {
+    sy = H / sH; sx = sy; ox = (W - sW * sx) / 2; oy = 0;
+  } else {
+    sx = W / sW; sy = sx; ox = 0; oy = (H - sH * sy) / 2;
+  }
+  const toX = v => ox + v * sx;
+  const toY = v => oy + v * sy;
+
+  const TEST_CFG = [
+    { id:'fixation',  label:'固視',  color:'#e2e8f0' },
+    { id:'h-pursuit', label:'H追蹤', color:'#38bdf8' },
+    { id:'v-pursuit', label:'V追蹤', color:'#4ade80' },
+    { id:'h-saccade', label:'H跳視', color:'#fb923c' },
+    { id:'v-saccade', label:'V跳視', color:'#c084fc' },
+  ];
+
+  for (const { id, color } of TEST_CFG) {
+    const pts = trailData[id];
+    if (!pts || pts.length < 2) continue;
+
+    // target path dashed
+    ctx.save();
+    ctx.setLineDash([4, 5]);
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.35;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    let started = false;
+    for (const p of pts) {
+      if (p.tx == null || p.ty == null) continue;
+      const x = toX(p.tx), y = toY(p.ty);
+      if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.restore();
+
+    // actual gaze path solid
+    ctx.save();
+    ctx.setLineDash([]);
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.85;
+    ctx.lineWidth = 1.5;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    for (let i = 0; i < pts.length; i++) {
+      const x = toX(pts[i].x), y = toY(pts[i].y);
+      if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+    }
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // legend (top-right)
+  ctx.font = `${10 * (DPR > 1 ? 1 : 1)}px sans-serif`;
+  TEST_CFG.forEach(({ id, label, color }, i) => {
+    const lx = W - 52, ly = 12 + i * 16;
+    ctx.fillStyle = color;
+    ctx.globalAlpha = 0.9;
+    ctx.fillRect(lx - 14, ly - 2, 10, 3);
+    ctx.globalAlpha = 1;
+    ctx.fillStyle = '#94a3b8';
+    ctx.textAlign = 'left';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(label, lx - 1, ly);
+  });
 }
 
 // ── PATH SYSTEM ──
