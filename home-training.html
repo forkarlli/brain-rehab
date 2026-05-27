@@ -60,6 +60,9 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
 
 /* ── results ── */
 #pg-results{background:linear-gradient(135deg,#0f172a 0%,#1a2744 100%)}
+.chart-wrap{width:100%;max-width:420px;margin:12px 0}
+.chart-label{font-size:11px;color:#64748b;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
+#segment-chart{width:100%;height:120px;border-radius:8px;background:rgba(255,255,255,.03);display:block}
 .result-title{font-size:24px;font-weight:700;margin-bottom:8px;color:#f1f5f9}
 .score-ring{width:140px;height:140px;position:relative;margin:20px auto}
 .score-ring svg{transform:rotate(-90deg)}
@@ -175,6 +178,10 @@ body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;backgrou
         <div class="result-card-val" id="res-duration">--</div>
       </div>
     </div>
+    <div class="chart-wrap">
+      <div class="chart-label">進步趨勢（各段分數）</div>
+      <canvas id="segment-chart"></canvas>
+    </div>
     <div class="ai-feedback">
       <div class="feedback-label">🤖 AI 回饋</div>
       <div id="ai-feedback-text">分析中…</div>
@@ -201,10 +208,11 @@ const STORAGE_KEY = 'bcf_home_training';
 
 // ── state ──
 let patientId = '';
-let gazeData  = [];       // [{x,y,t}]
+let gazeData  = [];       // [{x,y,t,tx,ty}]
 let trainStartTime = 0;
 let webgazerReady  = false;
 let animFrame      = null;
+let currentTargetPos = null;
 
 // ── utils ──
 function showPage(id) {
@@ -465,7 +473,7 @@ let trialGaze   = [];
 let currentSpeed    = 0.3;
 let currentSpeedMax = 0.3;
 let lastFatigueVar  = null;
-const metrics = { pursuit: [], saccade: null };
+const metrics = { segments: [] };
 
 function startTraining() {
   showPage('pg-training');
@@ -473,8 +481,7 @@ function startTraining() {
   segIdx = 0;
   trainStartTime = Date.now();
   gazeData = [];
-  metrics.pursuit = [];
-  metrics.saccade = null;
+  metrics.segments = [];
   runSegment();
 }
 
@@ -484,6 +491,7 @@ function runSegment() {
   segTimer = 30;
   trialGaze = [];
   lastFatigueVar = null;
+  currentTargetPos = null;
 
   const isPursuit = seg.type === 'pursuit';
   if (isPursuit) {
@@ -505,7 +513,9 @@ function runSegment() {
   if (webgazerReady) {
     webgazer.setGazeListener((data) => {
       if (!data) return;
-      const sample = { x: data.x, y: data.y, t: Date.now() };
+      const tp = currentTargetPos;
+      const sample = { x: data.x, y: data.y, t: Date.now(),
+        tx: tp ? tp.x : null, ty: tp ? tp.y : null };
       trialGaze.push(sample);
       gazeData.push(sample);
       moveGazeDot(data.x, data.y);
@@ -528,10 +538,9 @@ function runSegment() {
 
 function finishSegment() {
   stopAnim();
+  currentTargetPos = null;
   if (webgazerReady) webgazer.setGazeListener(null);
-  const seg = segments[segIdx];
-  if (seg.type === 'pursuit') metrics.pursuit.push(analyzePursuit(trialGaze));
-  else                        metrics.saccade = analyzeSaccade(trialGaze);
+  metrics.segments.push({ ...analyzeSegment(trialGaze), type: segments[segIdx].type });
   segIdx++;
   setTimeout(runSegment, 600);
 }
@@ -611,6 +620,7 @@ function startPursuitAnim(pathId, amplitude) {
 
     // moving target
     const { x: tx, y: ty } = getPathTarget(pathId, t, amplitude, W, H);
+    currentTargetPos = { x: tx, y: ty };
     ctx.beginPath(); ctx.arc(tx, ty, 22, 0, Math.PI*2);
     ctx.fillStyle = color.replace(')', ',.12)').replace('rgb(', 'rgba(').replace('#', 'rgba(').replace(/rgba\(([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/, (_, r, g, b) => `rgba(${parseInt(r,16)},${parseInt(g,16)},${parseInt(b,16)}`);
     // simpler approach for fill:
@@ -650,6 +660,7 @@ function startSaccadeAnim() {
       tx = cx + R*Math.cos(rad);
       ty = cy + R*Math.sin(rad);
     }
+    currentTargetPos = { x: tx, y: ty };
     ctx.beginPath(); ctx.arc(tx, ty, 16, 0, Math.PI*2);
     ctx.fillStyle = 'rgba(251,191,36,.15)'; ctx.fill();
     ctx.beginPath(); ctx.arc(tx, ty, 8,  0, Math.PI*2);
@@ -674,32 +685,37 @@ function moveGazeDot(x, y) {
 }
 
 // ── analysis ──
-function analyzePursuit(samples) {
-  if (samples.length < 10) return { score:50, stability:50, biasX:0, biasY:0 };
-  const W = window.innerWidth, H = window.innerHeight;
-  const cx = W/2, cy = H/2;
-  const dists = samples.map(s => Math.hypot(s.x-cx, s.y-cy));
-  const avgDist = dists.reduce((a,b)=>a+b,0)/dists.length;
-  const maxDist = Math.min(W,H)*0.4;
-  const score = Math.round(Math.min(100, (avgDist/maxDist)*100));
-  const xs = samples.map(s=>s.x);
-  const ys = samples.map(s=>s.y);
-  const stability = Math.round(Math.max(0, 100 - (variance(xs)+variance(ys))/80));
-  const biasX = xs.reduce((a,b)=>a+b,0)/xs.length - cx;
-  const biasY = ys.reduce((a,b)=>a+b,0)/ys.length - cy;
-  return { score, stability, biasX, biasY };
-}
+function analyzeSegment(samples) {
+  if (samples.length < 10) return { segmentScore: 50, stability: 50, biasX: 0, biasY: 0 };
 
-function analyzeSaccade(samples) {
-  if (samples.length < 10) return { score:50, stability:50, biasX:0 };
-  const W = window.innerWidth;
-  const cx = W/2;
-  const xs = samples.map(s=>s.x);
-  const score = Math.round(60 + Math.random()*30); // baseline with noise
-  const stability = Math.round(Math.max(0, 100 - variance(xs)/80));
-  const meanX = xs.reduce((a,b)=>a+b,0)/xs.length;
-  const biasX = meanX - cx;
-  return { score, stability, biasX };
+  const tStart = samples[0].t;
+  const firstHalf  = samples.filter(s => s.t - tStart < 15000);
+  const secondHalf = samples.filter(s => s.t - tStart >= 15000);
+
+  const avgErrOf = (arr) => {
+    const valid = arr.filter(s => s.tx != null);
+    if (valid.length < 3) return null;
+    return valid.reduce((a, s) => a + Math.hypot(s.x - s.tx, s.y - s.ty), 0) / valid.length;
+  };
+
+  let segmentScore = 50;
+  const errFirst  = avgErrOf(firstHalf);
+  const errSecond = avgErrOf(secondHalf);
+  if (errFirst != null && errSecond != null && errFirst > 0) {
+    segmentScore = 50 + (errFirst - errSecond) / errFirst * 50;
+    segmentScore = Math.round(Math.max(0, Math.min(100, segmentScore)));
+  }
+
+  const xs = samples.map(s => s.x);
+  const ys = samples.map(s => s.y);
+  const sd = Math.sqrt(variance(xs) + variance(ys));
+  const stability = Math.round(Math.max(0, Math.min(100, 100 - (sd - 50) / 150 * 100)));
+
+  const cx = window.innerWidth / 2, cy = window.innerHeight / 2;
+  const biasX = xs.reduce((a, b) => a + b, 0) / xs.length - cx;
+  const biasY = ys.reduce((a, b) => a + b, 0) / ys.length - cy;
+
+  return { segmentScore, stability, biasX, biasY };
 }
 
 function variance(arr) {
@@ -714,15 +730,20 @@ async function endTraining() {
   if (webgazerReady) { webgazer.setGazeListener(null); webgazer.pause(); }
 
   const duration = Math.round((Date.now() - trainStartTime)/1000);
-  const pArr = metrics.pursuit.length > 0 ? metrics.pursuit : [{ score:50, stability:50, biasX:0, biasY:0 }];
-  const avg  = arr => Math.round(arr.reduce((a,b)=>a+b,0)/arr.length);
+  const allSegs = metrics.segments.length > 0 ? metrics.segments
+                : [{ segmentScore: 50, stability: 50, biasX: 0, biasY: 0, type: 'pursuit' }];
+  const avg = arr => Math.round(arr.reduce((a, b) => a + b, 0) / arr.length);
 
-  const pursuitScore = avg(pArr.map(m=>m.score));
-  const saccadeScore = metrics.saccade?.score || 50;
-  const stabilityVal = avg([...pArr.map(m=>m.stability), metrics.saccade?.stability || 50]);
-  const biasRaw  = pArr.reduce((a,m)=>a+m.biasX,0)/pArr.length;
-  const biasRawY = pArr.reduce((a,m)=>a+m.biasY,0)/pArr.length;
-  const overallScore = avg([pursuitScore, saccadeScore, stabilityVal]);
+  const avgSegScore  = avg(allSegs.map(s => s.segmentScore));
+  const avgStability = avg(allSegs.map(s => s.stability));
+  const overallScore = Math.round(avgSegScore * 0.6 + avgStability * 0.4);
+
+  const pursuitSegs = allSegs.filter(s => s.type === 'pursuit');
+  const pursuitScore = pursuitSegs.length > 0 ? avg(pursuitSegs.map(s => s.segmentScore)) : avgSegScore;
+  const stabilityVal = avgStability;
+
+  const biasRaw  = pursuitSegs.length > 0 ? pursuitSegs.reduce((a, s) => a + s.biasX, 0) / pursuitSegs.length : 0;
+  const biasRawY = pursuitSegs.length > 0 ? pursuitSegs.reduce((a, s) => a + s.biasY, 0) / pursuitSegs.length : 0;
   const date = new Date().toISOString();
 
   // classify bias for next session path selection
@@ -743,6 +764,8 @@ async function endTraining() {
   const circ = 364.4;
   document.getElementById('score-arc').style.strokeDashoffset = circ - (overallScore/100)*circ;
 
+  drawSegmentChart(allSegs.map(s => s.segmentScore));
+
   // persist lastBias so next session selects correct paths
   const store = getStore();
   store.sessions  = store.sessions || [];
@@ -761,6 +784,67 @@ async function endTraining() {
   } catch(e) { console.warn('server save failed, local backup ok', e.message); }
 
   generateFeedback(pursuitScore, stabilityVal, overallScore, biasH, biasV);
+}
+
+function drawSegmentChart(scores) {
+  const canvas = document.getElementById('segment-chart');
+  if (!canvas || scores.length < 2) return;
+  const DPR = window.devicePixelRatio || 1;
+  const W = canvas.offsetWidth  || 380;
+  const H = canvas.offsetHeight || 120;
+  canvas.width  = W * DPR;
+  canvas.height = H * DPR;
+  const ctx = canvas.getContext('2d');
+  ctx.scale(DPR, DPR);
+
+  const PAD = { top: 14, right: 14, bottom: 24, left: 34 };
+  const plotW = W - PAD.left - PAD.right;
+  const plotH = H - PAD.top  - PAD.bottom;
+
+  // grid lines + Y labels
+  [0, 25, 50, 75, 100].forEach(v => {
+    const y = PAD.top + plotH * (1 - v / 100);
+    ctx.strokeStyle = 'rgba(255,255,255,.07)';
+    ctx.lineWidth = 1;
+    ctx.beginPath(); ctx.moveTo(PAD.left, y); ctx.lineTo(PAD.left + plotW, y); ctx.stroke();
+    ctx.fillStyle = '#475569'; ctx.font = '9px sans-serif';
+    ctx.textAlign = 'right'; ctx.textBaseline = 'middle';
+    ctx.fillText(v, PAD.left - 4, y);
+  });
+
+  // X labels
+  scores.forEach((_, i) => {
+    const x = PAD.left + (i / (scores.length - 1)) * plotW;
+    ctx.fillStyle = '#475569'; ctx.font = '9px sans-serif';
+    ctx.textAlign = 'center'; ctx.textBaseline = 'top';
+    ctx.fillText(i + 1, x, PAD.top + plotH + 5);
+  });
+
+  const px = (i) => PAD.left + (i / (scores.length - 1)) * plotW;
+  const py = (v) => PAD.top  + plotH * (1 - v / 100);
+
+  // gradient fill
+  const grad = ctx.createLinearGradient(0, PAD.top, 0, PAD.top + plotH);
+  grad.addColorStop(0, 'rgba(56,189,248,.22)');
+  grad.addColorStop(1, 'rgba(56,189,248,.02)');
+  ctx.beginPath();
+  scores.forEach((v, i) => i === 0 ? ctx.moveTo(px(i), py(v)) : ctx.lineTo(px(i), py(v)));
+  ctx.lineTo(px(scores.length - 1), PAD.top + plotH);
+  ctx.lineTo(PAD.left, PAD.top + plotH);
+  ctx.closePath();
+  ctx.fillStyle = grad; ctx.fill();
+
+  // line
+  ctx.beginPath();
+  scores.forEach((v, i) => i === 0 ? ctx.moveTo(px(i), py(v)) : ctx.lineTo(px(i), py(v)));
+  ctx.strokeStyle = '#38bdf8'; ctx.lineWidth = 2;
+  ctx.lineJoin = 'round'; ctx.stroke();
+
+  // dots
+  scores.forEach((v, i) => {
+    ctx.beginPath(); ctx.arc(px(i), py(v), 3.5, 0, Math.PI * 2);
+    ctx.fillStyle = '#38bdf8'; ctx.fill();
+  });
 }
 
 function generateFeedback(pursuit, stability, overall, biasH, biasV) {
