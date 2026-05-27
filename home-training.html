@@ -383,12 +383,20 @@ function renderLevelGrid(containerId) {
   const grid = document.getElementById(containerId);
   if (!grid) return;
   grid.innerHTML = Object.entries(TRAINING_LEVELS).map(([n, cfg]) => `
-    <div class="level-card${+n === selectedLevel ? ' selected' : ''}" data-level="${n}"
-         onclick="pickLevel(${n})">
+    <div class="level-card${+n === selectedLevel ? ' selected' : ''}" data-level="${n}">
       <div class="level-card-num">L${n}</div>
       <div class="level-card-name">${cfg.label}</div>
       <div class="level-card-segs">${cfg.desc}</div>
     </div>`).join('');
+  grid.querySelectorAll('.level-card').forEach(card => {
+    card.addEventListener('touchstart', function(e) {
+      e.preventDefault();
+      pickLevel(parseInt(this.dataset.level));
+    }, { passive: false });
+    card.addEventListener('click', function() {
+      pickLevel(parseInt(this.dataset.level));
+    });
+  });
 }
 
 // ── head-position estimator (replaces WebGazer) ──
@@ -675,6 +683,15 @@ function showChoicePage() {
     el.textContent = '尚無評估記錄，建議先進行評估';
   }
   renderLevelGrid('choice-level-grid');
+  // ensure assess button responds to touch on iPad Safari
+  const btnAssess = document.querySelector('#pg-choice .btn-primary');
+  if (btnAssess && !btnAssess._touchBound) {
+    btnAssess._touchBound = true;
+    btnAssess.addEventListener('touchstart', function(e) {
+      e.preventDefault();
+      startAssessment();
+    }, { passive: false });
+  }
   showPage('pg-choice');
 }
 
