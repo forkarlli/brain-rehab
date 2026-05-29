@@ -508,8 +508,8 @@ function buildGazeMap() {
 function mapGaze() {
   if (!latestGaze || !gazeOffset) return null;
   const W = window.innerWidth, H = window.innerHeight;
-  const x = W/2 + (latestGaze.gazeH - gazeOffset.offsetH) * W * 3.0;
-  const y = H/2 + (latestGaze.gazeV - gazeOffset.offsetV) * H * 4.0;
+  const x = W/2 + (latestGaze.gazeH - gazeOffset.offsetH) * W * 8.0;
+  const y = H/2 + (latestGaze.gazeV - gazeOffset.offsetV) * H * 12.0;
   return {
     x: Math.max(0, Math.min(W, x)),
     y: Math.max(0, Math.min(H, y)),
@@ -1156,6 +1156,7 @@ function finishAssessment() {
   document.getElementById('level-rec-val').textContent =
     `Level ${_recommendedLevel} — ${lvRec.label}（${lvRec.desc}）`;
   document.getElementById('level-rec-box').style.display = 'block';
+
 
   showPage('pg-assessment-result');
   setTimeout(() => {
