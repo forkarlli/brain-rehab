@@ -427,7 +427,7 @@ function renderLevelGrid(containerId) {
 let faceMesh      = null;
 let gazeCamera    = null;
 let latestGaze    = null;      // { gazeH: -1..1, gazeV: -1..1 } or null
-let gazeMapCoeffs = null;      // { ax, bx, ay, by } screen = a*gaze + b
+let gazeOffset    = null;      // { offsetH, offsetV } personal centre calibration
 let calibGazeSamples = [];     // [samples per calib point]
 
 function calcGaze(lm) {
@@ -450,45 +450,31 @@ function calcGaze(lm) {
   return { gazeH, gazeV };
 }
 
-function fitLinear(xs, ys) {
-  const n = xs.length;
-  if (n < 2) return { a:0, b: ys[0] ?? 0 };
-  const sx = xs.reduce((a,v)=>a+v,0), sy = ys.reduce((a,v)=>a+v,0);
-  const sxx = xs.reduce((a,v)=>a+v*v,0), sxy = xs.reduce((a,v,i)=>a+v*ys[i],0);
-  const d = n*sxx - sx*sx;
-  if (Math.abs(d) < 1e-10) return { a:0, b:sy/n };
-  const a = (n*sxy - sx*sy)/d;
-  return { a, b:(sy - a*sx)/n };
-}
-
 function buildGazeMap() {
-  const pts = CALIB_POINTS.map(([rx,ry], i) => {
-    const s = calibGazeSamples[i] || [];
-    if (!s.length) return null;
-    return { sx: rx*window.innerWidth, sy: ry*window.innerHeight,
-             gazeH: s.reduce((a,v)=>a+v.gazeH,0)/s.length,
-             gazeV: s.reduce((a,v)=>a+v.gazeV,0)/s.length };
-  }).filter(Boolean);
-  if (pts.length < 3) { console.warn('[Gaze] insufficient calib points:', pts.length); return; }
-  const fX = fitLinear(pts.map(p=>p.gazeH), pts.map(p=>p.sx));
-  const fY = fitLinear(pts.map(p=>p.gazeV), pts.map(p=>p.sy));
-
-  // Y-axis compensation: MediaPipe iris vertical sensitivity is lower than horizontal.
-  // Measure actual gazeV range across calibration points and boost if too small.
-  const gazeVs     = pts.map(p => p.gazeV);
-  const gazeVRange = Math.max(...gazeVs) - Math.min(...gazeVs);
-  const yComp      = gazeVRange < 0.05 ? 3.0 : 1.0;
-
-  gazeMapCoeffs = { ax:fX.a, bx:fX.b, ay:fY.a * yComp, by:fY.b };
-  console.log('[Gaze] calibrated', gazeMapCoeffs, `gazeVRange=${gazeVRange.toFixed(4)} yComp=${yComp}`);
+  // Collect all calibration samples to compute the personal gaze centre offset.
+  // The 5-point calibration captures where the user's eyes rest at centre gaze,
+  // which varies per person and session.
+  const allSamples = calibGazeSamples.flat();
+  if (allSamples.length < 3) { console.warn('[Gaze] insufficient calib samples:', allSamples.length); return; }
+  const offsetH = allSamples.reduce((a, v) => a + v.gazeH, 0) / allSamples.length;
+  const offsetV = allSamples.reduce((a, v) => a + v.gazeV, 0) / allSamples.length;
+  gazeOffset = { offsetH, offsetV };
+  console.log('[Gaze] offset calibrated', gazeOffset,
+    `n=${allSamples.length} rawH_range=[${Math.min(...allSamples.map(s=>s.gazeH)).toFixed(3)},${Math.max(...allSamples.map(s=>s.gazeH)).toFixed(3)}]`,
+    `rawV_range=[${Math.min(...allSamples.map(s=>s.gazeV)).toFixed(3)},${Math.max(...allSamples.map(s=>s.gazeV)).toFixed(3)}]`);
 }
 
+// Fixed mapping: MediaPipe gazeH ±0.15 covers full screen width,
+// gazeV ±0.08 covers full screen height (vertical sensitivity is lower).
+// Multipliers: W * 3.0 = W/2 / 0.15,  H * 6.0 = H/2 / 0.083
 function mapGaze() {
-  if (!latestGaze || !gazeMapCoeffs) return null;
+  if (!latestGaze || !gazeOffset) return null;
   const W = window.innerWidth, H = window.innerHeight;
+  const x = W/2 + (latestGaze.gazeH - gazeOffset.offsetH) * W * 3.0;
+  const y = H/2 + (latestGaze.gazeV - gazeOffset.offsetV) * H * 6.0;
   return {
-    x: Math.max(0, Math.min(W, gazeMapCoeffs.ax * latestGaze.gazeH + gazeMapCoeffs.bx)),
-    y: Math.max(0, Math.min(H, gazeMapCoeffs.ay * latestGaze.gazeV + gazeMapCoeffs.by)),
+    x: Math.max(0, Math.min(W, x)),
+    y: Math.max(0, Math.min(H, y)),
   };
 }
 
@@ -840,7 +826,7 @@ function runNextAssessTest() {
 
 function runAssessTest(test) {
   console.log('[ASSESS] TEST START', test.id,
-    { latestGaze, gazeMapCoeffs: gazeMapCoeffs ? gazeMapCoeffs : 'NULL' });
+    { latestGaze, gazeOffset: gazeOffset ? gazeOffset : 'NULL' });
 
   const canvas = document.getElementById('assess-canvas');
   const ctx    = canvas.getContext('2d');
@@ -1046,7 +1032,7 @@ function finishAssessment() {
   const bVraw  = assessResults['v-pursuit']?.biasY  ?? 0;
 
   const _tot = calibGazeSamples.reduce((a,s)=>a+s.length,0);
-  const _dbg = `fix=${fix} h=${hSc} v=${vSc} hSac=${hSac} vSac=${vSac} | map=${gazeMapCoeffs?'OK':'NO'} calibSamps=${_tot}`;
+  const _dbg = `fix=${fix} h=${hSc} v=${vSc} hSac=${hSac} vSac=${vSac} | offset=${gazeOffset?'OK':'NO'} calibSamps=${_tot}`;
   console.log('[ASSESS FINAL]', _dbg, JSON.stringify(assessResults));
   document.title = _dbg;
 
