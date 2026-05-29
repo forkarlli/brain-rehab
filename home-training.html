@@ -1034,38 +1034,27 @@ function scoreAssessTest(test) {
     } else if (test.id === 'h-pursuit' || test.id === 'v-pursuit') {
       const withTgt = assessSamples.filter(s => s.tx != null);
       if (withTgt.length >= 3) {
+        const axis    = test.id === 'h-pursuit' ? 'h' : 'v';
         const gazeArr = withTgt.map(s => ({x:s.x, y:s.y}));
         const tgtArr  = withTgt.map(s => ({x:s.tx, y:s.ty}));
-        const rms     = calcRMSError(gazeArr, tgtArr);
-        const gain    = calcPursuitGain(gazeArr, tgtArr);
-        const catchup = countCatchupSaccades(gazeArr);
-        // Gain:   deviation from 1.0; ±0.7 tolerance → 0 (range 0.3–1.7)
-        const gainScore = Math.round(Math.max(0, Math.min(100, 100 - Math.abs(gain-1)/0.7*100)));
-        // RMS:    30 px → 100,  200 px → 0
-        const rmsScore  = Math.round(Math.max(0, Math.min(100, 100 - (rms-30)/170*100)));
-        // Catch-up: 0 → 100,  15+ → 0
+        const dirScore  = calcDirectionalScore(gazeArr, tgtArr, axis);
+        const catchup   = countCatchupSaccades(gazeArr);
         const csScore   = Math.round(Math.max(0, Math.min(100, 100 - catchup/15*100)));
-        score   = Math.round(gainScore*0.4 + rmsScore*0.4 + csScore*0.2);
-        details = { gain: +gain.toFixed(2), rmsError: Math.round(rms), catchupCount: catchup };
-        console.log(`[SCORE] ${test.id} gainScore=${gainScore} rmsScore=${rmsScore} csScore=${csScore} → ${score}`);
+        score   = Math.round(dirScore * 0.8 + csScore * 0.2);
+        details = { dirScore, catchupCount: catchup };
+        console.log(`[SCORE] ${test.id} dir=${dirScore} catchup=${catchup} → ${score}`);
       } else {
         score = 50;
       }
 
     } else if (test.id === 'h-saccade' || test.id === 'v-saccade') {
-      const latency = calcSaccadeLatency(assessSamples, assessTargetJumps);
-      const withTgt = assessSamples.filter(s => s.tx != null);
-      let accuracy = 50;
-      if (withTgt.length >= 3) {
-        const rms = calcRMSError(withTgt.map(s=>({x:s.x,y:s.y})), withTgt.map(s=>({x:s.tx,y:s.ty})));
-        // RMS:  30 px → 100,  200 px → 0
-        accuracy = Math.round(Math.max(0, Math.min(100, 100 - (rms-30)/170*100)));
-      }
-      // Latency: 150 ms → 100,  500 ms → 0
+      const axis      = test.id === 'h-saccade' ? 'h' : 'v';
+      const dirScore  = calcSaccadeDirectionScore(assessSamples, assessTargetJumps, axis);
+      const latency   = calcSaccadeLatency(assessSamples, assessTargetJumps);
       const latencyScore = Math.round(Math.max(0, Math.min(100, 100 - (latency-150)/350*100)));
-      score   = Math.round(latencyScore*0.5 + accuracy*0.5);
-      details = { latency: Math.round(latency), accuracy };
-      console.log(`[SCORE] ${test.id} latencyScore=${latencyScore} accuracy=${accuracy} → ${score}`);
+      score   = Math.round(dirScore * 0.6 + latencyScore * 0.4);
+      details = { dirScore, latency: Math.round(latency) };
+      console.log(`[SCORE] ${test.id} dir=${dirScore} latency=${Math.round(latency)} → ${score}`);
     }
   }
 
@@ -1130,11 +1119,11 @@ function finishAssessment() {
 
   // detail panels (click card to expand)
   const DETAIL_FMT = {
-    'fixation':  d => d.bcea    != null ? `BCEA = ${d.bcea} px²　Entropy = ${d.entropy}` : '',
-    'h-pursuit': d => d.gain    != null ? `Gain = ${d.gain}　RMS = ${d.rmsError} px　Catch-up = ${d.catchupCount}次` : '',
-    'v-pursuit': d => d.gain    != null ? `Gain = ${d.gain}　RMS = ${d.rmsError} px　Catch-up = ${d.catchupCount}次` : '',
-    'h-saccade': d => d.latency != null ? `Latency = ${d.latency} ms　落點 = ${d.accuracy}分` : '',
-    'v-saccade': d => d.latency != null ? `Latency = ${d.latency} ms　落點 = ${d.accuracy}分` : '',
+    'fixation':  d => d.bcea     != null ? `BCEA = ${d.bcea} px²　Entropy = ${d.entropy}` : '',
+    'h-pursuit': d => d.dirScore != null ? `方向一致性 = ${d.dirScore}%　Catch-up = ${d.catchupCount}次` : '',
+    'v-pursuit': d => d.dirScore != null ? `方向一致性 = ${d.dirScore}%　Catch-up = ${d.catchupCount}次` : '',
+    'h-saccade': d => d.dirScore != null ? `方向正確率 = ${d.dirScore}%　Latency = ${d.latency} ms` : '',
+    'v-saccade': d => d.dirScore != null ? `方向正確率 = ${d.dirScore}%　Latency = ${d.latency} ms` : '',
   };
   ['fixation','h-pursuit','v-pursuit','h-saccade','v-saccade'].forEach(id => {
     const det = document.getElementById('detail-' + id);
@@ -1916,6 +1905,50 @@ function calcPursuitGain(gazeArr, targetArr) {
   const gain = Math.min(2.5, sdG / sdT);
   console.log(`[GAIN] n=${gazeArr.length} varTX=${varTX.toFixed(0)} varTY=${varTY.toFixed(0)} sdT=${sdT.toFixed(1)} sdG=${sdG.toFixed(1)} gain=${gain.toFixed(2)}`);
   return gain;
+}
+
+// ── Direction-based scoring ──
+function calcDirectionalScore(gazeArr, targetArr, axis) {
+  // axis: 'h' = horizontal only, 'v' = vertical only
+  // Score = fraction of steps where gaze moved in same direction as target
+  let agree = 0, total = 0;
+  for (let i = 1; i < gazeArr.length; i++) {
+    const gazeDx   = gazeArr[i].x  - gazeArr[i-1].x;
+    const gazeDy   = gazeArr[i].y  - gazeArr[i-1].y;
+    const targetDx = targetArr[i].x - targetArr[i-1].x;
+    const targetDy = targetArr[i].y - targetArr[i-1].y;
+    // Only score steps where the target moved meaningfully on the relevant axis
+    const targetMoved = axis === 'h' ? Math.abs(targetDx) > 5
+                      : Math.abs(targetDy) > 5;
+    if (!targetMoved) continue;
+    total++;
+    const axisAgree = axis === 'h'
+      ? Math.sign(gazeDx) === Math.sign(targetDx)
+      : Math.sign(gazeDy) === Math.sign(targetDy);
+    if (axisAgree) agree++;
+  }
+  return total > 0 ? Math.round(agree / total * 100) : 50;
+}
+
+function calcSaccadeDirectionScore(gazeArr, targetJumps, axis) {
+  // Score = fraction of jumps where gaze moved in correct direction within 500ms
+  let correct = 0;
+  for (let i = 1; i < targetJumps.length; i++) {
+    const jump     = targetJumps[i];
+    const prevJump = targetJumps[i - 1];
+    const targetDir = axis === 'v'
+      ? Math.sign(jump.y - prevJump.y)
+      : Math.sign(jump.x - prevJump.x);
+    const after = gazeArr.filter(g => g.t >= jump.t && g.t <= jump.t + 500);
+    if (after.length < 2) continue;
+    const gazeDir = axis === 'v'
+      ? Math.sign(after[after.length-1].y - after[0].y)
+      : Math.sign(after[after.length-1].x - after[0].x);
+    if (gazeDir === targetDir) correct++;
+  }
+  return targetJumps.length > 1
+    ? Math.round(correct / (targetJumps.length - 1) * 100)
+    : 50;
 }
 
 // ── end training ──
