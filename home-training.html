@@ -822,6 +822,8 @@ let assessResults        = {};
 let assessAnimFrame      = null;
 let assessTimerInterval  = null;
 let assessPollerInterval = null;
+let assessGazeInterval   = null;  // 50ms trail collector (separate from scoring poller)
+let currentAssessTestId  = '';
 let assessCurrentTarget  = null;
 let assessTargetJumps    = [];  // [{t,x,y}] saccade jump timestamps
 
@@ -844,6 +846,7 @@ function runNextAssessTest() {
   stopAssessAnim();
   clearInterval(assessTimerInterval);
   clearInterval(assessPollerInterval);
+  clearInterval(assessGazeInterval);
 
   if (assessTestIdx >= ASSESS_TESTS.length) { finishAssessment(); return; }
   const test = ASSESS_TESTS[assessTestIdx];
@@ -874,6 +877,22 @@ function runAssessTest(test) {
   canvas.height = window.innerHeight;
   const W = canvas.width, H = canvas.height, cx = W/2, cy = H/2;
 
+  currentAssessTestId = test.id;
+  trailData[test.id]  = [];  // reset for this test
+
+  // ── 50ms trail collector (for playback) ──
+  assessGazeInterval = setInterval(() => {
+    if (!latestGaze) return;
+    const mapped = mapGaze();
+    if (!mapped) return;
+    trailData[currentAssessTestId].push({
+      x: mapped.x, y: mapped.y, t: Date.now(),
+      tx: assessCurrentTarget?.x ?? window.innerWidth  / 2,
+      ty: assessCurrentTarget?.y ?? window.innerHeight / 2,
+    });
+  }, 50);
+
+  // ── 200ms scoring poller (for clinical metrics) ──
   let remaining = test.dur;
   let _pollerCount = 0;
 
@@ -884,12 +903,9 @@ function runAssessTest(test) {
       console.log(`[GAZE] ${test.id} #${_pollerCount} mapped=${g ? `(${g.x.toFixed(0)},${g.y.toFixed(0)})` : 'null'} tgt=${assessCurrentTarget ? `(${assessCurrentTarget.x.toFixed(0)},${assessCurrentTarget.y.toFixed(0)})` : 'null'} latestGaze=${latestGaze ? JSON.stringify(latestGaze) : 'null'}`);
     }
     if (!g) return;
-    const pt = { x:g.x, y:g.y, t:Date.now(),
+    assessSamples.push({ x:g.x, y:g.y, t:Date.now(),
       tx: assessCurrentTarget?.x ?? null, ty: assessCurrentTarget?.y ?? null,
-      detected: true };
-    assessSamples.push(pt);
-    if (!trailData[test.id]) trailData[test.id] = [];
-    trailData[test.id].push({ x:g.x, y:g.y, tx:pt.tx, ty:pt.ty });
+      detected: true });
   }, 200);
 
   assessTimerInterval = setInterval(() => {
@@ -898,6 +914,7 @@ function runAssessTest(test) {
     if (remaining <= 0) {
       clearInterval(assessTimerInterval);
       clearInterval(assessPollerInterval);
+      clearInterval(assessGazeInterval);
       stopAssessAnim();
       scoreAssessTest(test);
     }
@@ -1141,7 +1158,11 @@ function finishAssessment() {
   document.getElementById('level-rec-box').style.display = 'block';
 
   showPage('pg-assessment-result');
-  setTimeout(drawGazeTrail, 100);
+  setTimeout(() => {
+    document.title = 'trails:' + Object.keys(trailData).map(k => k + ':' + trailData[k].length).join(',');
+    console.log('[TRAILS]', document.title, trailData);
+    drawGazeTrail();
+  }, 100);
 }
 
 // ── neural interpretation (ported from BCF app.js) ──
@@ -1227,6 +1248,19 @@ function drawGazeTrail() {
 function drawTrailChart(testId, label, color) {
   const canvas = document.getElementById('trail-' + testId);
   if (!canvas) return;
+  const pts = trailData[testId];
+  console.log('drawTrail', testId, 'pts:', pts?.length,
+    'canvas:', canvas.width, 'x', canvas.height,
+    'offset:', canvas.offsetWidth, 'x', canvas.offsetHeight);
+
+  // bind tap diagnostic
+  if (!canvas._diagBound) {
+    canvas._diagBound = true;
+    const tapHandler = (e) => { e.stopPropagation(); document.title = 'TAPPED:' + testId; console.log('canvas tap', testId); };
+    canvas.addEventListener('click',      tapHandler);
+    canvas.addEventListener('touchstart', tapHandler, { passive: true });
+  }
+
   const DPR = window.devicePixelRatio || 1;
   const W = canvas.offsetWidth || 200;
   const H = 150;
@@ -1321,6 +1355,8 @@ const TRAIL_CFG = {
 };
 
 function toggleTrailPlay(testId) {
+  console.log('togglePlay', testId, 'data:', trailData[testId]?.length);
+  document.title = 'PLAY:' + testId + ' pts=' + (trailData[testId]?.length ?? 0);
   const player = trailPlayers[testId];
   const btn    = document.getElementById('btn-play-' + testId);
   const pts    = trailData[testId];
