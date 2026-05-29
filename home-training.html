@@ -1284,8 +1284,6 @@ function drawTrailChart(testId, label, color) {
   const toX = v => ox + v * sx;
   const toY = v => oy + v * sy;
 
-  const pts = trailData[testId];
-
   if (pts && pts.length >= 2) {
     // target path (dashed)
     ctx.save();
