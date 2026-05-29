@@ -1352,33 +1352,39 @@ function playTrailFrame(testId, label, color) {
   const canvas = document.getElementById('trail-' + testId);
   if (!pts || !canvas) return;
 
-  const duration = pts[pts.length-1].t - pts[0].t;
+  console.log('PLAY', testId, pts.length, 'pts  canvas:', canvas.width, 'x', canvas.height,
+    'offset:', canvas.offsetWidth, 'x', canvas.offsetHeight);
+
+  // ── canvas size: ensure non-zero (DPR-aware) ──
+  const DPR = window.devicePixelRatio || 1;
+  const W   = canvas.offsetWidth  || 200;
+  const H   = canvas.offsetHeight || 150;
+  if (canvas.width === 0 || canvas.height === 0) {
+    canvas.width  = W * DPR;
+    canvas.height = H * DPR;
+  }
+  if (canvas.width === 0) return;  // layout not ready yet
+
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);  // draw in CSS-pixel space (0..W, 0..H)
+
+  // ── simple direct scaling: screen px → canvas CSS px ──
+  // trailData holds screen coords (0..innerWidth, 0..innerHeight)
+  const scaleX = W / window.innerWidth;
+  const scaleY = H / window.innerHeight;
+  const toX = v => v * scaleX;
+  const toY = v => v * scaleY;
+
+  // ── timing ──
+  const duration = Math.max(1, pts[pts.length-1].t - pts[0].t);
   const elapsed  = Date.now() - player.startReal;
   const progress = Math.min(1, elapsed / duration);
   const cutoffT  = pts[0].t + elapsed;
 
-  // progress bar
   const progEl = document.getElementById('prog-' + testId);
   if (progEl) progEl.style.width = (progress * 100) + '%';
 
-  // canvas setup
-  const DPR = window.devicePixelRatio || 1;
-  const W   = canvas.offsetWidth || 200;
-  const H   = 150;
-  if (canvas.width !== W * DPR) { canvas.width = W * DPR; canvas.height = H * DPR; }
-  const ctx = canvas.getContext('2d');
-  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
-
-  // coordinate mapping (same as drawTrailChart)
-  const sW = window.innerWidth, sH = window.innerHeight;
-  const canvasAspect = W / H, screenAspect = sW / sH;
-  let sx, sy, ox, oy;
-  if (canvasAspect > screenAspect) { sy = H/sH; sx=sy; ox=(W-sW*sx)/2; oy=0; }
-  else                              { sx = W/sW; sy=sx; ox=0; oy=(H-sH*sy)/2; }
-  const toX = v => ox + v * sx;
-  const toY = v => oy + v * sy;
-
-  // background
+  // ── draw ──
   ctx.fillStyle = '#0f172a';
   ctx.fillRect(0, 0, W, H);
 
@@ -1389,11 +1395,11 @@ function playTrailFrame(testId, label, color) {
   ctx.globalAlpha = 0.2;
   ctx.lineWidth = 1;
   ctx.beginPath();
-  let started = false;
+  let tgtStarted = false;
   for (const p of pts) {
     if (p.tx == null) continue;
     const x = toX(p.tx), y = toY(p.ty);
-    if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+    if (!tgtStarted) { ctx.moveTo(x, y); tgtStarted = true; } else ctx.lineTo(x, y);
   }
   ctx.stroke();
   ctx.restore();
@@ -1404,26 +1410,29 @@ function playTrailFrame(testId, label, color) {
     ctx.save();
     ctx.setLineDash([]);
     ctx.strokeStyle = color;
-    ctx.globalAlpha = 0.7;
+    ctx.globalAlpha = 0.75;
     ctx.lineWidth = 1.5;
     ctx.lineJoin = 'round';
     ctx.beginPath();
-    vis.forEach((p, i) => { const x=toX(p.x), y=toY(p.y); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
+    vis.forEach((p, i) => {
+      const x = toX(p.x), y = toY(p.y);
+      i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+    });
     ctx.stroke();
     ctx.restore();
   }
 
-  // current gaze dot (blue)
+  // current gaze dot (blue, 8px diameter)
   if (vis.length > 0) {
-    const last = vis[vis.length-1];
+    const last = vis[vis.length - 1];
     ctx.save(); ctx.globalAlpha = 1;
     ctx.fillStyle = '#38bdf8';
     ctx.beginPath(); ctx.arc(toX(last.x), toY(last.y), 4, 0, Math.PI*2); ctx.fill();
     ctx.restore();
   }
 
-  // current target dot (red) — last point with tx before cutoff
-  const tgtPt = vis.reduce((b, p) => p.tx != null ? p : b, null);
+  // current target dot (red, 8px diameter)
+  const tgtPt = vis.reduce((b, p) => (p.tx != null ? p : b), null);
   if (tgtPt) {
     ctx.save(); ctx.globalAlpha = 1;
     ctx.fillStyle = '#f87171';
@@ -1431,24 +1440,24 @@ function playTrailFrame(testId, label, color) {
     ctx.restore();
   }
 
-  // title
+  // title (top-left)
   ctx.globalAlpha = 1;
   ctx.fillStyle = color; ctx.font = 'bold 11px sans-serif';
   ctx.textAlign = 'left'; ctx.textBaseline = 'top';
   ctx.fillText(label, 8, 7);
 
-  // score
+  // score (top-right)
   const score = assessResults[testId]?.score;
   if (score != null) {
-    ctx.fillStyle = score>=75?'#4ade80':score>=50?'#fbbf24':'#f87171';
+    ctx.fillStyle = score >= 75 ? '#4ade80' : score >= 50 ? '#fbbf24' : '#f87171';
     ctx.font = 'bold 14px sans-serif';
     ctx.textAlign = 'right'; ctx.textBaseline = 'top';
-    ctx.fillText(score, W-8, 6);
+    ctx.fillText(score, W - 8, 6);
   }
 
   if (progress >= 1) {
     player.playing = false;
-    player.pausedAt = duration + 1;  // mark finished so next press restarts
+    player.pausedAt = duration + 1;
     const btn = document.getElementById('btn-play-' + testId);
     if (btn) btn.textContent = '▶ 回放';
     if (progEl) progEl.style.width = '100%';
