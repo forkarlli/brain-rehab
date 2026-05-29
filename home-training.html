@@ -101,6 +101,12 @@ video{pointer-events:none!important}
 .assess-score-card{background:rgba(255,255,255,.06);border:1px solid rgba(255,255,255,.1);border-radius:12px;padding:14px;text-align:center;cursor:pointer;-webkit-tap-highlight-color:transparent}
 .assess-detail{font-size:11px;color:#94a3b8;margin-top:8px;line-height:1.8;text-align:left;border-top:1px solid rgba(255,255,255,.08);padding-top:8px;display:none}
 .assess-score-card.expanded .assess-detail{display:block}
+.trail-wrap{border-radius:8px;overflow:hidden;background:#0f172a}
+.trail-ctrl{display:flex;align-items:center;gap:8px;padding:4px 8px;background:rgba(255,255,255,.04);border-top:1px solid rgba(255,255,255,.06)}
+.trail-btn{background:rgba(255,255,255,.1);border:none;color:#94a3b8;font-size:11px;padding:3px 10px;border-radius:6px;cursor:pointer;-webkit-tap-highlight-color:transparent;white-space:nowrap;flex-shrink:0}
+.trail-btn:active{background:rgba(255,255,255,.2)}
+.trail-progress{flex:1;height:2px;background:rgba(255,255,255,.1);border-radius:1px;overflow:hidden}
+.trail-progress-fill{height:100%;width:0%;background:#38bdf8;border-radius:1px}
 .assess-score-label{font-size:11px;color:#64748b;margin-bottom:6px;text-transform:uppercase;letter-spacing:.5px}
 .assess-score-val{font-size:28px;font-weight:800}
 .score-good{color:#4ade80}
@@ -310,11 +316,41 @@ video{pointer-events:none!important}
     <div style="width:100%;max-width:420px;margin:4px 0 12px">
       <div class="chart-label">眼球軌跡記錄</div>
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px">
-        <canvas id="trail-fixation"  style="grid-column:1/-1;width:100%;height:150px;border-radius:8px;display:block"></canvas>
-        <canvas id="trail-h-pursuit" style="width:100%;height:150px;border-radius:8px;display:block"></canvas>
-        <canvas id="trail-v-pursuit" style="width:100%;height:150px;border-radius:8px;display:block"></canvas>
-        <canvas id="trail-h-saccade" style="width:100%;height:150px;border-radius:8px;display:block"></canvas>
-        <canvas id="trail-v-saccade" style="width:100%;height:150px;border-radius:8px;display:block"></canvas>
+        <div class="trail-wrap" style="grid-column:1/-1">
+          <canvas id="trail-fixation"  style="width:100%;height:150px;display:block"></canvas>
+          <div class="trail-ctrl">
+            <button class="trail-btn" id="btn-play-fixation"  onclick="toggleTrailPlay('fixation')">▶ 回放</button>
+            <div class="trail-progress"><div class="trail-progress-fill" id="prog-fixation"></div></div>
+          </div>
+        </div>
+        <div class="trail-wrap">
+          <canvas id="trail-h-pursuit" style="width:100%;height:150px;display:block"></canvas>
+          <div class="trail-ctrl">
+            <button class="trail-btn" id="btn-play-h-pursuit" onclick="toggleTrailPlay('h-pursuit')">▶ 回放</button>
+            <div class="trail-progress"><div class="trail-progress-fill" id="prog-h-pursuit"></div></div>
+          </div>
+        </div>
+        <div class="trail-wrap">
+          <canvas id="trail-v-pursuit" style="width:100%;height:150px;display:block"></canvas>
+          <div class="trail-ctrl">
+            <button class="trail-btn" id="btn-play-v-pursuit" onclick="toggleTrailPlay('v-pursuit')">▶ 回放</button>
+            <div class="trail-progress"><div class="trail-progress-fill" id="prog-v-pursuit"></div></div>
+          </div>
+        </div>
+        <div class="trail-wrap">
+          <canvas id="trail-h-saccade" style="width:100%;height:150px;display:block"></canvas>
+          <div class="trail-ctrl">
+            <button class="trail-btn" id="btn-play-h-saccade" onclick="toggleTrailPlay('h-saccade')">▶ 回放</button>
+            <div class="trail-progress"><div class="trail-progress-fill" id="prog-h-saccade"></div></div>
+          </div>
+        </div>
+        <div class="trail-wrap">
+          <canvas id="trail-v-saccade" style="width:100%;height:150px;display:block"></canvas>
+          <div class="trail-ctrl">
+            <button class="trail-btn" id="btn-play-v-saccade" onclick="toggleTrailPlay('v-saccade')">▶ 回放</button>
+            <div class="trail-progress"><div class="trail-progress-fill" id="prog-v-saccade"></div></div>
+          </div>
+        </div>
       </div>
     </div>
     <div class="rx-box">
@@ -371,7 +407,8 @@ let gazePollerInterval = null;
 let animFrame         = null;
 let currentTargetPos  = null;
 
-let trailData       = {};  // { testId: [{x,y,tx,ty}] }
+let trailData       = {};  // { testId: [{x,y,t,tx,ty}] }
+let trailPlayers    = {};  // { testId: { raf, playing, startReal, pausedAt } }
 let selectedLevel   = 2;   // 1-4
 let _recommendedLevel = 2;
 let _lastVibrate    = 0;
@@ -793,6 +830,8 @@ function startAssessment() {
   assessTestIdx = 0;
   assessResults = {};
   trailData = {};
+  Object.values(trailPlayers).forEach(p => { if (p?.raf) cancelAnimationFrame(p.raf); });
+  trailPlayers = {};
   showPage('pg-assessment');
   setTimeout(runNextAssessTest, 200);
 }
@@ -1270,6 +1309,153 @@ function drawTrailChart(testId, label, color) {
     ctx.textBaseline = 'top';
     ctx.fillText(score, W - 8, 6);
   }
+}
+
+// ── Trail playback ──
+const TRAIL_CFG = {
+  'fixation':  { label:'固視穩定', color:'#e2e8f0' },
+  'h-pursuit': { label:'H 追蹤',   color:'#38bdf8' },
+  'v-pursuit': { label:'V 追蹤',   color:'#4ade80' },
+  'h-saccade': { label:'H 跳視',   color:'#fb923c' },
+  'v-saccade': { label:'V 跳視',   color:'#c084fc' },
+};
+
+function toggleTrailPlay(testId) {
+  const player = trailPlayers[testId];
+  const btn    = document.getElementById('btn-play-' + testId);
+  const pts    = trailData[testId];
+  if (!pts || pts.length < 2) return;
+
+  if (player?.playing) {
+    // → pause
+    cancelAnimationFrame(player.raf);
+    player.playing = false;
+    player.pausedAt = Date.now() - player.startReal;
+    if (btn) btn.textContent = '▶ 回放';
+  } else {
+    // → play (or resume; restart if finished)
+    const duration  = pts[pts.length-1].t - pts[0].t;
+    const elapsed   = player?.pausedAt ?? 0;
+    const resumeAt  = (elapsed >= duration) ? 0 : elapsed;
+    trailPlayers[testId] = { playing:true, startReal: Date.now() - resumeAt, pausedAt:0, raf:null };
+    if (btn) btn.textContent = '⏸ 暫停';
+    const { label, color } = TRAIL_CFG[testId] || { label:testId, color:'#e2e8f0' };
+    playTrailFrame(testId, label, color);
+  }
+}
+
+function playTrailFrame(testId, label, color) {
+  const player = trailPlayers[testId];
+  if (!player?.playing) return;
+
+  const pts    = trailData[testId];
+  const canvas = document.getElementById('trail-' + testId);
+  if (!pts || !canvas) return;
+
+  const duration = pts[pts.length-1].t - pts[0].t;
+  const elapsed  = Date.now() - player.startReal;
+  const progress = Math.min(1, elapsed / duration);
+  const cutoffT  = pts[0].t + elapsed;
+
+  // progress bar
+  const progEl = document.getElementById('prog-' + testId);
+  if (progEl) progEl.style.width = (progress * 100) + '%';
+
+  // canvas setup
+  const DPR = window.devicePixelRatio || 1;
+  const W   = canvas.offsetWidth || 200;
+  const H   = 150;
+  if (canvas.width !== W * DPR) { canvas.width = W * DPR; canvas.height = H * DPR; }
+  const ctx = canvas.getContext('2d');
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+
+  // coordinate mapping (same as drawTrailChart)
+  const sW = window.innerWidth, sH = window.innerHeight;
+  const canvasAspect = W / H, screenAspect = sW / sH;
+  let sx, sy, ox, oy;
+  if (canvasAspect > screenAspect) { sy = H/sH; sx=sy; ox=(W-sW*sx)/2; oy=0; }
+  else                              { sx = W/sW; sy=sx; ox=0; oy=(H-sH*sy)/2; }
+  const toX = v => ox + v * sx;
+  const toY = v => oy + v * sy;
+
+  // background
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(0, 0, W, H);
+
+  // full target path (dashed, dim)
+  ctx.save();
+  ctx.setLineDash([3, 4]);
+  ctx.strokeStyle = color;
+  ctx.globalAlpha = 0.2;
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  let started = false;
+  for (const p of pts) {
+    if (p.tx == null) continue;
+    const x = toX(p.tx), y = toY(p.ty);
+    if (!started) { ctx.moveTo(x, y); started = true; } else ctx.lineTo(x, y);
+  }
+  ctx.stroke();
+  ctx.restore();
+
+  // gaze trail up to cutoffT
+  const vis = pts.filter(p => p.t <= cutoffT);
+  if (vis.length >= 2) {
+    ctx.save();
+    ctx.setLineDash([]);
+    ctx.strokeStyle = color;
+    ctx.globalAlpha = 0.7;
+    ctx.lineWidth = 1.5;
+    ctx.lineJoin = 'round';
+    ctx.beginPath();
+    vis.forEach((p, i) => { const x=toX(p.x), y=toY(p.y); i===0?ctx.moveTo(x,y):ctx.lineTo(x,y); });
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  // current gaze dot (blue)
+  if (vis.length > 0) {
+    const last = vis[vis.length-1];
+    ctx.save(); ctx.globalAlpha = 1;
+    ctx.fillStyle = '#38bdf8';
+    ctx.beginPath(); ctx.arc(toX(last.x), toY(last.y), 4, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  // current target dot (red) — last point with tx before cutoff
+  const tgtPt = vis.reduce((b, p) => p.tx != null ? p : b, null);
+  if (tgtPt) {
+    ctx.save(); ctx.globalAlpha = 1;
+    ctx.fillStyle = '#f87171';
+    ctx.beginPath(); ctx.arc(toX(tgtPt.tx), toY(tgtPt.ty), 4, 0, Math.PI*2); ctx.fill();
+    ctx.restore();
+  }
+
+  // title
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = color; ctx.font = 'bold 11px sans-serif';
+  ctx.textAlign = 'left'; ctx.textBaseline = 'top';
+  ctx.fillText(label, 8, 7);
+
+  // score
+  const score = assessResults[testId]?.score;
+  if (score != null) {
+    ctx.fillStyle = score>=75?'#4ade80':score>=50?'#fbbf24':'#f87171';
+    ctx.font = 'bold 14px sans-serif';
+    ctx.textAlign = 'right'; ctx.textBaseline = 'top';
+    ctx.fillText(score, W-8, 6);
+  }
+
+  if (progress >= 1) {
+    player.playing = false;
+    player.pausedAt = duration + 1;  // mark finished so next press restarts
+    const btn = document.getElementById('btn-play-' + testId);
+    if (btn) btn.textContent = '▶ 回放';
+    if (progEl) progEl.style.width = '100%';
+    return;
+  }
+
+  player.raf = requestAnimationFrame(() => playTrailFrame(testId, label, color));
 }
 
 // ── PATH SYSTEM ──
