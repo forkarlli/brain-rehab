@@ -5828,10 +5828,9 @@ async function fetchRightEyeAuto(candidateIndex) {
   }
 }
 
-// NAV labels matching playwright-fetch.js NAV_ITEMS order
+// Report labels matching righteye-service REPORT_SECTIONS order
 const _RE_NAV_LABELS = [
-  'My Score', 'Circular SP', 'Horizontal Saccades',
-  'Fixation Stability', 'Horizontal SP', 'Vertical Saccades', 'Vertical SP',
+  'My Score', 'Horizontal Saccades', 'Vertical Saccades',
 ];
 
 // Public alias used throughout the codebase
@@ -5847,9 +5846,25 @@ function _applyRightEyeAutoResult(d, screenshots) {
     for (let i = 0; i < take; i++) {
       RE_IMAGES.push({
         id: 'auto_' + i,
-        dataUrl: 'data:image/png;base64,' + screenshots[i],
+        dataUrl: 'data:image/jpeg;base64,' + screenshots[i],
         label: _RE_NAV_LABELS[i] || ('截圖 ' + (i + 1)),
       });
+    }
+    if (screenshots[1]) {
+      RE_SACC_H_IMAGE = {
+        data: screenshots[1],
+        mediaType: 'image/jpeg',
+        dataUrl: 'data:image/jpeg;base64,' + screenshots[1],
+      };
+      renderSaccDirPreview('horizontal', RE_SACC_H_IMAGE.dataUrl);
+    }
+    if (screenshots[2]) {
+      RE_SACC_V_IMAGE = {
+        data: screenshots[2],
+        mediaType: 'image/jpeg',
+        dataUrl: 'data:image/jpeg;base64,' + screenshots[2],
+      };
+      renderSaccDirPreview('vertical', RE_SACC_V_IMAGE.dataUrl);
     }
     // Primary: use existing renderREThumbs (grid must already be in DOM)
     const grid = document.getElementById('re-thumb-grid');
