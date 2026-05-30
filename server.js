@@ -647,7 +647,7 @@ app.post('/api/righteye/fetch', async (req, res) => {
   try {
     const upstream = await fetch(`${RIGHTEYE_URL}/fetch`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: { 'Content-Type': 'application/json', 'ngrok-skip-browser-warning': 'true' },
       body: JSON.stringify(req.body),
       signal: controller.signal,
     });
