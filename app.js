@@ -5834,12 +5834,15 @@ const _RE_NAV_LABELS = [
   'Fixation Stability', 'Horizontal SP', 'Vertical Saccades', 'Vertical SP',
 ];
 
+// Public alias used throughout the codebase
+function populateRightEyeFields(d, screenshots) { _applyRightEyeAutoResult(d, screenshots); }
+
 function _applyRightEyeAutoResult(d, screenshots) {
   if (!d) return;
 
-  // ── Screenshots: inject into RE_IMAGES and render thumbnails ──────────
+  // ── Problem 1: Screenshots ─────────────────────────────────────────────
   if (Array.isArray(screenshots) && screenshots.length > 0) {
-    RE_IMAGES.length = 0; // clear existing
+    RE_IMAGES.length = 0;
     const take = Math.min(screenshots.length, 6);
     for (let i = 0; i < take; i++) {
       RE_IMAGES.push({
@@ -5848,17 +5851,45 @@ function _applyRightEyeAutoResult(d, screenshots) {
         label: _RE_NAV_LABELS[i] || ('截圖 ' + (i + 1)),
       });
     }
-    renderREThumbs();
+    // Primary: use existing renderREThumbs (grid must already be in DOM)
+    const grid = document.getElementById('re-thumb-grid');
+    if (grid) {
+      renderREThumbs();
+    } else {
+      // Fallback: inject thumbnails directly into the drop-zone area
+      const dropZone = document.getElementById('re-drop-zone');
+      if (dropZone) {
+        const container = dropZone.parentElement;
+        let fallbackGrid = document.getElementById('re-thumb-grid-auto');
+        if (!fallbackGrid) {
+          fallbackGrid = document.createElement('div');
+          fallbackGrid.id = 're-thumb-grid-auto';
+          fallbackGrid.style.cssText = 'display:flex;flex-wrap:wrap;gap:8px;margin-top:10px';
+          container.appendChild(fallbackGrid);
+        }
+        fallbackGrid.innerHTML = RE_IMAGES.map(img =>
+          `<div style="text-align:center">
+            <div style="font-size:10px;color:#6b7280;margin-bottom:2px;max-width:110px;overflow:hidden;white-space:nowrap">${img.label}</div>
+            <img src="${img.dataUrl}" style="width:110px;height:75px;object-fit:cover;border-radius:4px;border:1px solid #e5e7eb;cursor:pointer"
+                 title="${img.label}" onclick="this.nextSibling||void(window.open(this.src))">
+          </div>`
+        ).join('');
+        const counter = document.getElementById('re-img-counter');
+        if (counter) counter.textContent = '已上傳 ' + RE_IMAGES.length + ' / 6 張';
+      }
+    }
   }
 
-  // ── Numeric field helpers ─────────────────────────────────────────────
+  // ── Problem 2: setVal — explicit String conversion, 0 is valid ────────
   const setVal = (id, val) => {
-    if (val == null || val === '') return;
+    if (val == null) return;                    // skip null/undefined only
     const el = document.getElementById(id);
-    if (el) el.value = val;
+    if (!el) return;
+    el.value = String(val);                     // explicit string (handles 0, 354, etc.)
+    el.dispatchEvent(new Event('input', { bubbles: true }));
   };
 
-  // Extract the first numeric % from a Claude finding string like "82% normal"
+  // Extract first numeric % from Claude text like "82% normal" or "SP: 78%"
   const extractPct = str => {
     if (typeof str !== 'string') return null;
     const m = str.match(/(\d+(?:\.\d+)?)\s*%/);
@@ -5866,52 +5897,83 @@ function _applyRightEyeAutoResult(d, screenshots) {
   };
 
   // ── Smooth Pursuit ────────────────────────────────────────────────────
-  // re-spH: overall horizontal % (parse Claude text, fall back to overallScores.pursuits)
-  setVal('re-spH', extractPct(d.smoothPursuit?.horizontal?.finding) ?? d.overallScores?.pursuits ?? null);
-  // re-spH-right: rightward direction % (same source — Claude gives overall horizontal)
+  setVal('re-spH',       extractPct(d.smoothPursuit?.horizontal?.finding) ?? d.overallScores?.pursuits ?? null);
   setVal('re-spH-right', extractPct(d.smoothPursuit?.horizontal?.finding) ?? null);
-  // re-spV: vertical %
-  setVal('re-spV', extractPct(d.smoothPursuit?.vertical?.finding) ?? null);
-  // re-spC: circular %
-  setVal('re-spC', extractPct(d.smoothPursuit?.circular?.finding) ?? null);
+  setVal('re-spV',       extractPct(d.smoothPursuit?.vertical?.finding)   ?? null);
+  setVal('re-spC',       extractPct(d.smoothPursuit?.circular?.finding)   ?? null);
 
   // ── Saccadic Latency OD / OS ──────────────────────────────────────────
   setVal('re-lat-od', d.horizontalSaccades?.rightEye?.latency_ms ?? null);
   setVal('re-lat-os', d.horizontalSaccades?.leftEye?.latency_ms  ?? null);
 
-  // ── Fixation: form has one field (no OD/OS split) ─────────────────────
-  // Fill with rightEye value; OS shown in results panel below
+  // ── Fixation ──────────────────────────────────────────────────────────
   setVal('re-fixation-score', d.fixationStability?.rightEye?.within1deg_percent ?? null);
 
-  // Render clinical summary
+  // ── Problem 3: Saccade finding type → form fields ────────────────────
+  // findingType contains keywords like "Overshoot", "Undershoot", "Missed", "Latency"
+  // We use presence (1) as an indicator since Claude gives type, not count
+  const hasFT = (ft, kw) => typeof ft === 'string' && ft.toLowerCase().includes(kw.toLowerCase());
+
+  const hOD = d.horizontalSaccades?.rightEye?.findingType || '';   // OD → rightward saccade
+  const hOS = d.horizontalSaccades?.leftEye?.findingType  || '';   // OS → leftward saccade
+  const vUp = d.verticalSaccades?.upward?.findingType     || '';
+  const vDn = d.verticalSaccades?.downward?.findingType   || '';
+
+  // Horizontal saccades (rightward = OD findings, leftward = OS findings)
+  if (hasFT(hOD, 'Overshoot'))  setVal('re-h-over-r',   1);
+  if (hasFT(hOD, 'Undershoot')) setVal('re-h-under-r',  1);
+  if (hasFT(hOD, 'Missed'))     setVal('re-h-missed-r', 1);
+  if (hasFT(hOS, 'Overshoot'))  setVal('re-h-over-l',   1);
+  if (hasFT(hOS, 'Undershoot')) setVal('re-h-under-l',  1);
+  if (hasFT(hOS, 'Missed'))     setVal('re-h-missed-l', 1);
+
+  // Vertical saccades
+  if (hasFT(vUp, 'Overshoot'))  setVal('re-v-over-r',   1);
+  if (hasFT(vUp, 'Undershoot')) setVal('re-v-under-r',  1);
+  if (hasFT(vUp, 'Missed'))     setVal('re-v-missed-r', 1);
+  if (hasFT(vDn, 'Overshoot'))  setVal('re-v-over-l',   1);
+  if (hasFT(vDn, 'Undershoot')) setVal('re-v-under-l',  1);
+  if (hasFT(vDn, 'Missed'))     setVal('re-v-missed-l', 1);
+
+  // Velocity fields (re-svH / re-svV) not available from clinical analysis —
+  // those require raw numeric extraction from the RightEye report numbers
+
+  // ── Clinical summary panel ────────────────────────────────────────────
   const resultPanel = document.getElementById('re-auto-result');
   const contentEl   = document.getElementById('re-auto-result-content');
+  if (!resultPanel || !contentEl) return;
+
   const loc = Array.isArray(d.primaryLocalization) ? d.primaryLocalization.join('，') : '';
   const confBadge = { high: '🟢 高', moderate: '🟡 中', low: '🔴 低' }[d.confidence] || d.confidence || '';
 
+  const fmt = (ft, loc2) => ft ? `${ft}${loc2 ? ' → ' + loc2 : ''}` : null;
+  const fmtFix = (eye) => eye?.findingType
+    ? `${eye.within1deg_percent ?? '?'}% within 1° — ${eye.findingType}${eye.localization ? ' → ' + eye.localization : ''}`
+    : null;
+  const fmtLat = (eye) => eye?.latency_ms != null
+    ? `${eye.latency_ms} ms — ${eye.findingType || ''}${eye.localization ? ' → ' + eye.localization : ''}`
+    : (eye?.findingType ? eye.findingType + (eye.localization ? ' → ' + eye.localization : '') : null);
+
   const tableRows = [
-    ['受測者',       d.patientName],
-    ['評估日期',     d.assessmentDate],
-    ['整體精準度',   d.overallScores?.myAccuracyScore != null ? `${d.overallScores.myAccuracyScore}%` : null],
-    ['Pursuits',     d.overallScores?.pursuits  != null ? `${d.overallScores.pursuits}%`  : null],
-    ['Saccades',     d.overallScores?.saccades  != null ? `${d.overallScores.saccades}%`  : null],
-    ['Fixations',    d.overallScores?.fixations != null ? `${d.overallScores.fixations}%` : null],
-    ['H-Saccade OD', d.horizontalSaccades?.rightEye?.latency_ms != null
-      ? `${d.horizontalSaccades.rightEye.latency_ms} ms — ${d.horizontalSaccades.rightEye.findingType} → ${d.horizontalSaccades.rightEye.localization}` : null],
-    ['H-Saccade OS', d.horizontalSaccades?.leftEye?.latency_ms != null
-      ? `${d.horizontalSaccades.leftEye.latency_ms} ms — ${d.horizontalSaccades.leftEye.findingType} → ${d.horizontalSaccades.leftEye.localization}` : null],
-    ['V-Saccade 上向', d.verticalSaccades?.upward?.findingType   ? `${d.verticalSaccades.upward.findingType} → ${d.verticalSaccades.upward.localization}`   : null],
-    ['V-Saccade 下向', d.verticalSaccades?.downward?.findingType ? `${d.verticalSaccades.downward.findingType} → ${d.verticalSaccades.downward.localization}` : null],
-    ['固視 OD', d.fixationStability?.rightEye?.findingType
-      ? `${d.fixationStability.rightEye.within1deg_percent}% within 1° — ${d.fixationStability.rightEye.findingType} → ${d.fixationStability.rightEye.localization}` : null],
-    ['固視 OS', d.fixationStability?.leftEye?.findingType
-      ? `${d.fixationStability.leftEye.within1deg_percent}% within 1° — ${d.fixationStability.leftEye.findingType} → ${d.fixationStability.leftEye.localization}` : null],
-    ['Circular Pursuit',   d.smoothPursuit?.circular?.finding   ? `${d.smoothPursuit.circular.finding} → ${d.smoothPursuit.circular.localization}`     : null],
-    ['Horizontal Pursuit', d.smoothPursuit?.horizontal?.finding ? `${d.smoothPursuit.horizontal.finding} → ${d.smoothPursuit.horizontal.localization}` : null],
-    ['Vertical Pursuit',   d.smoothPursuit?.vertical?.finding   ? `${d.smoothPursuit.vertical.finding} → ${d.smoothPursuit.vertical.localization}`     : null],
-    ['主要定位',  loc  || null],
-    ['信心度',    confBadge || null],
-    ['臨床備注',  d.clinicalNotes || null],
+    ['受測者',          d.patientName],
+    ['評估日期',        d.assessmentDate],
+    ['整體精準度',      d.overallScores?.myAccuracyScore != null ? `${d.overallScores.myAccuracyScore}%` : null],
+    ['Pursuits %',      d.overallScores?.pursuits  != null ? `${d.overallScores.pursuits}%`  : null],
+    ['Saccades %',      d.overallScores?.saccades  != null ? `${d.overallScores.saccades}%`  : null],
+    ['Fixations %',     d.overallScores?.fixations != null ? `${d.overallScores.fixations}%` : null],
+    ['H-Sacc OD (ms)',  fmtLat(d.horizontalSaccades?.rightEye)],
+    ['H-Sacc OS (ms)',  fmtLat(d.horizontalSaccades?.leftEye)],
+    ['V-Sacc 上向',     fmt(vUp, d.verticalSaccades?.upward?.localization)],
+    ['V-Sacc 下向',     fmt(vDn, d.verticalSaccades?.downward?.localization)],
+    ['固視 OD',         fmtFix(d.fixationStability?.rightEye)],
+    ['固視 OS',         fmtFix(d.fixationStability?.leftEye)],
+    ['Circular SP',     d.smoothPursuit?.circular?.finding   ? `${d.smoothPursuit.circular.finding} → ${d.smoothPursuit.circular.localization}`     : null],
+    ['Horizontal SP',   d.smoothPursuit?.horizontal?.finding ? `${d.smoothPursuit.horizontal.finding} → ${d.smoothPursuit.horizontal.localization}` : null],
+    ['Vertical SP',     d.smoothPursuit?.vertical?.finding   ? `${d.smoothPursuit.vertical.finding} → ${d.smoothPursuit.vertical.localization}`     : null],
+    ['主要定位',        loc  || null],
+    ['信心度',          confBadge || null],
+    ['臨床備注',        d.clinicalNotes || null],
+    ['⚠️ 未填欄位',    '速度(re-svH/V)、各方向速度需手動輸入原始數值'],
   ].filter(r => r[1]);
 
   contentEl.innerHTML = tableRows.map(([k, v]) =>
