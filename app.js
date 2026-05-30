@@ -5830,7 +5830,7 @@ async function fetchRightEyeAuto(candidateIndex) {
 
 // Report labels matching righteye-service REPORT_SECTIONS order
 const _RE_NAV_LABELS = [
-  'My Score', 'Horizontal Saccades', 'Vertical Saccades',
+  'Standard Report', 'Horizontal Saccades', 'Vertical Saccades',
 ];
 
 // Public alias used throughout the codebase
