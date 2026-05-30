@@ -643,7 +643,7 @@ const RIGHTEYE_URL = process.env.RIGHTEYE_SERVICE_URL || 'http://127.0.0.1:3001'
 
 app.post('/api/righteye/fetch', async (req, res) => {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 120000);
+  const timer = setTimeout(() => controller.abort(), 180000);
   try {
     const upstream = await fetch(`${RIGHTEYE_URL}/fetch`, {
       method: 'POST',
