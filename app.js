@@ -5758,6 +5758,18 @@ function renderSaccDirResults() {
 }
 
 // ===== AUTO FETCH RIGHTEYE =====
+// Persists candidate list across the two-step fetch (search → select)
+let _rightEyeCandidateCache = [];
+
+function _parseNameFromCandidateLabel(label) {
+  // Format: "keyboard_arrow_down 5/19/2026 3:43 PM ChenZoo Wang Wang19750130 Dynamic Vision"
+  // parts[0]=icon, [1]=date, [2]=time, [3]=AM/PM, [4]=firstName, [5]=lastName, [6]=userId
+  if (!label) return '';
+  const parts = label.trim().split(/\s+/);
+  if (parts.length >= 6) return `${parts[4] || ''} ${parts[5] || ''}`.trim();
+  return '';
+}
+
 async function fetchRightEyeAuto(candidateIndex) {
   const userIdEl  = document.getElementById('righteye-auto-userid');
   const statusEl  = document.getElementById('righteye-auto-status');
@@ -5783,6 +5795,7 @@ async function fetchRightEyeAuto(candidateIndex) {
     const data = await resp.json();
 
     if (data.requiresSelection) {
+      _rightEyeCandidateCache = data.candidates || [];
       statusEl.textContent = `找到 ${data.candidates.length} 筆，請選擇`;
       const listEl = document.getElementById('re-candidates-list');
       listEl.innerHTML = data.candidates.map((c, i) =>
@@ -5799,8 +5812,15 @@ async function fetchRightEyeAuto(candidateIndex) {
       return;
     }
 
+    // Resolve patient name from candidate label when available (more accurate than Claude's extraction)
+    let resolvedName = data.assessmentData?.patientName || '';
+    if (candidateIndex !== undefined && _rightEyeCandidateCache[candidateIndex]) {
+      const parsed = _parseNameFromCandidateLabel(_rightEyeCandidateCache[candidateIndex].label);
+      if (parsed) resolvedName = parsed;
+    }
+
     statusEl.textContent = '✅ 已自動填入';
-    _applyRightEyeAutoResult(data.assessmentData);
+    _applyRightEyeAutoResult({ ...data.assessmentData, patientName: resolvedName });
 
   } catch (err) {
     statusEl.textContent = '❌ 錯誤';
@@ -5812,17 +5832,27 @@ function _applyRightEyeAutoResult(d) {
   if (!d) return;
 
   const setVal = (id, val) => {
-    if (val == null) return;
+    if (val == null || val === '') return;
     const el = document.getElementById(id);
     if (el) el.value = val;
   };
 
-  // Smooth Pursuit 水平
-  setVal('re-spH', d.overallScores?.pursuits ?? null);
+  // Extract numeric % from a finding string like "78% normal" or "Smooth Pursuit 82%"
+  const extractPct = str => {
+    if (typeof str !== 'string') return null;
+    const m = str.match(/(\d+(?:\.\d+)?)\s*%/);
+    return m ? parseFloat(m[1]) : null;
+  };
+
+  // Smooth Pursuit 水平: try to parse % from finding text, fall back to overallScores.pursuits
+  const spHVal = extractPct(d.smoothPursuit?.horizontal?.finding) ?? d.overallScores?.pursuits ?? null;
+  setVal('re-spH', spHVal);
+
   // Saccadic Latency OD / OS
   setVal('re-lat-od', d.horizontalSaccades?.rightEye?.latency_ms ?? null);
   setVal('re-lat-os', d.horizontalSaccades?.leftEye?.latency_ms  ?? null);
-  // Fixation stability score
+
+  // Fixation: no OD/OS split — fill overall score with rightEye value (closest field available)
   setVal('re-fixation-score', d.fixationStability?.rightEye?.within1deg_percent ?? null);
 
   // Render clinical summary
@@ -5838,9 +5868,9 @@ function _applyRightEyeAutoResult(d) {
     ['Pursuits',     d.overallScores?.pursuits  != null ? `${d.overallScores.pursuits}%`  : null],
     ['Saccades',     d.overallScores?.saccades  != null ? `${d.overallScores.saccades}%`  : null],
     ['Fixations',    d.overallScores?.fixations != null ? `${d.overallScores.fixations}%` : null],
-    ['H-Saccade OD Latency', d.horizontalSaccades?.rightEye?.latency_ms != null
+    ['H-Saccade OD', d.horizontalSaccades?.rightEye?.latency_ms != null
       ? `${d.horizontalSaccades.rightEye.latency_ms} ms — ${d.horizontalSaccades.rightEye.findingType} → ${d.horizontalSaccades.rightEye.localization}` : null],
-    ['H-Saccade OS Latency', d.horizontalSaccades?.leftEye?.latency_ms != null
+    ['H-Saccade OS', d.horizontalSaccades?.leftEye?.latency_ms != null
       ? `${d.horizontalSaccades.leftEye.latency_ms} ms — ${d.horizontalSaccades.leftEye.findingType} → ${d.horizontalSaccades.leftEye.localization}` : null],
     ['V-Saccade 上向', d.verticalSaccades?.upward?.findingType   ? `${d.verticalSaccades.upward.findingType} → ${d.verticalSaccades.upward.localization}`   : null],
     ['V-Saccade 下向', d.verticalSaccades?.downward?.findingType ? `${d.verticalSaccades.downward.findingType} → ${d.verticalSaccades.downward.localization}` : null],
@@ -5848,9 +5878,9 @@ function _applyRightEyeAutoResult(d) {
       ? `${d.fixationStability.rightEye.within1deg_percent}% within 1° — ${d.fixationStability.rightEye.findingType} → ${d.fixationStability.rightEye.localization}` : null],
     ['固視 OS', d.fixationStability?.leftEye?.findingType
       ? `${d.fixationStability.leftEye.within1deg_percent}% within 1° — ${d.fixationStability.leftEye.findingType} → ${d.fixationStability.leftEye.localization}` : null],
-    ['Circular Pursuit',    d.smoothPursuit?.circular?.finding    ? `${d.smoothPursuit.circular.finding} → ${d.smoothPursuit.circular.localization}`       : null],
-    ['Horizontal Pursuit',  d.smoothPursuit?.horizontal?.finding  ? `${d.smoothPursuit.horizontal.finding} → ${d.smoothPursuit.horizontal.localization}`   : null],
-    ['Vertical Pursuit',    d.smoothPursuit?.vertical?.finding    ? `${d.smoothPursuit.vertical.finding} → ${d.smoothPursuit.vertical.localization}`       : null],
+    ['Circular Pursuit',   d.smoothPursuit?.circular?.finding   ? `${d.smoothPursuit.circular.finding} → ${d.smoothPursuit.circular.localization}`     : null],
+    ['Horizontal Pursuit', d.smoothPursuit?.horizontal?.finding ? `${d.smoothPursuit.horizontal.finding} → ${d.smoothPursuit.horizontal.localization}` : null],
+    ['Vertical Pursuit',   d.smoothPursuit?.vertical?.finding   ? `${d.smoothPursuit.vertical.finding} → ${d.smoothPursuit.vertical.localization}`     : null],
     ['主要定位',  loc  || null],
     ['信心度',    confBadge || null],
     ['臨床備注',  d.clinicalNotes || null],
