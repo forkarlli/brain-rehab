@@ -5820,7 +5820,7 @@ async function fetchRightEyeAuto(candidateIndex) {
     }
 
     statusEl.textContent = '✅ 已自動填入';
-    _applyRightEyeAutoResult({ ...data.assessmentData, patientName: resolvedName });
+    _applyRightEyeAutoResult({ ...data.assessmentData, patientName: resolvedName }, data.screenshots);
 
   } catch (err) {
     statusEl.textContent = '❌ 錯誤';
@@ -5828,31 +5828,59 @@ async function fetchRightEyeAuto(candidateIndex) {
   }
 }
 
-function _applyRightEyeAutoResult(d) {
+// NAV labels matching playwright-fetch.js NAV_ITEMS order
+const _RE_NAV_LABELS = [
+  'My Score', 'Circular SP', 'Horizontal Saccades',
+  'Fixation Stability', 'Horizontal SP', 'Vertical Saccades', 'Vertical SP',
+];
+
+function _applyRightEyeAutoResult(d, screenshots) {
   if (!d) return;
 
+  // ── Screenshots: inject into RE_IMAGES and render thumbnails ──────────
+  if (Array.isArray(screenshots) && screenshots.length > 0) {
+    RE_IMAGES.length = 0; // clear existing
+    const take = Math.min(screenshots.length, 6);
+    for (let i = 0; i < take; i++) {
+      RE_IMAGES.push({
+        id: 'auto_' + i,
+        dataUrl: 'data:image/png;base64,' + screenshots[i],
+        label: _RE_NAV_LABELS[i] || ('截圖 ' + (i + 1)),
+      });
+    }
+    renderREThumbs();
+  }
+
+  // ── Numeric field helpers ─────────────────────────────────────────────
   const setVal = (id, val) => {
     if (val == null || val === '') return;
     const el = document.getElementById(id);
     if (el) el.value = val;
   };
 
-  // Extract numeric % from a finding string like "78% normal" or "Smooth Pursuit 82%"
+  // Extract the first numeric % from a Claude finding string like "82% normal"
   const extractPct = str => {
     if (typeof str !== 'string') return null;
     const m = str.match(/(\d+(?:\.\d+)?)\s*%/);
     return m ? parseFloat(m[1]) : null;
   };
 
-  // Smooth Pursuit 水平: try to parse % from finding text, fall back to overallScores.pursuits
-  const spHVal = extractPct(d.smoothPursuit?.horizontal?.finding) ?? d.overallScores?.pursuits ?? null;
-  setVal('re-spH', spHVal);
+  // ── Smooth Pursuit ────────────────────────────────────────────────────
+  // re-spH: overall horizontal % (parse Claude text, fall back to overallScores.pursuits)
+  setVal('re-spH', extractPct(d.smoothPursuit?.horizontal?.finding) ?? d.overallScores?.pursuits ?? null);
+  // re-spH-right: rightward direction % (same source — Claude gives overall horizontal)
+  setVal('re-spH-right', extractPct(d.smoothPursuit?.horizontal?.finding) ?? null);
+  // re-spV: vertical %
+  setVal('re-spV', extractPct(d.smoothPursuit?.vertical?.finding) ?? null);
+  // re-spC: circular %
+  setVal('re-spC', extractPct(d.smoothPursuit?.circular?.finding) ?? null);
 
-  // Saccadic Latency OD / OS
+  // ── Saccadic Latency OD / OS ──────────────────────────────────────────
   setVal('re-lat-od', d.horizontalSaccades?.rightEye?.latency_ms ?? null);
   setVal('re-lat-os', d.horizontalSaccades?.leftEye?.latency_ms  ?? null);
 
-  // Fixation: no OD/OS split — fill overall score with rightEye value (closest field available)
+  // ── Fixation: form has one field (no OD/OS split) ─────────────────────
+  // Fill with rightEye value; OS shown in results panel below
   setVal('re-fixation-score', d.fixationStability?.rightEye?.within1deg_percent ?? null);
 
   // Render clinical summary
