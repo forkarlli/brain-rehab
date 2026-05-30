@@ -652,7 +652,20 @@ app.post('/api/righteye/fetch', async (req, res) => {
       signal: controller.signal,
     });
     clearTimeout(timer);
-    const data = await upstream.json();
+    const text = await upstream.text();
+    let data;
+    try {
+      data = JSON.parse(text);
+    } catch (_) {
+      const preview = text.replace(/\s+/g, ' ').slice(0, 200);
+      console.error('[righteye-proxy] upstream returned non-JSON:', upstream.status, preview);
+      return res.status(502).json({
+        success: false,
+        error: `righteye-service returned non-JSON response (HTTP ${upstream.status})`,
+        upstreamStatus: upstream.status,
+        preview,
+      });
+    }
     res.status(upstream.status).json(data);
   } catch (err) {
     clearTimeout(timer);
