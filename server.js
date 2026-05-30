@@ -639,38 +639,29 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
 });
 
 // ===== RIGHTEYE FETCH PROXY =====
-const RIGHTEYE_SERVICE_PORT = 3001;
+const RIGHTEYE_URL = process.env.RIGHTEYE_SERVICE_URL || 'http://127.0.0.1:3001';
 
-app.post('/api/righteye/fetch', (req, res) => {
-  const body = JSON.stringify(req.body);
-  const options = {
-    hostname: '127.0.0.1',
-    port: RIGHTEYE_SERVICE_PORT,
-    path: '/fetch',
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
-  };
-  const proxyReq = http.request(options, proxyRes => {
-    let data = '';
-    proxyRes.on('data', chunk => { data += chunk; });
-    proxyRes.on('end', () => {
-      try {
-        res.status(proxyRes.statusCode).json(JSON.parse(data));
-      } catch (e) {
-        res.status(502).json({ success: false, error: '服務回應格式錯誤' });
-      }
+app.post('/api/righteye/fetch', async (req, res) => {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 120000);
+  try {
+    const upstream = await fetch(`${RIGHTEYE_URL}/fetch`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(req.body),
+      signal: controller.signal,
     });
-  });
-  proxyReq.on('error', err => {
-    console.error('[righteye-proxy] 無法連線本地服務:', err.message);
-    res.status(503).json({ success: false, error: 'righteye-service 未啟動，請先執行 node server.js（port 3001）' });
-  });
-  proxyReq.setTimeout(120000, () => {
-    proxyReq.destroy();
-    res.status(504).json({ success: false, error: '抓取逾時（120s），請稍後再試' });
-  });
-  proxyReq.write(body);
-  proxyReq.end();
+    clearTimeout(timer);
+    const data = await upstream.json();
+    res.status(upstream.status).json(data);
+  } catch (err) {
+    clearTimeout(timer);
+    if (err.name === 'AbortError') {
+      return res.status(504).json({ success: false, error: '抓取逾時（120s），請稍後再試' });
+    }
+    console.error('[righteye-proxy] 連線失敗:', err.message);
+    res.status(503).json({ success: false, error: `righteye-service 無法連線：${err.message}` });
+  }
 });
 
 // ===== START SERVER =====
