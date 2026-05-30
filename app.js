@@ -5950,6 +5950,41 @@ function _applyRightEyeAutoResult(d, screenshots) {
   if (hasFT(vDn, 'Undershoot')) setVal('re-v-under-l',  1);
   if (hasFT(vDn, 'Missed'))     setVal('re-v-missed-l', 1);
 
+  // Prefer exact values parsed from the Standard Report tables over AI inference.
+  const rv = d.reportValues || {};
+  setVal('re-spH',       rv.smoothPursuit?.horizontal);
+  setVal('re-spH-right', rv.smoothPursuit?.horizontalRight);
+  setVal('re-spH-left',  rv.smoothPursuit?.horizontalLeft);
+  setVal('re-spV',       rv.smoothPursuit?.vertical);
+  setVal('re-spC',       rv.smoothPursuit?.circular);
+  setVal('re-syncH',     rv.synchronization?.horizontal);
+  setVal('re-syncV',     rv.synchronization?.vertical);
+  setVal('re-pld-right', rv.pathwayLengthDifference?.right);
+  setVal('re-pld-left',  rv.pathwayLengthDifference?.left);
+  setVal('re-svH',       rv.saccadicVelocity?.horizontal);
+  setVal('re-svV',       rv.saccadicVelocity?.vertical);
+  setVal('re-sv-right',  rv.saccadicVelocity?.right);
+  setVal('re-sv-left',   rv.saccadicVelocity?.left);
+  setVal('re-sv-up',     rv.saccadicVelocity?.up);
+  setVal('re-sv-down',   rv.saccadicVelocity?.down);
+  setVal('re-saccade-score',    d.overallScores?.saccades);
+  setVal('re-saccade-ta-right', rv.saccadicTargeting?.right);
+  setVal('re-saccade-ta-left',  rv.saccadicTargeting?.left);
+  setVal('re-h-total',    rv.horizontalSaccades?.total);
+  setVal('re-h-over-r',   rv.horizontalSaccades?.rightOvershoot);
+  setVal('re-h-under-r',  rv.horizontalSaccades?.rightUndershoot);
+  setVal('re-h-missed-r', rv.horizontalSaccades?.rightMissed);
+  setVal('re-h-over-l',   rv.horizontalSaccades?.leftOvershoot);
+  setVal('re-h-under-l',  rv.horizontalSaccades?.leftUndershoot);
+  setVal('re-h-missed-l', rv.horizontalSaccades?.leftMissed);
+  setVal('re-v-total',    rv.verticalSaccades?.total);
+  setVal('re-v-over-r',   rv.verticalSaccades?.upOvershoot);
+  setVal('re-v-under-r',  rv.verticalSaccades?.upUndershoot);
+  setVal('re-v-missed-r', rv.verticalSaccades?.upMissed);
+  setVal('re-v-over-l',   rv.verticalSaccades?.downOvershoot);
+  setVal('re-v-under-l',  rv.verticalSaccades?.downUndershoot);
+  setVal('re-v-missed-l', rv.verticalSaccades?.downMissed);
+
   // Velocity fields (re-svH / re-svV) not available from clinical analysis —
   // those require raw numeric extraction from the RightEye report numbers
 

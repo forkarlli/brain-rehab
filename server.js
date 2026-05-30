@@ -643,7 +643,7 @@ const RIGHTEYE_URL = process.env.RIGHTEYE_SERVICE_URL || 'http://127.0.0.1:3001'
 
 app.post('/api/righteye/fetch', async (req, res) => {
   const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), 180000);
+  const timer = setTimeout(() => controller.abort(), 240000);
   try {
     const upstream = await fetch(`${RIGHTEYE_URL}/fetch`, {
       method: 'POST',
@@ -670,7 +670,7 @@ app.post('/api/righteye/fetch', async (req, res) => {
   } catch (err) {
     clearTimeout(timer);
     if (err.name === 'AbortError') {
-      return res.status(504).json({ success: false, error: '抓取逾時（120s），請稍後再試' });
+      return res.status(504).json({ success: false, error: '抓取逾時（240s），請稍後再試' });
     }
     console.error('[righteye-proxy] 連線失敗:', err.message);
     res.status(503).json({ success: false, error: `righteye-service 無法連線：${err.message}` });
