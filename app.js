@@ -5784,8 +5784,8 @@ async function fetchRightEyeAuto(candidateIndex) {
   resultPanel.style.display = 'none';
 
   try {
-    const payload = { userId };
-    if (candidateIndex !== undefined) payload.candidateIndex = candidateIndex;
+    // Always use candidateIndex:0 to pick the most recent assessment directly
+    const payload = { userId, candidateIndex: candidateIndex !== undefined ? candidateIndex : 0 };
 
     const resp = await fetch('/api/righteye/fetch', {
       method: 'POST',
