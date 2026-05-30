@@ -5175,6 +5175,25 @@ function renderRightEyeInterface() {
         <h3>👁 RightEye 報告</h3>
         <span class="bcf-section-hint">上傳截圖並填入數值 → 自動產生眼動機處方，結果同步整合至 BCF 總報告</span>
       </div>
+
+      <!-- Auto-fetch bar -->
+      <div style="display:flex;align-items:center;gap:10px;margin:0 0 14px 0;padding:10px 14px;background:#f0f9ff;border:1px solid #bae6fd;border-radius:8px;flex-wrap:wrap">
+        <span style="font-weight:700;color:#0369a1;font-size:13px;white-space:nowrap">🔍 自動抓取</span>
+        <input type="text" id="righteye-auto-userid" class="input" placeholder="User ID（如 Wang19750130）" style="font-size:13px;flex:1;min-width:160px;max-width:280px">
+        <button class="btn" style="background:#0ea5e9;color:#fff;font-size:13px;padding:7px 14px;white-space:nowrap" onclick="fetchRightEyeAuto()">🔍 自動抓取RightEye報告</button>
+        <span id="righteye-auto-status" style="font-size:12px;color:#6b7280;min-width:60px"></span>
+      </div>
+      <!-- Candidate selection (shown when multiple results) -->
+      <div id="re-candidates-panel" style="display:none;margin:0 0 14px 0;padding:12px 14px;background:#fefce8;border:1px solid #fde047;border-radius:8px">
+        <div style="font-weight:600;color:#92400e;margin-bottom:8px;font-size:13px">找到多筆評估，請選擇：</div>
+        <div id="re-candidates-list"></div>
+      </div>
+      <!-- Assessment result panel -->
+      <div id="re-auto-result" style="display:none;margin:0 0 14px 0;padding:12px 14px;background:#f0fdf4;border:1px solid #86efac;border-radius:8px;font-size:13px">
+        <div style="font-weight:700;color:#15803d;margin-bottom:8px">✅ AI 判讀結果</div>
+        <div id="re-auto-result-content"></div>
+      </div>
+
       <div class="re-layout">
 
         <div>
@@ -5736,6 +5755,117 @@ function renderSaccDirResults() {
       }).join('')}`;
   }
   resultsEl.style.display = 'block';
+}
+
+// ===== AUTO FETCH RIGHTEYE =====
+async function fetchRightEyeAuto(candidateIndex) {
+  const userIdEl  = document.getElementById('righteye-auto-userid');
+  const statusEl  = document.getElementById('righteye-auto-status');
+  const candPanel = document.getElementById('re-candidates-panel');
+  const resultPanel = document.getElementById('re-auto-result');
+
+  const userId = userIdEl ? userIdEl.value.trim() : '';
+  if (!userId) { showToast('請輸入 User ID', 'error'); return; }
+
+  statusEl.textContent = '⏳ 連線中…';
+  candPanel.style.display = 'none';
+  resultPanel.style.display = 'none';
+
+  try {
+    const payload = { userId };
+    if (candidateIndex !== undefined) payload.candidateIndex = candidateIndex;
+
+    const resp = await fetch('/api/righteye/fetch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    const data = await resp.json();
+
+    if (data.requiresSelection) {
+      statusEl.textContent = `找到 ${data.candidates.length} 筆，請選擇`;
+      const listEl = document.getElementById('re-candidates-list');
+      listEl.innerHTML = data.candidates.map((c, i) =>
+        `<button class="btn" style="display:block;width:100%;text-align:left;margin-bottom:4px;font-size:12px;padding:6px 10px;background:#fff;border:1px solid #d1d5db;border-radius:6px"
+          onclick="fetchRightEyeAuto(${i})">${c.label || '評估 ' + (i + 1)}</button>`
+      ).join('');
+      candPanel.style.display = 'block';
+      return;
+    }
+
+    if (!data.success) {
+      statusEl.textContent = '❌ ' + (data.error || '抓取失敗');
+      showToast('自動抓取失敗：' + (data.error || '未知錯誤'), 'error');
+      return;
+    }
+
+    statusEl.textContent = '✅ 已自動填入';
+    _applyRightEyeAutoResult(data.assessmentData);
+
+  } catch (err) {
+    statusEl.textContent = '❌ 錯誤';
+    showToast('自動抓取錯誤：' + err.message, 'error');
+  }
+}
+
+function _applyRightEyeAutoResult(d) {
+  if (!d) return;
+
+  const setVal = (id, val) => {
+    if (val == null) return;
+    const el = document.getElementById(id);
+    if (el) el.value = val;
+  };
+
+  // Smooth Pursuit 水平
+  setVal('re-spH', d.overallScores?.pursuits ?? null);
+  // Saccadic Latency OD / OS
+  setVal('re-lat-od', d.horizontalSaccades?.rightEye?.latency_ms ?? null);
+  setVal('re-lat-os', d.horizontalSaccades?.leftEye?.latency_ms  ?? null);
+  // Fixation stability score
+  setVal('re-fixation-score', d.fixationStability?.rightEye?.within1deg_percent ?? null);
+
+  // Render clinical summary
+  const resultPanel = document.getElementById('re-auto-result');
+  const contentEl   = document.getElementById('re-auto-result-content');
+  const loc = Array.isArray(d.primaryLocalization) ? d.primaryLocalization.join('，') : '';
+  const confBadge = { high: '🟢 高', moderate: '🟡 中', low: '🔴 低' }[d.confidence] || d.confidence || '';
+
+  const tableRows = [
+    ['受測者',       d.patientName],
+    ['評估日期',     d.assessmentDate],
+    ['整體精準度',   d.overallScores?.myAccuracyScore != null ? `${d.overallScores.myAccuracyScore}%` : null],
+    ['Pursuits',     d.overallScores?.pursuits  != null ? `${d.overallScores.pursuits}%`  : null],
+    ['Saccades',     d.overallScores?.saccades  != null ? `${d.overallScores.saccades}%`  : null],
+    ['Fixations',    d.overallScores?.fixations != null ? `${d.overallScores.fixations}%` : null],
+    ['H-Saccade OD Latency', d.horizontalSaccades?.rightEye?.latency_ms != null
+      ? `${d.horizontalSaccades.rightEye.latency_ms} ms — ${d.horizontalSaccades.rightEye.findingType} → ${d.horizontalSaccades.rightEye.localization}` : null],
+    ['H-Saccade OS Latency', d.horizontalSaccades?.leftEye?.latency_ms != null
+      ? `${d.horizontalSaccades.leftEye.latency_ms} ms — ${d.horizontalSaccades.leftEye.findingType} → ${d.horizontalSaccades.leftEye.localization}` : null],
+    ['V-Saccade 上向', d.verticalSaccades?.upward?.findingType   ? `${d.verticalSaccades.upward.findingType} → ${d.verticalSaccades.upward.localization}`   : null],
+    ['V-Saccade 下向', d.verticalSaccades?.downward?.findingType ? `${d.verticalSaccades.downward.findingType} → ${d.verticalSaccades.downward.localization}` : null],
+    ['固視 OD', d.fixationStability?.rightEye?.findingType
+      ? `${d.fixationStability.rightEye.within1deg_percent}% within 1° — ${d.fixationStability.rightEye.findingType} → ${d.fixationStability.rightEye.localization}` : null],
+    ['固視 OS', d.fixationStability?.leftEye?.findingType
+      ? `${d.fixationStability.leftEye.within1deg_percent}% within 1° — ${d.fixationStability.leftEye.findingType} → ${d.fixationStability.leftEye.localization}` : null],
+    ['Circular Pursuit',    d.smoothPursuit?.circular?.finding    ? `${d.smoothPursuit.circular.finding} → ${d.smoothPursuit.circular.localization}`       : null],
+    ['Horizontal Pursuit',  d.smoothPursuit?.horizontal?.finding  ? `${d.smoothPursuit.horizontal.finding} → ${d.smoothPursuit.horizontal.localization}`   : null],
+    ['Vertical Pursuit',    d.smoothPursuit?.vertical?.finding    ? `${d.smoothPursuit.vertical.finding} → ${d.smoothPursuit.vertical.localization}`       : null],
+    ['主要定位',  loc  || null],
+    ['信心度',    confBadge || null],
+    ['臨床備注',  d.clinicalNotes || null],
+  ].filter(r => r[1]);
+
+  contentEl.innerHTML = tableRows.map(([k, v]) =>
+    `<div style="display:flex;gap:8px;margin-bottom:4px;align-items:flex-start">
+      <span style="font-weight:600;color:#166534;white-space:nowrap;min-width:130px;font-size:12px">${k}</span>
+      <span style="color:#1e293b;font-size:12px">${v}</span>
+    </div>`
+  ).join('');
+
+  resultPanel.style.display = 'block';
+  resultPanel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+  showToast('✅ 已自動填入 RightEye 欄位', 'success');
 }
 
 async function readRightEyeWithAI() {

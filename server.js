@@ -4,6 +4,7 @@ const Anthropic = require('@anthropic-ai/sdk');
 const multer   = require('multer');
 const path     = require('path');
 const fs       = require('fs');
+const http     = require('http');
 
 const app    = express();
 const PORT   = process.env.PORT || 3000;
@@ -635,6 +636,41 @@ app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
     console.error('transcribe error:', err.message);
     res.status(500).json({ error: err.message });
   }
+});
+
+// ===== RIGHTEYE FETCH PROXY =====
+const RIGHTEYE_SERVICE_PORT = 3001;
+
+app.post('/api/righteye/fetch', (req, res) => {
+  const body = JSON.stringify(req.body);
+  const options = {
+    hostname: '127.0.0.1',
+    port: RIGHTEYE_SERVICE_PORT,
+    path: '/fetch',
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+  };
+  const proxyReq = http.request(options, proxyRes => {
+    let data = '';
+    proxyRes.on('data', chunk => { data += chunk; });
+    proxyRes.on('end', () => {
+      try {
+        res.status(proxyRes.statusCode).json(JSON.parse(data));
+      } catch (e) {
+        res.status(502).json({ success: false, error: '服務回應格式錯誤' });
+      }
+    });
+  });
+  proxyReq.on('error', err => {
+    console.error('[righteye-proxy] 無法連線本地服務:', err.message);
+    res.status(503).json({ success: false, error: 'righteye-service 未啟動，請先執行 node server.js（port 3001）' });
+  });
+  proxyReq.setTimeout(120000, () => {
+    proxyReq.destroy();
+    res.status(504).json({ success: false, error: '抓取逾時（120s），請稍後再試' });
+  });
+  proxyReq.write(body);
+  proxyReq.end();
 });
 
 // ===== START SERVER =====
