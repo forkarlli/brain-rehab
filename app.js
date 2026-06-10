@@ -1373,8 +1373,11 @@ const BRAIN_REGION_ALIASES = {
   'Right Parietal':       ['Right Parietal Cortex', 'Right Parietal Lobe', '右頂葉'],
   'Left Temporal Lobe':   ['左顳葉', 'Left Temporal', 'Left Temporal Cortex'],
   'Right Temporal Lobe':  ['右顳葉', 'Right Temporal', 'Right Temporal Cortex'],
-  'Left Mes':             ['左中腦', 'Left Mesencephalon'],
-  'Right Mes':            ['右中腦', 'Right Mesencephalon'],
+  'Left Mes':                    ['左中腦', 'Left Mesencephalon'],
+  'Right Mes':                   ['右中腦', 'Right Mesencephalon'],
+  // TODO: '雙側齒狀核' (bilateral dentate) ≠ fastigial — dentate 與 fastigial 是不同的小腦深部核，需拆開各自建立 canonical key
+  'Bilateral Fastigial Nucleus': ['Cerebellar Fastigial Nucleus', 'Bilateral Fastigial', 'Fastigial Nucleus（雙側）', '雙側齒狀核'],
+  'Oculomotor Vermis':           ['Oculomotor Vermis ↓', '眼動蚓部', 'Oculomotor Cerebellar Vermis'],
 };
 
 function normalizeBrainRegion(name) {
@@ -1455,7 +1458,49 @@ const REGION_SIDE_TYPE = {
   'Left PPRF':  { side: 'left',  type: 'brainstem' },
   'Right PPRF': { side: 'right', type: 'brainstem' },
 };
-const BILATERAL_REGIONS = new Set(['Bilateral Midbrain', 'Bilateral Pons']);
+const BILATERAL_REGIONS = new Set(['Bilateral Midbrain', 'Bilateral Pons', 'Bilateral Fastigial Nucleus']);
+
+// ── Horizontal Overshoot Resolver ─────────────────────────────────────────
+// ⚠️  閾值未校準，勿用於真實病人 — 所有數值為佔位值，等待實測校準後更新
+const OVERSHOOT_RESOLVER_CONFIG = {
+  bilateralSymmetryMaxDiff:     15,   // |R% - L%| ≤ 此值視為雙側對稱（佔位值）
+  bilateralMinPct:              10,   // 雙側各自需達此 % 才觸發雙側診斷（佔位值）
+  dominanceRatio:               2.0,  // dominant側 / 弱側 ≥ 此值 → 強制單側（佔位值）
+  mildMinPct:                   10,   // Overshoot mild 最低 %（佔位值）
+  moderateMinPct:               30,   // Overshoot moderate 最低 %（佔位值）
+  severeMinPct:                 50,   // Overshoot severe 最低 %（佔位值）
+  bilateralRequireBothAbnormal: true, // 雙側判定是否要求兩側均為 abnormal（佔位值）
+};
+
+const HORIZONTAL_OVERSHOOT_MATRIX = {
+  right_overshoot: {
+    region: ['Right Fastigial Nucleus'],
+    brain:  ['Right CB'],
+    tag:    'Cerebellar_Inhibition_Deficit',
+    label:  '水平 Saccade 右向 Overshoot',
+    noteS:  'Right Fastigial Nucleus 過衝抑制嚴重異常 ⚠️',
+    noteM:  'Right Fastigial Nucleus 過衝中度，低速精準控制訓練',
+    noteLi: 'Right Fastigial Nucleus 過衝輕度，建議精準控制訓練',
+  },
+  left_overshoot: {
+    region: ['Left Fastigial Nucleus'],
+    brain:  ['Left CB'],
+    tag:    'Cerebellar_Inhibition_Deficit',
+    label:  '水平 Saccade 左向 Overshoot',
+    noteS:  'Left Fastigial Nucleus 過衝抑制嚴重異常 ⚠️',
+    noteM:  'Left Fastigial Nucleus 過衝中度，低速精準控制訓練',
+    noteLi: 'Left Fastigial Nucleus 過衝輕度，建議精準控制訓練',
+  },
+  bilateral_overshoot: {
+    region: ['Bilateral Fastigial Nucleus', 'Oculomotor Vermis'],
+    brain:  ['Right CB', 'Left CB', 'CB Vermis'],
+    tag:    'Cerebellar_Inhibition_Deficit',
+    label:  '水平 Saccade 雙側 Overshoot',
+    noteS:  'Bilateral Fastigial Nucleus + Oculomotor Vermis 過衝抑制嚴重異常 ⚠️',
+    noteM:  'Bilateral Fastigial Nucleus + Oculomotor Vermis 過衝中度，低速精準控制訓練',
+    noteLi: 'Bilateral Fastigial Nucleus + Oculomotor Vermis 過衝輕度，建議精準控制訓練',
+  },
+};
 
 // ===== BRAINSTEM GAZE / TONGUE LOCALIZATION =====
 const GAZE_DIRECTIONS = [
@@ -3363,6 +3408,39 @@ function computeFlyingChairRx(affectedItems, patient) {
 }
 
 // ===== RIGHT EYE REPORT ANALYSIS =====
+// ⚠️  OVERSHOOT_RESOLVER_CONFIG 閾值未校準，勿用於真實病人
+function resolveHorizontalOvershootDirection({ hOverRPct, hOverLPct, hOverRSt, hOverLSt }) {
+  console.warn('[OVERSHOOT RESOLVER] 閾值未校準，勿用於真實病人');
+  const cfg   = OVERSHOOT_RESOLVER_CONFIG;
+  const isAbn = s => s === 'mild' || s === 'moderate' || s === 'severe';
+  const rAbn  = isAbn(hOverRSt);
+  const lAbn  = isAbn(hOverLSt);
+
+  if (!rAbn && !lAbn) return null;
+  if (rAbn && !lAbn)  return 'right_overshoot';
+  if (!rAbn && lAbn)  return 'left_overshoot';
+
+  // Both abnormal — check bilateral vs dominant-unilateral
+  const rPct = hOverRPct ?? 0;
+  const lPct = hOverLPct ?? 0;
+  const max  = Math.max(rPct, lPct);
+  const min  = Math.min(rPct, lPct);
+
+  if (min > 0 && max / min >= cfg.dominanceRatio) {
+    return rPct >= lPct ? 'right_overshoot' : 'left_overshoot';
+  }
+
+  const diff         = Math.abs(rPct - lPct);
+  const bothAboveMin = rPct >= cfg.bilateralMinPct && lPct >= cfg.bilateralMinPct;
+
+  if (bothAboveMin && diff <= cfg.bilateralSymmetryMaxDiff) return 'bilateral_overshoot';
+  return rPct >= lPct ? 'right_overshoot' : 'left_overshoot';
+}
+
+function lookupOvershootFromMatrix(direction) {
+  return HORIZONTAL_OVERSHOOT_MATRIX[direction] ?? null;
+}
+
 function computeRightEyeRx(data) {
   const { spH, spV, spC, eso, svH, svV, syncH, syncV, intrusion, intrusionAmp, intrusionType,
           pldRight, pldLeft, orthRight, orthLeft,
@@ -3560,7 +3638,7 @@ function computeRightEyeRx(data) {
         if (intrusion === 'none') return [];
         const isVert = intrusion === 'up' || intrusion === 'down';
         const base = isVert ? ['Midbrain', 'CB Flocculus'] : ['CB Flocculus', 'Superior Colliculus'];
-        return intrusionAmp === '大' ? [...base, 'Cerebellar Fastigial Nucleus', 'BG'] : base;
+        return intrusionAmp === '大' ? [...base, 'Bilateral Fastigial Nucleus', 'BG'] : base;
       })(),
       note: (() => {
         if (intrusion === 'none') return '';
@@ -3568,23 +3646,37 @@ function computeRightEyeRx(data) {
         const base = isVert
           ? 'INC/中腦垂直整合中樞失能 — 建議 Vertical Anti-Saccade + Gaze Holding'
           : 'CB Flocculus掃視抑制弱化 + SC過度放電 — 建議 Gaze Holding + Stare OPK';
-        return intrusionAmp === '大' ? base + '；Fastigial Nucleus/BG抑制喪失 ⚠️' : base;
+        return intrusionAmp === '大' ? base + '；Bilateral Fastigial Nucleus/BG抑制喪失 ⚠️' : base;
       })(),
     },
     // ── Saccade Over/Under/Missed ──
     ...(hTotal ? [
-      { label: '水平 Saccade 右向 Overshoot',  value: hOverRPct  !== null ? hOverRPct  + '%' : '—', status: hOverRSt,
-        brain: overBrain(hOverRSt, ['Right CB'], ['Right CB']),
-        note:  overNote(hOverRSt, 'Right CB 過衝抑制嚴重異常 ⚠️', 'Right CB 過衝中度，低速精準控制訓練', 'Right CB 過衝輕度，建議精準控制訓練') },
+      ...(() => {
+        // Pre-processing layer: resolve direction before indicator insertion
+        // Replaces the former separate right/left overshoot entries — no double-count
+        const dir = resolveHorizontalOvershootDirection({ hOverRPct, hOverLPct, hOverRSt, hOverLSt });
+        if (!dir) return [];
+        const mx = lookupOvershootFromMatrix(dir);
+        if (!mx) return [];
+        const cfg      = OVERSHOOT_RESOLVER_CONFIG;
+        const totalPct = (hOverRPct ?? 0) + (hOverLPct ?? 0);
+        const totalSt  = totalPct >= cfg.severeMinPct  ? 'severe'
+                       : totalPct >= cfg.moderateMinPct ? 'moderate'
+                       : totalPct >= cfg.mildMinPct     ? 'mild' : 'normal';
+        const displayPct = dir === 'bilateral_overshoot'
+          ? `R:${hOverRPct ?? '—'}% / L:${hOverLPct ?? '—'}%（總${totalPct}%）`
+          : dir === 'right_overshoot' ? (hOverRPct !== null ? hOverRPct + '%' : '—')
+          : (hOverLPct !== null ? hOverLPct + '%' : '—');
+        return [{ label: mx.label, value: displayPct, status: totalSt,
+                  brain: overBrain(totalSt, mx.brain, mx.brain),
+                  note:  overNote(totalSt, mx.noteS, mx.noteM, mx.noteLi) }];
+      })(),
       { label: '水平 Saccade 右向 Undershoot', value: hUnderRPct !== null ? hUnderRPct + '%' : '—', status: hUnderRSt,
         brain: overBrain(hUnderRSt, ['Left CB'], ['Left CB']),
         note:  overNote(hUnderRSt, 'Left CB 欠衝嚴重，右向精準度不足 ⚠️', 'Left CB 欠衝中度，強化精準控制訓練', 'Left CB 欠衝輕度，建議精準控制訓練') },
       { label: '水平 Saccade 右向 Missed',    value: hMissRPct  !== null ? hMissRPct  + '%' : '—', status: hMissRSt,
         brain: overBrain(hMissRSt, ['Right PPRF', 'Left SC'], ['Right PPRF', 'Left SC']),
         note:  overNote(hMissRSt, 'Right PPRF（同側執行端）+ Left SC（對側整合啟動端）嚴重不足 ⚠️', 'Right PPRF + Left SC 中度不足', 'Right PPRF + Left SC 輕度不足') },
-      { label: '水平 Saccade 左向 Overshoot',  value: hOverLPct  !== null ? hOverLPct  + '%' : '—', status: hOverLSt,
-        brain: overBrain(hOverLSt, ['Left CB'], ['Left CB']),
-        note:  overNote(hOverLSt, 'Left CB 過衝抑制嚴重異常 ⚠️', 'Left CB 過衝中度，低速精準控制訓練', 'Left CB 過衝輕度，建議精準控制訓練') },
       { label: '水平 Saccade 左向 Undershoot', value: hUnderLPct !== null ? hUnderLPct + '%' : '—', status: hUnderLSt,
         brain: overBrain(hUnderLSt, ['Right CB'], ['Right CB']),
         note:  overNote(hUnderLSt, 'Right CB 欠衝嚴重，左向精準度不足 ⚠️', 'Right CB 欠衝中度，強化精準控制訓練', 'Right CB 欠衝輕度，建議精準控制訓練') },
@@ -3836,10 +3928,10 @@ function computeRightEyeRx(data) {
     addRx({ mode: 'M1', name: 'Gaze Holding固視保持', angle: '0°（Flocculus抑制重建）', speed: 'S1', dist: 'D2', reps: '20', target: '有（點狀小目標）', bg: '空白背板',
       notes: ['建議優先 Gaze Holding 凝視保持訓練，重新建立 Flocculus 對掃視發射器的抑制；可加入 Stare OPK 減少中腦過度徵召'], priority: 2 });
   }
-  // 振幅大 → Fastigial Nucleus / BG
+  // 振幅大 → Bilateral Fastigial Nucleus / BG
   if (intAbn && intrusionAmp === '大') {
-    addRx({ mode: 'M7', name: '複合Saccade交叉整合', angle: 'R45/L45（Fastigial/BG）', speed: 'S4', dist: 'D4', reps: '10', target: '有', bg: '空白背板',
-      notes: ['Intrusion振幅大 → Cerebellar Fastigial Nucleus + BG 注視抑制嚴重喪失 — 交叉整合訓練（M7）'], priority: 2 });
+    addRx({ mode: 'M7', name: '複合Saccade交叉整合', angle: 'R45/L45（Bilateral Fastigial Nucleus/BG）', speed: 'S4', dist: 'D4', reps: '10', target: '有', bg: '空白背板',
+      notes: ['Intrusion振幅大 → Bilateral Fastigial Nucleus + BG 注視抑制嚴重喪失 — 交叉整合訓練（M7）'], priority: 2 });
   }
   // Intrusion + Sync低 → M7 BrainStem
   if (intAbn && syncAbn) {
@@ -3847,20 +3939,33 @@ function computeRightEyeRx(data) {
   }
 
   // === Overshoot / Undershoot / Missed → 處方 ===
-  // Overshoot → CB → M3（低速精準抑制）
-  if (hOverRSt === 'severe') {
-    addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑ 右向', angle: 'R90（Right CB 過衝-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 右向 Overshoot >50% → Right CB 抑制訓練，極低速精準'], priority: 2 });
-  } else if (hOverRSt === 'moderate') {
-    addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑ 右向', angle: 'R90（Right CB 過衝-中度）', speed: 'S3', dist: 'D3', reps: '13', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 右向 Overshoot 30-50% → Right CB 抑制訓練，中速'], priority: 2 });
-  } else if (hOverRSt === 'mild') {
-    addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑ 右向', angle: 'R90（Right CB 過衝-輕度）', speed: 'S4', dist: 'D3', reps: '10', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 右向 Overshoot 10-30% → Right CB 輕度抑制'], priority: 3 });
-  }
-  if (hOverLSt === 'severe') {
-    addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑ 左向', angle: 'L90（Left CB 過衝-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 左向 Overshoot >50% → Left CB 抑制訓練，極低速精準'], priority: 2 });
-  } else if (hOverLSt === 'moderate') {
-    addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑ 左向', angle: 'L90（Left CB 過衝-中度）', speed: 'S3', dist: 'D3', reps: '13', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 左向 Overshoot 30-50% → Left CB 抑制訓練，中速'], priority: 2 });
-  } else if (hOverLSt === 'mild') {
-    addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑ 左向', angle: 'L90（Left CB 過衝-輕度）', speed: 'S4', dist: 'D3', reps: '10', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 左向 Overshoot 10-30% → Left CB 輕度抑制'], priority: 3 });
+  // Overshoot → CB → M3（低速精準抑制）— via resolveHorizontalOvershootDirection（防雙側重複計入）
+  {
+    const dir = resolveHorizontalOvershootDirection({ hOverRPct, hOverLPct, hOverRSt, hOverLSt });
+    const mx  = dir ? lookupOvershootFromMatrix(dir) : null;
+    if (mx) {
+      const cfg      = OVERSHOOT_RESOLVER_CONFIG;
+      const totalPct = (hOverRPct ?? 0) + (hOverLPct ?? 0);
+      const totalSt  = totalPct >= cfg.severeMinPct  ? 'severe'
+                     : totalPct >= cfg.moderateMinPct ? 'moderate'
+                     : totalPct >= cfg.mildMinPct     ? 'mild' : 'normal';
+      const dirLabel  = dir === 'bilateral_overshoot' ? '雙向' : dir === 'right_overshoot' ? '右向' : '左向';
+      const angleStr  = dir === 'bilateral_overshoot' ? 'R90/L90' : dir === 'right_overshoot' ? 'R90' : 'L90';
+      const regionStr = mx.region.join(' + ');
+      if (totalSt === 'severe') {
+        addRx({ mode: 'M3', name: `Saccade↓+Pursuit↑ ${dirLabel}`, angle: `${angleStr}（${regionStr} 過衝-嚴重）`,
+          speed: 'S2', dist: 'D3', reps: '15', target: '有（小目標）', bg: '空白背板',
+          notes: [`RightEye: ${dirLabel} Overshoot 總強度>50% → ${regionStr} 抑制訓練，極低速精準`], priority: 2 });
+      } else if (totalSt === 'moderate') {
+        addRx({ mode: 'M3', name: `Saccade↓+Pursuit↑ ${dirLabel}`, angle: `${angleStr}（${regionStr} 過衝-中度）`,
+          speed: 'S3', dist: 'D3', reps: '13', target: '有（小目標）', bg: '空白背板',
+          notes: [`RightEye: ${dirLabel} Overshoot 總強度30-50% → ${regionStr} 抑制訓練，中速`], priority: 2 });
+      } else if (totalSt === 'mild') {
+        addRx({ mode: 'M3', name: `Saccade↓+Pursuit↑ ${dirLabel}`, angle: `${angleStr}（${regionStr} 過衝-輕度）`,
+          speed: 'S4', dist: 'D3', reps: '10', target: '有（小目標）', bg: '空白背板',
+          notes: [`RightEye: ${dirLabel} Overshoot 總強度10-30% → ${regionStr} 輕度抑制`], priority: 3 });
+      }
+    }
   }
   if (vOverRSt === 'severe' || vOverLSt === 'severe') {
     addRx({ mode: 'M3', name: 'Saccade↓+Pursuit↑ 垂直', angle: 'R0/L0（垂直 CB Vermis 過衝-嚴重）', speed: 'S2', dist: 'D3', reps: '15', target: '有（小目標）', bg: '空白背板', notes: ['RightEye: 垂直 Overshoot >50% → CB Vermis 抑制訓練，極低速'], priority: 2 });
@@ -8462,7 +8567,7 @@ function runIntegratedAnalysis(patientId) {
 function extractDomainRegions(moduleOutput, domain) {
   const domainRegions = {
     horizontal: ['Left FEF','Right FEF','Left PPRF','Right PPRF','Left CB','Right CB','Left SC','Right SC','Left BG','Right BG'],
-    vertical:   ['riMLF','CB Vermis','Superior Colliculus','Midbrain','Bilateral Midbrain','Bilateral SC','Cerebellar Fastigial Nucleus'],
+    vertical:   ['riMLF','CB Vermis','Superior Colliculus','Midbrain','Bilateral Midbrain','Bilateral SC','Bilateral Fastigial Nucleus'],
     vestibular: ['Left CB','Right CB','Left Flocculus','Right Flocculus','CB Flocculus','Vestibulocerebellum',
                  'Left Vestibular','Right Vestibular','Bilateral Anterior Canal',
                  'Left Anterior Canal','Right Anterior Canal','Left Posterior Canal','Right Posterior Canal'],
@@ -9079,9 +9184,11 @@ function generateIntegratedPrescription(patientId, strategy, analysisResult) {
 
   // Expand canonical names to aliases computeEyeMachineRx actually checks
   const EYERX_ALIASES = {
-    'riMLF':        ['Bilateral Midbrain'],
-    'CB Vermis':    ['Right CB', 'Left CB'],
-    'CB Flocculus': ['Right CB', 'Left CB'],
+    'riMLF':                       ['Bilateral Midbrain'],
+    'CB Vermis':                   ['Right CB', 'Left CB'],
+    'CB Flocculus':                ['Right CB', 'Left CB'],
+    'Bilateral Fastigial Nucleus': ['Right CB', 'Left CB'],
+    'Oculomotor Vermis':           ['Right CB', 'Left CB'],
   };
   for (const [canon, extra] of Object.entries(EYERX_ALIASES)) {
     if (affectedBrainRegions.has(canon)) extra.forEach(a => affectedBrainRegions.add(a));
@@ -9312,8 +9419,8 @@ function printRxPrescription() {
   window.print();
 }
 
-async function exportRxPDF(patientId) {
-  const el = document.getElementById('rxGen-zone5-card');
+async function exportRxPDF(patientId, elementId) {
+  const el = document.getElementById(elementId || 'rxGen-zone5-card');
   if (!el) { showToast('找不到處方區塊', 'error'); return; }
   if (typeof html2canvas === 'undefined' || typeof window.jspdf === 'undefined') {
     showToast('PDF 匯出庫尚未載入，請稍候再試', 'error'); return;
@@ -9562,6 +9669,71 @@ function _renderRightEyeCard(rec) {
     </div>`;
 }
 
+function showIntegratedPrescriptionDetail(rxId) {
+  const rx = (DB.integratedPrescriptions || []).find(r => r.id === rxId);
+  if (!rx) { showToast('找不到處方記錄', 'error'); return; }
+  const pt = getPatient(rx.patientId);
+  const STRAT_ICON = { '保守模式': '🛡️', '標準模式': '⚡', '核心迴路模式': '🔄' };
+  const icon = STRAT_ICON[rx.strategyName] || '⚡';
+  const consClr = rx.consistencyPct >= 80 ? '#16a34a' : rx.consistencyPct >= 50 ? '#d97706' : '#dc2626';
+
+  const cards = (rx.items || []).map((item, i) => {
+    const isEye = item.tool === '眼動機';
+    const headCls = isEye ? 'rx5-head-eye' : 'rx5-head-fly';
+    const cardCls = item.isHighConf ? 'rx5-card-high' : 'rx5-card-pend';
+    const confBadge = item.isHighConf
+      ? '<span class="rx5-conf-badge rx5-conf-high">🔴 跨模組確認</span>'
+      : '<span class="rx5-conf-badge rx5-conf-pend">🟡 待確認</span>';
+    const regionHtml = (item.brainRegions || []).map(r =>
+      `<span class="bcf-brain-region-tag" style="font-size:10px;margin:1px 2px 1px 0">🧠 ${r}</span>`
+    ).join('');
+    return `<div class="rx5-card ${cardCls}">
+      <div class="rx5-head ${headCls}">
+        <span class="rx5-seq">${i + 1}</span>
+        <span class="rx5-tool-badge ${isEye ? '' : 'rx5-tool-fly'}">${item.tool}</span>
+        <span class="rx5-mode">${item.mode}</span>
+        <span class="rx5-name">${item.name}</span>
+        <span style="flex:1"></span>${confBadge}
+      </div>
+      <div class="rx5-params">
+        <span class="rx5-param"><span class="rx5-plabel">板面</span>${item.angle}</span>
+        <span class="rx5-param"><span class="rx5-plabel">速度</span>${item.speed}</span>
+        <span class="rx5-param"><span class="rx5-plabel">距離</span>${item.dist}</span>
+        <span class="rx5-param"><span class="rx5-plabel">次數</span>${item.reps}</span>
+        <span class="rx5-param"><span class="rx5-plabel">目標物</span>${item.target}</span>
+        <span class="rx5-param"><span class="rx5-plabel">窗板</span>${item.bg}</span>
+      </div>
+      <div class="rx5-regions">${regionHtml || '<span style="color:var(--gray-300);font-size:11px">—</span>'}</div>
+    </div>`;
+  }).join('');
+
+  const content = document.getElementById('integratedRxContent');
+  if (!content) return;
+  content.innerHTML = `
+    <div id="integratedRxModalCard">
+      <div style="margin-bottom:16px">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
+          <span style="font-size:20px;font-weight:700">${pt ? pt.name : rx.patientId}</span>
+          <span style="background:var(--primary-light);color:var(--primary);padding:3px 10px;border-radius:4px;font-size:12px;font-weight:700">${icon} ${rx.strategyName}</span>
+          <span style="background:#f0fdf4;color:${consClr};border:1px solid ${consClr}30;padding:3px 10px;border-radius:4px;font-size:12px;font-weight:700">一致性 ${rx.consistencyPct}%</span>
+        </div>
+        <div style="font-size:12px;color:var(--gray-400)">
+          處方日期：${rx.date} ・ 共 ${rx.itemCount} 項 ・ 儲存時間：${new Date(rx.savedAt).toLocaleString('zh-TW')}
+        </div>
+      </div>
+      <div class="rx5-cards">${cards || '<div style="text-align:center;padding:40px;color:var(--gray-300)">無處方項目</div>'}</div>
+    </div>
+    <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;padding-top:12px;border-top:1px solid var(--gray-100)">
+      <button class="btn btn-secondary" onclick="printRxPrescription()" style="font-size:13px">🖨️ 列印</button>
+      <button class="btn btn-secondary" onclick="exportRxPDF('${rx.patientId}', 'integratedRxModalCard')" style="font-size:13px">📄 匯出 PDF</button>
+      <button class="btn btn-outline" onclick="closeModal('integratedRxModal')" style="font-size:13px">關閉</button>
+    </div>`;
+
+  const modal = document.querySelector('#integratedRxModal .modal-header h3');
+  if (modal) modal.textContent = `${icon} 整合處方詳情`;
+  openModal('integratedRxModal');
+}
+
 function renderPrescriptions() {
   const grid = document.getElementById('prescriptionsGrid');
   if (!grid) return;
@@ -9636,7 +9808,7 @@ function renderPrescriptions() {
         </div>
         <div class="rx-card-footer">
           <span style="font-size:11px;color:var(--gray-400)">${rx.id}</span>
-          <button class="btn btn-sm btn-primary" onclick="showToast('整合處方詳情待開發', 'info')">查看詳情</button>
+          <button class="btn btn-sm btn-primary" onclick="showIntegratedPrescriptionDetail('${rx.id}')">查看詳情</button>
         </div>
       </div>`;
   }).join('');
