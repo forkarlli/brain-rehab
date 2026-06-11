@@ -1461,15 +1461,17 @@ const REGION_SIDE_TYPE = {
 const BILATERAL_REGIONS = new Set(['Bilateral Midbrain', 'Bilateral Pons', 'Bilateral Fastigial Nucleus']);
 
 // ── Horizontal Overshoot Resolver ─────────────────────────────────────────
-// ⚠️  閾值未校準，勿用於真實病人 — 所有數值為佔位值，等待實測校準後更新
+// ⚠️  閾值未校準，勿用於真實病人 — 佔位值，7樣本校準
 const OVERSHOOT_RESOLVER_CONFIG = {
-  bilateralSymmetryMaxDiff:     15,   // |R% - L%| ≤ 此值視為雙側對稱（佔位值）
-  bilateralMinPct:              10,   // 雙側各自需達此 % 才觸發雙側診斷（佔位值）
-  dominanceRatio:               2.0,  // dominant側 / 弱側 ≥ 此值 → 強制單側（佔位值）
-  mildMinPct:                   10,   // Overshoot mild 最低 %（佔位值）
-  moderateMinPct:               30,   // Overshoot moderate 最低 %（佔位值）
-  severeMinPct:                 50,   // Overshoot severe 最低 %（佔位值）
-  bilateralRequireBothAbnormal: true, // 雙側判定是否要求兩側均為 abnormal（佔位值）
+  WEIGHT_9TO18:           1,     // 過衝 9-18mm 權重 // 佔位值，7樣本校準
+  WEIGHT_18TO36:          2,     // 過衝 18-36mm 權重（越遠越重）// 佔位值，7樣本校準
+  // 整體掃視能力差旗標：Missed 佔比超此則標記（不進過衝分數）
+  MISSED_IMPAIRMENT_RATIO: 0.15, // 佔位值，7樣本校準
+  MIN_CONFIDENCE:         0.6,   // 軌跡圖判讀信心（僅用於側別那條輸入）// 佔位值，7樣本校準
+  // 雙側 % 加總門檻（totalPct = hOverRPct + hOverLPct，0–200 範圍）// 佔位值，7樣本校準
+  TOTAL_PCT_MILD_MIN:     10,   // 佔位值，7樣本校準
+  TOTAL_PCT_MODERATE_MIN: 30,   // 佔位值，7樣本校準
+  TOTAL_PCT_SEVERE_MIN:   50,   // 佔位值，7樣本校準
 };
 
 const HORIZONTAL_OVERSHOOT_MATRIX = {
@@ -3408,33 +3410,24 @@ function computeFlyingChairRx(affectedItems, patient) {
 }
 
 // ===== RIGHT EYE REPORT ANALYSIS =====
-// ⚠️  OVERSHOOT_RESOLVER_CONFIG 閾值未校準，勿用於真實病人
-function resolveHorizontalOvershootDirection({ hOverRPct, hOverLPct, hOverRSt, hOverLSt }) {
-  console.warn('[OVERSHOOT RESOLVER] 閾值未校準，勿用於真實病人');
-  const cfg   = OVERSHOOT_RESOLVER_CONFIG;
-  const isAbn = s => s === 'mild' || s === 'moderate' || s === 'severe';
-  const rAbn  = isAbn(hOverRSt);
-  const lAbn  = isAbn(hOverLSt);
+// saccDirResults: reSaccDirResultsH（AI 軌跡圖分析結果，只含異常項）
+// saccDirConfidence: reSaccDirConfidenceH（AI 信心分數 0–1，未分析為 null）
+// 回傳: diagnosisKey string 或 null（嚴重度由 hOverRSt/hOverLSt 決定，此函式不碰）
+function resolveHorizontalOvershootDirection(saccDirResults, saccDirConfidence) {
+  const cfg = OVERSHOOT_RESOLVER_CONFIG;
 
-  if (!rAbn && !lAbn) return null;
-  if (rAbn && !lAbn)  return 'right_overshoot';
-  if (!rAbn && lAbn)  return 'left_overshoot';
+  if ((saccDirConfidence ?? 0) < cfg.MIN_CONFIDENCE) return null;
 
-  // Both abnormal — check bilateral vs dominant-unilateral
-  const rPct = hOverRPct ?? 0;
-  const lPct = hOverLPct ?? 0;
-  const max  = Math.max(rPct, lPct);
-  const min  = Math.min(rPct, lPct);
+  const overshoots = (saccDirResults || []).filter(d => d.type === 'Overshoot');
+  if (overshoots.length === 0) return null;
 
-  if (min > 0 && max / min >= cfg.dominanceRatio) {
-    return rPct >= lPct ? 'right_overshoot' : 'left_overshoot';
-  }
+  const hasRight = overshoots.some(d => d.direction === '往右');
+  const hasLeft  = overshoots.some(d => d.direction === '往左');
 
-  const diff         = Math.abs(rPct - lPct);
-  const bothAboveMin = rPct >= cfg.bilateralMinPct && lPct >= cfg.bilateralMinPct;
-
-  if (bothAboveMin && diff <= cfg.bilateralSymmetryMaxDiff) return 'bilateral_overshoot';
-  return rPct >= lPct ? 'right_overshoot' : 'left_overshoot';
+  if (hasRight && hasLeft) return 'bilateral_overshoot';
+  if (hasRight)            return 'right_overshoot';
+  if (hasLeft)             return 'left_overshoot';
+  return null;
 }
 
 function lookupOvershootFromMatrix(direction) {
@@ -3450,7 +3443,8 @@ function computeRightEyeRx(data) {
           vTotal, vOverR, vUnderR, vMissedR, vOverL, vUnderL, vMissedL,
           hOverRGrade, hUnderRGrade, hOverLGrade, hUnderLGrade,
           vpLateralDrift, vsLateralDrift,
-          latOD, latOS } = data;
+          latOD, latOS,
+          saccDirResults = [], saccDirConfidence = null } = data;
 
   const spSt   = v => v === null ? 'na' : v > 90   ? 'normal' : v >= 80   ? 'mild' : 'severe';
   const esoSt  = v => v === null ? 'na' : v < 1.0  ? 'normal' : v <= 2.0  ? 'mild' : 'severe';
@@ -3660,9 +3654,9 @@ function computeRightEyeRx(data) {
         if (!mx) return [];
         const cfg      = OVERSHOOT_RESOLVER_CONFIG;
         const totalPct = (hOverRPct ?? 0) + (hOverLPct ?? 0);
-        const totalSt  = totalPct >= cfg.severeMinPct  ? 'severe'
-                       : totalPct >= cfg.moderateMinPct ? 'moderate'
-                       : totalPct >= cfg.mildMinPct     ? 'mild' : 'normal';
+        const totalSt  = totalPct >= cfg.TOTAL_PCT_SEVERE_MIN  ? 'severe'
+                       : totalPct >= cfg.TOTAL_PCT_MODERATE_MIN ? 'moderate'
+                       : totalPct >= cfg.TOTAL_PCT_MILD_MIN     ? 'mild' : 'normal';
         const displayPct = dir === 'bilateral_overshoot'
           ? `R:${hOverRPct ?? '—'}% / L:${hOverLPct ?? '—'}%（總${totalPct}%）`
           : dir === 'right_overshoot' ? (hOverRPct !== null ? hOverRPct + '%' : '—')
@@ -3946,9 +3940,9 @@ function computeRightEyeRx(data) {
     if (mx) {
       const cfg      = OVERSHOOT_RESOLVER_CONFIG;
       const totalPct = (hOverRPct ?? 0) + (hOverLPct ?? 0);
-      const totalSt  = totalPct >= cfg.severeMinPct  ? 'severe'
-                     : totalPct >= cfg.moderateMinPct ? 'moderate'
-                     : totalPct >= cfg.mildMinPct     ? 'mild' : 'normal';
+      const totalSt  = totalPct >= cfg.TOTAL_PCT_SEVERE_MIN  ? 'severe'
+                     : totalPct >= cfg.TOTAL_PCT_MODERATE_MIN ? 'moderate'
+                     : totalPct >= cfg.TOTAL_PCT_MILD_MIN     ? 'mild' : 'normal';
       const dirLabel  = dir === 'bilateral_overshoot' ? '雙向' : dir === 'right_overshoot' ? '右向' : '左向';
       const angleStr  = dir === 'bilateral_overshoot' ? 'R90/L90' : dir === 'right_overshoot' ? 'R90' : 'L90';
       const regionStr = mx.region.join(' + ');
@@ -4449,6 +4443,8 @@ function generateBCFResults() {
     hUnderLGrade: reAIGrades.leftward_undershoot,
     vpLateralDrift: parseNum(document.getElementById('re-vp-lateral-drift')?.value),
     vsLateralDrift: parseNum(document.getElementById('re-vs-lateral-drift')?.value),
+    saccDirResults:    reSaccDirResultsH,
+    saccDirConfidence: reSaccDirConfidenceH,
   };
   const reResult = computeRightEyeRx(reData);
 
@@ -4794,6 +4790,8 @@ function generateIntegratedPrescription() {
     vsLateralDrift: parseNum(document.getElementById('re-vs-lateral-drift')?.value),
     latOD: parseNum(document.getElementById('re-lat-od')?.value),
     latOS: parseNum(document.getElementById('re-lat-os')?.value),
+    saccDirResults:    reSaccDirResultsH,
+    saccDirConfidence: reSaccDirConfidenceH,
   };
   const reResult = computeRightEyeRx(reData);
 
@@ -6313,6 +6311,8 @@ function analyzeRightEyeStandalone() {
     vsLateralDrift: parseNum(document.getElementById('re-vs-lateral-drift')?.value),
     latOD: parseNum(document.getElementById('re-lat-od')?.value),
     latOS: parseNum(document.getElementById('re-lat-os')?.value),
+    saccDirResults:    reSaccDirResultsH,
+    saccDirConfidence: reSaccDirConfidenceH,
   };
   const reResult = computeRightEyeRx(reData);
   const resultsEl = document.getElementById('re-results');
@@ -6516,6 +6516,8 @@ function generateREStrategyPrescription() {
     vsLateralDrift: parseNum(document.getElementById('re-vs-lateral-drift')?.value),
     latOD: parseNum(document.getElementById('re-lat-od')?.value),
     latOS: parseNum(document.getElementById('re-lat-os')?.value),
+    saccDirResults:    reSaccDirResultsH,
+    saccDirConfidence: reSaccDirConfidenceH,
   };
   const reResult = computeRightEyeRx(reData);
   const stratEl = document.getElementById('re-strategy-results');
@@ -6657,6 +6659,8 @@ async function saveRightEyeAssessment() {
       hUnderLGrade: reAIGrades.leftward_undershoot,
       latOD: parseNum(document.getElementById('re-lat-od')?.value),
       latOS: parseNum(document.getElementById('re-lat-os')?.value),
+      saccDirResults:    reSaccDirResultsH,
+      saccDirConfidence: reSaccDirConfidenceH,
     };
     const rxResult = computeRightEyeRx(reDataForAnalysis);
     reRec.indicators   = rxResult.indicators.map(i => ({ label: i.label, value: i.value, status: i.status, brain: i.brain, note: i.note }));
@@ -8504,6 +8508,7 @@ function runIntegratedAnalysis(patientId) {
       svUp: reRec.svUp ?? null, svDown: reRec.svDown ?? null,
       latOD: reRec.latOD ?? null, latOS: reRec.latOS ?? null,
       hOverRGrade: null, hUnderRGrade: null, hOverLGrade: null, hUnderLGrade: null,
+      saccDirResults: [], saccDirConfidence: null,
     });
   }
 
