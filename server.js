@@ -37,6 +37,7 @@ const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 let Patient      = null;
 let Assessment   = null;
 let HomeTraining = null;
+let BCFSession   = null;
 let dbReady      = false;
 
 if (process.env.MONGODB_URI) {
@@ -67,6 +68,47 @@ if (process.env.MONGODB_URI) {
   Patient     = mongoose.model('Patient',     patientSchema,     'patients');
   Assessment  = mongoose.model('Assessment',  assessmentSchema,  'assessments');
   HomeTraining = mongoose.model('HomeTraining', homeTrainingSchema, 'home_training_sessions');
+
+  const bcfSessionSchema = new mongoose.Schema({
+    patientId:   { type: String, required: true, index: true },
+    sessionDate: { type: Date, default: Date.now },
+    clinicianId: { type: String },
+    rightEyeRaw: {
+      saccade:  { latency_ms: Number, gain: Number, velocity: Number },
+      pursuit:  { gain: Number },
+      fixation: { stabilityIndex: Number, bcea: Number },
+    },
+    lesionProfile: {
+      status:          { type: String, enum: ['functional','structural','mixed','unknown'], default: 'unknown' },
+      confidence:      Number,
+      laterality:      { type: String, enum: ['left','right','bilateral','unknown'], default: 'unknown' },
+      affectedRegions: [String],
+    },
+    prescription: {
+      tier:    { type: Number, enum: [1, 2], default: 1 },
+      modules: [{
+        eyeMachineMode: String,
+        targetRegion:   String,
+        parameters: { frequency_hz: Number, amplitude_deg: Number, duration_min: Number, intensity: Number },
+      }],
+      rationale: String,
+    },
+    adaptiveState: {
+      sessionIndex:     { type: Number, default: 1 },
+      learningSlope:    Number,
+      plateauDetected:  { type: Boolean, default: false },
+      plateauSessions:  { type: Number,  default: 0 },
+      probeResults: [{
+        probeType:        String,
+        responseTime_ms:  Number,
+        improvementDelta: Number,
+        timestamp:        { type: Date, default: Date.now },
+      }],
+      recommendedUpgrade: { type: Boolean, default: false },
+    },
+  }, { timestamps: true, versionKey: false });
+
+  BCFSession = mongoose.model('BCFSession', bcfSessionSchema, 'bcf_sessions');
 
   mongoose.connect(process.env.MONGODB_URI)
     .then(async () => {
