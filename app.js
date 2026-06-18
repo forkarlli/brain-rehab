@@ -5771,7 +5771,7 @@ async function analyzeSaccadeDirection(direction) {
     const resp = await fetch('https://brain-rehab-production.up.railway.app/api/analyze-saccade-direction', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ image: { data: img.data, mediaType: img.mediaType } }),
+      body: JSON.stringify({ image: { data: img.data, mediaType: img.mediaType }, patientId: document.getElementById('assess-patient-select')?.value || null }),
     });
     if (!resp.ok) {
       const errBody = await resp.json().catch(() => ({}));
