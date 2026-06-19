@@ -515,6 +515,7 @@ app.post('/api/analyze-righteye', async (req, res) => {
     const raw = response.content[0].text.trim();
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('AI 回覆格式錯誤，請重試');
+    console.log('AI response keys:', Object.keys(JSON.parse(jsonMatch[0])));
     res.json(JSON.parse(jsonMatch[0]));
   } catch (err) {
     console.error('analyze-righteye error:', err.message);
