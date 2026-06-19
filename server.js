@@ -557,8 +557,9 @@ try { saccadeDiag = JSON.parse(fs.readFileSync(SACCADE_DIAG_FILE, 'utf8')); } ca
 const SACCADE_VISION_SYSTEM = `你是功能性神經科醫師助手，專門分析眼球運動軌跡圖。
 請分析這張 RightEye 掃視軌跡圖截圖。
 
-重要：軌跡圖顯示眼球在靶點之間來回移動的路徑。
-- Overshoot：眼球超過靶點後才停止（軌跡超出圓圈範圍）
+重要：僅根據軌跡圖的線條走向判定方向，禁止使用數字表格中的 OD/OS 欄位。
+- toward_right_or_up = overshoot：線條從左靶點（或下靶點）出發，超過右靶點（或上靶點）後折返
+- toward_left_or_down = overshoot：線條從右靶點（或上靶點）出發，超過左靶點（或下靶點）後折返
 - Undershoot：眼球未到達靶點就停止（軌跡未到圓圈）
 - 速度判定：若截圖中有速度數值，對照報告正常範圍判定是否偏慢
 
