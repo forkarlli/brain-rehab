@@ -5738,6 +5738,7 @@ function renderAISaccadeSummary() {
   const hasAny = rows.some(r => r.grade && r.grade !== 'none');
   if (!hasAny && reAIGrades.hOvershootPct === null) { el.style.display = 'none'; return; }
   el.style.display = 'block';
+  console.log('[renderAISaccadeSummary] el.style.display after set:', el.style.display);
   el.innerHTML = `
     <div class="re-num-group" style="margin-top:16px">AI 方向性 Saccade 判讀</div>
     <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px">
@@ -5757,6 +5758,7 @@ function renderAISaccadeSummary() {
     </table>`;
   if (reAIGrades.hOvershootPct !== null) {
     console.log('[renderAISaccadeSummary] appending hOvershootPct:', reAIGrades.hOvershootPct);
+    el.style.display = 'block';
     el.innerHTML += `<div style="margin-top:8px;font-size:13px;color:#374151">
       水平 Saccade Overshoot 總百分比：
       <strong style="color:${reAIGrades.hOvershootPct >= 30 ? '#dc2626' : reAIGrades.hOvershootPct >= 10 ? '#d97706' : '#16a34a'}">
