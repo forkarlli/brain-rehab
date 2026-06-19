@@ -5723,7 +5723,6 @@ function clearRightEyeForm() {
 // ===== RIGHTEYE AI ANALYSIS =====
 function renderAISaccadeSummary() {
   const el = document.getElementById('re-ai-saccade-summary');
-  console.log('[renderAISaccadeSummary] el:', el, 'hOvershootPct:', reAIGrades.hOvershootPct);
   if (!el) return;
   const gradeIcon = g => ({ none: '🟢', mild: '🟡', moderate: '🟠', severe: '🔴' }[g] || '⚪');
   const gradeLabel = g => ({ none: '無', mild: '輕度', moderate: '中度', severe: '嚴重' }[g] || '未偵測');
@@ -5736,7 +5735,6 @@ function renderAISaccadeSummary() {
   const hasAny = rows.some(r => r.grade && r.grade !== 'none');
   if (!hasAny && reAIGrades.hOvershootPct === null) { el.style.display = 'none'; return; }
   el.style.display = 'block';
-  console.log('[renderAISaccadeSummary] el.style.display after set:', el.style.display);
   el.innerHTML = `
     <div class="re-num-group" style="margin-top:16px">AI 方向性 Saccade 判讀</div>
     <table style="width:100%;border-collapse:collapse;font-size:13px;margin-top:6px">
@@ -5755,7 +5753,6 @@ function renderAISaccadeSummary() {
       }).join('')}</tbody>
     </table>`;
   if (reAIGrades.hOvershootPct !== null) {
-    console.log('[renderAISaccadeSummary] appending hOvershootPct:', reAIGrades.hOvershootPct);
     el.style.display = 'block';
     el.innerHTML += `<div style="margin-top:8px;font-size:13px;color:#374151">
       水平 Saccade Overshoot 總百分比：
@@ -6463,7 +6460,6 @@ async function readRightEyeWithAI() {
       pursuit_entropy:      vals.pursuit_entropy      || null,
       hOvershootPct:        vals.hOvershootPct        ?? null,
     };
-    console.log('reAIGrades.hOvershootPct:', reAIGrades.hOvershootPct);
     renderAISaccadeSummary();
     if (reAIGrades.pursuit_entropy)   renderPursuitEntropyFromAI(reAIGrades.pursuit_entropy);
     if (reAIGrades.saccade_direction) renderSaccadeDirectionFromAI(reAIGrades.saccade_direction);
