@@ -386,12 +386,30 @@ app.post('/api/analyze-righteye', async (req, res) => {
   "fixationScore": <Fixation 區塊的 Accuracy Score 數字（0–100），位於報告右上方 Fixations 區塊，如 100>,
   "saccadeScore": <Saccade 區塊的 Accuracy Score 數字（0–100），位於報告中間 Saccades 區塊，如 97>,
   "saccadeTaRight": <Saccade Metrics 表格中 TA (mm) 欄位的 Right 數值，如 10.75，找不到填 null>,
-  "saccadeTaLeft": <Saccade Metrics 表格中 TA (mm) 欄位的 Left 數值，如 10.50，找不到填 null>
+  "saccadeTaLeft": <Saccade Metrics 表格中 TA (mm) 欄位的 Left 數值，如 10.50，找不到填 null>,
+  "saccade_direction": {
+    "horizontal": {
+      "toward_right": <"overshoot"|"undershoot"|"normal">,
+      "toward_left": <"overshoot"|"undershoot"|"normal">,
+      "worse_direction": <"right"|"left"|"equal"|null>
+    },
+    "vertical": {
+      "toward_up": <"overshoot"|"undershoot"|"normal">,
+      "toward_down": <"overshoot"|"undershoot"|"normal">,
+      "worse_direction": <"up"|"down"|"equal"|null>
+    },
+    "note": "從軌跡圖判斷，禁止使用OD/OS數字欄位"
+  },
+  "pursuit_entropy": {
+    "circular":   { "chaos_score": <0-100>, "consistency_score": <0-100>, "worse_eye": <"OD"|"OS"|"equal"|null> },
+    "horizontal": { "chaos_score": <0-100>, "consistency_score": <0-100>, "worse_eye": <"OD"|"OS"|"equal"|null> },
+    "vertical":   { "chaos_score": <0-100>, "consistency_score": <0-100>, "worse_eye": <"OD"|"OS"|"equal"|null> }
+  }
 }`;
   try {
     const response = await anthropic.messages.create({
       model: 'claude-sonnet-4-6',
-      max_tokens: 1536,
+      max_tokens: 2500,
       system: `你是一位專業眼科儀器資料讀取助理，專門分析 RightEye FDA Standard Report 截圖並提取數值與側性判斷。
 
 分析規則：
