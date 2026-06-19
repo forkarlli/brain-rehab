@@ -5763,12 +5763,11 @@ function renderPursuitEntropyFromAI(entropy) {
   tbody.innerHTML = ['circular','horizontal','vertical'].map(type => {
     const e = entropy[type];
     if (!e) return '';
-    const grade = e.overall_entropy_grade || '-';
+    const grade = e.overall_entropy_grade || e.entropy_grade || '-';
     return `<tr>
       <td style="padding:8px;border:1px solid #e2e8f0">${type.replace('_',' ')}</td>
-      <td style="padding:8px;border:1px solid #e2e8f0;text-align:center">${e.right_eye?.chaos_score ?? '-'}</td>
-      <td style="padding:8px;border:1px solid #e2e8f0;text-align:center">${e.left_eye?.chaos_score ?? '-'}</td>
-      <td style="padding:8px;border:1px solid #e2e8f0;text-align:center">${e.right_eye?.consistency_score ?? '-'} / ${e.left_eye?.consistency_score ?? '-'}</td>
+      <td style="padding:8px;border:1px solid #e2e8f0;text-align:center" colspan="2">${e.chaos_score ?? '-'}</td>
+      <td style="padding:8px;border:1px solid #e2e8f0;text-align:center">${e.consistency_score ?? '-'}</td>
       <td style="padding:8px;border:1px solid #e2e8f0;text-align:center;color:${gradeColor[grade]||'#374151'};font-weight:700">${grade}</td>
       <td style="padding:8px;border:1px solid #e2e8f0;text-align:center">${e.worse_eye || '-'}</td>
       <td style="padding:8px;border:1px solid #e2e8f0;font-size:12px;color:#6b7280">${e.clinical_note || '-'}</td>
