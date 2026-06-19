@@ -5735,7 +5735,7 @@ function renderAISaccadeSummary() {
     { dir: '往左 Undershoot', grade: reAIGrades.leftward_undershoot,  brain: 'Right CB' },
   ];
   const hasAny = rows.some(r => r.grade && r.grade !== 'none');
-  if (!hasAny) { el.style.display = 'none'; return; }
+  if (!hasAny && reAIGrades.hOvershootPct === null) { el.style.display = 'none'; return; }
   el.style.display = 'block';
   el.innerHTML = `
     <div class="re-num-group" style="margin-top:16px">AI 方向性 Saccade 判讀</div>
