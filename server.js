@@ -31,6 +31,8 @@ app.use((req, res, next) => {
 });
 app.use(express.static(path.join(__dirname)));
 
+app.get('/api/version', (req, res) => res.json({ commit: 'aaeb164', time: new Date().toISOString() }));
+
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // ===== MONGODB =====
