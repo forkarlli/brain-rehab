@@ -5754,6 +5754,14 @@ function renderAISaccadeSummary() {
         </tr>`;
       }).join('')}</tbody>
     </table>`;
+  if (reAIGrades.hOvershootPct !== null) {
+    el.innerHTML += `<div style="margin-top:8px;font-size:13px;color:#374151">
+      水平 Saccade Overshoot 總百分比：
+      <strong style="color:${reAIGrades.hOvershootPct >= 30 ? '#dc2626' : reAIGrades.hOvershootPct >= 10 ? '#d97706' : '#16a34a'}">
+        ${reAIGrades.hOvershootPct}%
+      </strong>
+    </div>`;
+  }
 }
 
 function renderPursuitEntropyFromAI(entropy) {
@@ -6451,6 +6459,7 @@ async function readRightEyeWithAI() {
       leftward_undershoot:  vals.leftward_undershoot  || null,
       saccade_direction:    vals.saccade_direction    || null,
       pursuit_entropy:      vals.pursuit_entropy      || null,
+      hOvershootPct:        vals.hOvershootPct        ?? null,
     };
     renderAISaccadeSummary();
     if (reAIGrades.pursuit_entropy)   renderPursuitEntropyFromAI(reAIGrades.pursuit_entropy);
