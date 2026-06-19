@@ -6018,7 +6018,7 @@ function renderSaccDirResults() {
     const byPriority = {};
     allResults.forEach(d => {
       if (!byPriority[d.priority]) byPriority[d.priority] = { label: d.priority_label, color: d.priority_color, treatments: [] };
-      d.treatments.forEach(t => { if (!byPriority[d.priority].treatments.includes(t)) byPriority[d.priority].treatments.push(t); });
+      (d.treatments || []).forEach(t => { if (!byPriority[d.priority].treatments.includes(t)) byPriority[d.priority].treatments.push(t); });
     });
     const order  = ['brainstem_activation', 'cerebellar_calibration', 'cortical_calibration'];
     const active = order.filter(p => byPriority[p]);
