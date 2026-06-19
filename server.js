@@ -515,7 +515,6 @@ app.post('/api/analyze-righteye', async (req, res) => {
     const raw = response.content[0].text.trim();
     const jsonMatch = raw.match(/\{[\s\S]*\}/);
     if (!jsonMatch) throw new Error('AI 回覆格式錯誤，請重試');
-    console.log('pursuit_entropy:', JSON.stringify(JSON.parse(jsonMatch[0]).pursuit_entropy));
     res.json(JSON.parse(jsonMatch[0]));
   } catch (err) {
     console.error('analyze-righteye error:', err.message);
