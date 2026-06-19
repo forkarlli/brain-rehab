@@ -5693,9 +5693,7 @@ function clearRightEyeForm() {
   if (pid) localStorage.removeItem('righteye_images_' + pid);
   RE_IMAGES.length = 0;
   renderREThumbs();
-  reAIGrades = { rightward_overshoot: null, rightward_undershoot: null, leftward_overshoot: null, leftward_undershoot: null };
-  const aiSummary = document.getElementById('re-ai-saccade-summary');
-  if (aiSummary) aiSummary.style.display = 'none';
+  reAIGrades = { rightward_overshoot: null, rightward_undershoot: null, leftward_overshoot: null, leftward_undershoot: null, saccade_direction: null, pursuit_entropy: null, hOvershootPct: null };
   const resultsEl = document.getElementById('re-results');
   if (resultsEl) resultsEl.style.display = 'none';
   const saveBtn = document.getElementById('re-save-btn');
