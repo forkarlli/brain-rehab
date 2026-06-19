@@ -6460,7 +6460,6 @@ async function readRightEyeWithAI() {
       pursuit_entropy:      vals.pursuit_entropy      || null,
       hOvershootPct:        vals.hOvershootPct        ?? null,
     };
-    console.log('reAIGrades.hOvershootPct:', reAIGrades.hOvershootPct);
     renderAISaccadeSummary();
     if (reAIGrades.pursuit_entropy)   renderPursuitEntropyFromAI(reAIGrades.pursuit_entropy);
     if (reAIGrades.saccade_direction) renderSaccadeDirectionFromAI(reAIGrades.saccade_direction);
