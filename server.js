@@ -451,7 +451,7 @@ app.post('/api/analyze-righteye', async (req, res) => {
     - 從報告右側數字表格提取次數（#），純數值提取，不涉及運動方向判斷
     - hOverR/hUnderR/hMissedR = OD（右眼）的 Overshoot/Undershoot/Missed 次數
     - hOverL/hUnderL/hMissedL = OS（左眼）的 Overshoot/Undershoot/Missed 次數
-    - hOvershootPct：計算水平 Saccade Overshoot 百分比 = (hOverR + hOverL) / hTotal × 100，四捨五入至小數第一位；hTotal 為 0 或 null 時填 null
+    - hOvershootPct：從 Overshot Target (#) 欄位計算——該欄分兩行 (9-18mm) 和 (18-36mm)；hOverR = OD 欄 (9-18mm)+(18-36mm) 加總，hOverL = OS 欄 (9-18mm)+(18-36mm) 加總，hTotal = Saccade (#) 欄的 OD+OS 加總；hOvershootPct = (hOverR + hOverL) / hTotal × 100，四捨五入至小數第一位；hTotal 為 0 或 null 時填 null
     - ⚠️ 嚴格禁止：這些 OD/OS 次數欄位與 rightward/leftward 方向完全無關，禁止互相映射
     - 提取 OD/OS 分開的 Saccadic Velocity（若報告有呈現）
     - 注意：rule 3 用視覺估計比例（none/mild/moderate/severe）；rule 3b 用表格數字（整數次數）
