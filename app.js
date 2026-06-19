@@ -5725,6 +5725,7 @@ function clearRightEyeForm() {
 // ===== RIGHTEYE AI ANALYSIS =====
 function renderAISaccadeSummary() {
   const el = document.getElementById('re-ai-saccade-summary');
+  console.log('[renderAISaccadeSummary] el:', el, 'hOvershootPct:', reAIGrades.hOvershootPct);
   if (!el) return;
   const gradeIcon = g => ({ none: '🟢', mild: '🟡', moderate: '🟠', severe: '🔴' }[g] || '⚪');
   const gradeLabel = g => ({ none: '無', mild: '輕度', moderate: '中度', severe: '嚴重' }[g] || '未偵測');
@@ -5755,6 +5756,7 @@ function renderAISaccadeSummary() {
       }).join('')}</tbody>
     </table>`;
   if (reAIGrades.hOvershootPct !== null) {
+    console.log('[renderAISaccadeSummary] appending hOvershootPct:', reAIGrades.hOvershootPct);
     el.innerHTML += `<div style="margin-top:8px;font-size:13px;color:#374151">
       水平 Saccade Overshoot 總百分比：
       <strong style="color:${reAIGrades.hOvershootPct >= 30 ? '#dc2626' : reAIGrades.hOvershootPct >= 10 ? '#d97706' : '#16a34a'}">
