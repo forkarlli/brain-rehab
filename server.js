@@ -504,10 +504,18 @@ app.post('/api/analyze-righteye', async (req, res) => {
     找不到對應截圖則該項為 null
 
 11. 【Saccade 方向性軌跡判讀】從水平/垂直掃視軌跡圖的線條走向判斷，
-    禁止使用OD/OS數字欄位，輸出 saccade_direction 物件：
+    禁止使用OD/OS數字欄位，僅根據軌跡線條走向判定：
+    水平掃視：
+    - toward_right：往右跳（左→右）軌跡是否超過右側靶點 → overshoot；不足靶點 → undershoot；正常 → normal
+    - toward_left：往左跳（右→左）軌跡是否超過左側靶點 → overshoot；不足靶點 → undershoot；正常 → normal
+    - worse_direction：哪個方向異常更嚴重 "right"|"left"|"equal"|null
+    垂直掃視：
+    - toward_up：往上跳軌跡是否超過上靶點 → overshoot；不足 → undershoot；正常 → normal
+    - toward_down：往下跳軌跡是否超過下靶點 → overshoot；不足 → undershoot；正常 → normal
+    - worse_direction："up"|"down"|"equal"|null
+    輸出 saccade_direction 物件：
     { horizontal: {toward_right, toward_left, worse_direction},
       vertical: {toward_up, toward_down, worse_direction} }
-    每個方向值為 "overshoot"|"undershoot"|"normal"
 
 只回傳 JSON，不附加任何說明文字。`,
       messages: [{ role: 'user', content: [...imageBlocks, { type: 'text', text: userPrompt }] }],
