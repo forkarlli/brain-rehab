@@ -443,10 +443,11 @@ app.post('/api/analyze-righteye', async (req, res) => {
    - severe = 多量（>50%）
    回傳 rightward_overshoot, rightward_undershoot, leftward_overshoot, leftward_undershoot
 
-3. 其他 Saccade 圖形分析：
-   - 分別判斷往右（right-going）和往左（left-going）的 Overshoot 和 Undershoot 次數
-   - 提取左眼（OD）和右眼（OS）分開的 Saccadic Velocity（若報告有呈現方向性速度）
-   - 識別 Missed saccade（眼球未啟動的次數）
+3b. 其他 Saccade 數字表格提取（hTotal/hOverR/hUnderR 等欄位）：
+    - 從報告右側數字表格提取次數（#），不是從軌跡圖視覺判斷
+    - 分別提取往右（right-going）和往左（left-going）的 Overshoot / Undershoot / Missed 次數
+    - 提取 OD（右眼）和 OS（左眼）分開的 Saccadic Velocity（若報告有呈現方向性速度）
+    - 注意：rule 3 用視覺估計比例（none/mild/moderate/severe）；rule 3b 用表格數字（整數次數）
 
 4. 側性判斷輸出：
    - 明確標示數值的側性（Left/Right）
