@@ -5787,21 +5787,38 @@ function renderPursuitEntropyFromAI(entropy) {
 
 function renderSaccadeDirectionFromAI(dir) {
   if (!dir) return;
+  const SACC_MAP = {
+    '往右_overshoot':  { region: 'Right CB (Vermis)',          tag: 'right_cb_overshoot',   priority: 'cerebellar_calibration', priority_label: '小腦校準', priority_color: '#7c3aed' },
+    '往右_undershoot': { region: 'Left FEF / Basal Ganglia',   tag: 'left_fef_undershoot',  priority: 'cortical_calibration',   priority_label: '皮質校準', priority_color: '#0284c7' },
+    '往左_overshoot':  { region: 'Left CB (Vermis)',           tag: 'left_cb_overshoot',    priority: 'cerebellar_calibration', priority_label: '小腦校準', priority_color: '#7c3aed' },
+    '往左_undershoot': { region: 'Right FEF / Basal Ganglia',  tag: 'right_fef_undershoot', priority: 'cortical_calibration',   priority_label: '皮質校準', priority_color: '#0284c7' },
+    '往上_overshoot':  { region: 'Superior Vermis / Midbrain', tag: 'sup_vermis_overshoot', priority: 'cerebellar_calibration', priority_label: '小腦校準', priority_color: '#7c3aed' },
+    '往上_undershoot': { region: 'riMLF / Midbrain',           tag: 'rimlf_undershoot',     priority: 'brainstem_activation',   priority_label: '腦幹激活', priority_color: '#dc2626' },
+    '往下_overshoot':  { region: 'Inferior Vermis / Medulla',  tag: 'inf_vermis_overshoot', priority: 'cerebellar_calibration', priority_label: '小腦校準', priority_color: '#7c3aed' },
+    '往下_undershoot': { region: 'SC / Brainstem',             tag: 'sc_undershoot',        priority: 'brainstem_activation',   priority_label: '腦幹激活', priority_color: '#dc2626' },
+  };
+  const makeEntry = (direction, rawType) => {
+    const type = rawType === 'overshoot' ? 'Overshoot' : 'Undershoot';
+    const map  = SACC_MAP[`${direction}_${rawType}`] || {};
+    return { direction, type, region: map.region || '', tag: map.tag || '', priority: map.priority || null,
+             priority_label: map.priority_label || '', priority_color: map.priority_color || null,
+             treatments: [], velocity_slow: false, evidence: '', mechanism: '' };
+  };
   const h = dir.horizontal;
   const v = dir.vertical;
   if (h) {
     const hBtn = document.getElementById('re-sacc-dir-btn-horizontal');
     if (hBtn) hBtn.dataset.aiResult = JSON.stringify(h);
     reSaccDirResultsH = [
-      h.toward_right !== 'normal' ? { direction: '往右', type: h.toward_right === 'overshoot' ? 'Overshoot' : 'Undershoot' } : null,
-      h.toward_left  !== 'normal' ? { direction: '往左', type: h.toward_left  === 'overshoot' ? 'Overshoot' : 'Undershoot' } : null,
+      h.toward_right !== 'normal' ? makeEntry('往右', h.toward_right) : null,
+      h.toward_left  !== 'normal' ? makeEntry('往左', h.toward_left)  : null,
     ].filter(Boolean);
     renderSaccDirResults();
   }
   if (v) {
     reSaccDirResultsV = [
-      v.toward_up   !== 'normal' ? { direction: '往上', type: v.toward_up   === 'overshoot' ? 'Overshoot' : 'Undershoot' } : null,
-      v.toward_down !== 'normal' ? { direction: '往下', type: v.toward_down === 'overshoot' ? 'Overshoot' : 'Undershoot' } : null,
+      v.toward_up   !== 'normal' ? makeEntry('往上', v.toward_up)   : null,
+      v.toward_down !== 'normal' ? makeEntry('往下', v.toward_down) : null,
     ].filter(Boolean);
     renderSaccDirResults();
   }
