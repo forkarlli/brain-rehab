@@ -8041,7 +8041,7 @@ function _switchAssessTab(tab) {
     if (bcfEl)      bcfEl.style.display = 'none';
     if (btracksEl)  btracksEl.style.display = 'none';
     if (pageActions) pageActions.style.display = 'none';
-    if (reEl)       { reEl.style.display = 'block'; renderRightEyeInterface(); }
+    if (reEl)       { reEl.style.display = 'block'; renderRightEyeInterface(); renderAISaccadeSummary(); }
     return;
   }
   // Table tabs (cognitive / motor / language / default)
@@ -8074,7 +8074,7 @@ function renderAssessments() {
   if (activeTab === 'righteye') {
     if (tableCard)  tableCard.style.display = 'none';
     if (bcfEl)      bcfEl.style.display = 'none';
-    if (reEl)       { reEl.style.display = 'block'; renderRightEyeInterface(); }
+    if (reEl)       { reEl.style.display = 'block'; renderRightEyeInterface(); renderAISaccadeSummary(); }
     if (btracksEl)  btracksEl.style.display = 'none';
     if (pageActions) pageActions.style.display = 'none';
     return;
