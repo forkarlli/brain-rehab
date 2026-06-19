@@ -294,6 +294,7 @@ let currentDetailPatient = null;
 
 // RightEye uploaded screenshots
 const RE_IMAGES = [];
+const TE_IMAGES = [];
 
 // AI-detected directional saccade grades (filled by readRightEyeWithAI)
 let reAIGrades = { rightward_overshoot: null, rightward_undershoot: null, leftward_overshoot: null, leftward_undershoot: null };
@@ -5527,7 +5528,41 @@ function renderRightEyeInterface() {
       <button class="btn btn-success" id="re-save-btn" style="display:none" onclick="saveRightEyeAssessment()">💾 儲存評估</button>
     </div>
 
-    <div id="re-results" style="display:none"></div>`;
+    <div id="re-results" style="display:none"></div>
+
+    <div class="card" style="margin-top:20px">
+      <div class="card-header">
+        <h3>🔬 軌跡熵分析</h3>
+        <span class="bcf-section-hint">上傳最多 3 張軌跡截圖，AI 自動辨識測試類型並分別評估右眼／左眼混亂度</span>
+      </div>
+      <div id="te-drop-zone" style="border:2px dashed #cbd5e1;border-radius:10px;padding:24px;text-align:center;cursor:pointer;background:#f8fafc;margin-bottom:12px">
+        <div style="font-size:28px;margin-bottom:6px">📂</div>
+        <div style="color:#64748b;font-size:13px">拖放或點擊上傳截圖（最多 3 張）</div>
+        <input type="file" id="te-file-input" accept="image/*" multiple style="display:none">
+      </div>
+      <div id="te-thumbs" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px"></div>
+      <div style="display:flex;justify-content:flex-end;gap:8px">
+        <button class="btn btn-outline" onclick="clearTEImages()">清除</button>
+        <button class="btn btn-primary" onclick="analyzeTrajectoryEntropy()">🔬 分析軌跡熵</button>
+      </div>
+      <div id="te-results" style="margin-top:16px;display:none">
+        <table style="width:100%;border-collapse:collapse;font-size:13px">
+          <thead>
+            <tr style="background:#f1f5f9">
+              <th style="padding:8px;border:1px solid #e2e8f0;text-align:left">測試類型</th>
+              <th style="padding:8px;border:1px solid #e2e8f0;text-align:center">右眼混亂度</th>
+              <th style="padding:8px;border:1px solid #e2e8f0;text-align:center">左眼混亂度</th>
+              <th style="padding:8px;border:1px solid #e2e8f0;text-align:center">一致性 OD/OS</th>
+              <th style="padding:8px;border:1px solid #e2e8f0;text-align:center">偏離嚴重度 OD/OS</th>
+              <th style="padding:8px;border:1px solid #e2e8f0;text-align:center">整體等級</th>
+              <th style="padding:8px;border:1px solid #e2e8f0;text-align:center">較差眼</th>
+              <th style="padding:8px;border:1px solid #e2e8f0;text-align:left">臨床備註</th>
+            </tr>
+          </thead>
+          <tbody id="te-results-tbody"></tbody>
+        </table>
+      </div>
+    </div>`;
 
   console.log('[BCF] renderRightEyeInterface: innerHTML set, #re-opns-result =', document.getElementById('re-opns-result'));
   const dropZone = document.getElementById('re-drop-zone');
@@ -5540,6 +5575,18 @@ function renderRightEyeInterface() {
     e.preventDefault();
     dropZone.classList.remove('drag-over');
     handleREFiles(e.dataTransfer.files);
+  });
+
+  const teDropZone  = document.getElementById('te-drop-zone');
+  const teFileInput = document.getElementById('te-file-input');
+  teDropZone.addEventListener('click', () => teFileInput.click());
+  teFileInput.addEventListener('change', e => { handleTEFiles(e.target.files); e.target.value = ''; });
+  teDropZone.addEventListener('dragover', e => { e.preventDefault(); teDropZone.classList.add('drag-over'); });
+  teDropZone.addEventListener('dragleave', () => teDropZone.classList.remove('drag-over'));
+  teDropZone.addEventListener('drop', e => {
+    e.preventDefault();
+    teDropZone.classList.remove('drag-over');
+    handleTEFiles(e.dataTransfer.files);
   });
 
   document.addEventListener('paste', e => {
@@ -5793,6 +5840,86 @@ async function analyzeSaccadeDirection(direction) {
     showToast('分析失敗：' + err.message, 'error');
   } finally {
     if (btn) { btn.disabled = false; btn.textContent = origText; }
+  }
+}
+
+function handleTEFiles(files) {
+  const remaining = 3 - TE_IMAGES.length;
+  Array.from(files).slice(0, remaining).forEach(file => {
+    const reader = new FileReader();
+    reader.onload = e => {
+      TE_IMAGES.push({ id: Date.now() + '_' + Math.random(), dataUrl: e.target.result });
+      renderTEThumbs();
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+function renderTEThumbs() {
+  const thumbs = document.getElementById('te-thumbs');
+  if (!thumbs) return;
+  thumbs.innerHTML = TE_IMAGES.map(img => `
+    <div style="position:relative;display:inline-block">
+      <img src="${img.dataUrl}" style="width:80px;height:60px;object-fit:cover;border-radius:6px;border:1px solid #e2e8f0">
+      <button onclick="deleteTEImage('${img.id}')" style="position:absolute;top:-6px;right:-6px;background:#ef4444;color:#fff;border:none;border-radius:50%;width:18px;height:18px;font-size:11px;cursor:pointer;line-height:18px;text-align:center">×</button>
+    </div>`).join('');
+}
+
+function deleteTEImage(id) {
+  const idx = TE_IMAGES.findIndex(i => i.id === id);
+  if (idx !== -1) { TE_IMAGES.splice(idx, 1); renderTEThumbs(); }
+}
+
+function clearTEImages() {
+  TE_IMAGES.length = 0;
+  renderTEThumbs();
+  const res = document.getElementById('te-results');
+  if (res) res.style.display = 'none';
+}
+
+async function analyzeTrajectoryEntropy() {
+  if (TE_IMAGES.length === 0) { showToast('請先上傳軌跡截圖', 'error'); return; }
+  const btn = document.querySelector('[onclick="analyzeTrajectoryEntropy()"]');
+  if (btn) { btn.disabled = true; btn.textContent = '⏳ 分析中…'; }
+  const patientId = document.getElementById('assess-patient-select')?.value || null;
+  const tbody = document.getElementById('te-results-tbody');
+  if (tbody) tbody.innerHTML = '';
+  try {
+    const rows = await Promise.all(TE_IMAGES.map(async img => {
+      const base64 = img.dataUrl.split(',')[1];
+      const mediaType = img.dataUrl.match(/data:(image\/\w+);/)?.[1] || 'image/jpeg';
+      const resp = await fetch('https://brain-rehab-production.up.railway.app/api/analyze-trajectory-entropy', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ image: { data: base64, mediaType }, patientId, testType: null }),
+      });
+      if (!resp.ok) { const e = await resp.json().catch(() => ({})); throw new Error(e.error || `HTTP ${resp.status}`); }
+      return resp.json();
+    }));
+    const gradeColor = { low: '#16a34a', medium: '#d97706', high: '#dc2626' };
+    const worseLabel = { right: 'OD', left: 'OS', equal: '相等' };
+    if (tbody) tbody.innerHTML = rows.map(r => {
+      const m = r.metrics;
+      const testLabel = (m.testType || '—').replace(/_/g, ' ');
+      const grade = m.overall_entropy_grade || '—';
+      return `<tr>
+        <td style="padding:8px;border:1px solid #e2e8f0">${testLabel}</td>
+        <td style="padding:8px;border:1px solid #e2e8f0;text-align:center">${m.right_eye?.chaos_score ?? '—'}</td>
+        <td style="padding:8px;border:1px solid #e2e8f0;text-align:center">${m.left_eye?.chaos_score ?? '—'}</td>
+        <td style="padding:8px;border:1px solid #e2e8f0;text-align:center">${m.right_eye?.consistency_score ?? '—'} / ${m.left_eye?.consistency_score ?? '—'}</td>
+        <td style="padding:8px;border:1px solid #e2e8f0;text-align:center">${m.right_eye?.deviation_severity ?? '—'} / ${m.left_eye?.deviation_severity ?? '—'}</td>
+        <td style="padding:8px;border:1px solid #e2e8f0;text-align:center;color:${gradeColor[grade] || '#374151'};font-weight:700">${grade}</td>
+        <td style="padding:8px;border:1px solid #e2e8f0;text-align:center">${worseLabel[m.worse_eye] || '—'}</td>
+        <td style="padding:8px;border:1px solid #e2e8f0;font-size:12px;color:#6b7280">${m.clinical_note || '—'}</td>
+      </tr>`;
+    }).join('');
+    const res = document.getElementById('te-results');
+    if (res) res.style.display = 'block';
+    showToast('軌跡熵分析完成', 'success');
+  } catch (err) {
+    showToast('分析失敗：' + err.message, 'error');
+  } finally {
+    if (btn) { btn.disabled = false; btn.textContent = '🔬 分析軌跡熵'; }
   }
 }
 
