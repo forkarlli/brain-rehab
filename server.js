@@ -442,11 +442,16 @@ app.post('/api/analyze-righteye', async (req, res) => {
    - moderate = 中量（25–50%）
    - severe = 多量（>50%）
    回傳 rightward_overshoot, rightward_undershoot, leftward_overshoot, leftward_undershoot
+   ⚠️ 嚴格禁止：rightward/leftward 方向判斷只能來自軌跡圖視覺分析，
+   禁止使用 hOverR/hOverL/hUnderR/hUnderL 等 OD/OS 次數欄位推斷運動方向。
+   OD（右眼）次數 ≠ 往右方向；OS（左眼）次數 ≠ 往左方向。
 
 3b. 其他 Saccade 數字表格提取（hTotal/hOverR/hUnderR 等欄位）：
-    - 從報告右側數字表格提取次數（#），不是從軌跡圖視覺判斷
-    - 分別提取往右（right-going）和往左（left-going）的 Overshoot / Undershoot / Missed 次數
-    - 提取 OD（右眼）和 OS（左眼）分開的 Saccadic Velocity（若報告有呈現方向性速度）
+    - 從報告右側數字表格提取次數（#），純數值提取，不涉及運動方向判斷
+    - hOverR/hUnderR/hMissedR = OD（右眼）的 Overshoot/Undershoot/Missed 次數
+    - hOverL/hUnderL/hMissedL = OS（左眼）的 Overshoot/Undershoot/Missed 次數
+    - ⚠️ 嚴格禁止：這些 OD/OS 次數欄位與 rightward/leftward 方向完全無關，禁止互相映射
+    - 提取 OD/OS 分開的 Saccadic Velocity（若報告有呈現）
     - 注意：rule 3 用視覺估計比例（none/mild/moderate/severe）；rule 3b 用表格數字（整數次數）
 
 4. 側性判斷輸出：
