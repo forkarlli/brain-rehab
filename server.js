@@ -676,17 +676,25 @@ app.post('/api/analyze-saccade-direction', async (req, res) => {
 });
 
 const TRAJECTORY_ENTROPY_SYSTEM = `你是功能性神經科醫師助手，專門分析眼球運動軌跡的混亂程度。
-請分析這張 RightEye 眼動軌跡截圖，針對軌跡的視覺混亂度給出量化評估。
+請分析這張 RightEye 眼動軌跡截圖，針對右眼和左眼軌跡分別給出量化評估。
 
-評估規則：
-- trajectory_chaos_score (0-100)：軌跡越混亂越高，正常平滑軌跡為0-20，嚴重混亂為80-100
+評估規則（右眼和左眼分別評分）：
+- chaos_score (0-100)：軌跡越混亂越高，正常平滑為0-20，嚴重混亂為80-100
 - consistency_score (0-100)：軌跡一致性，越一致越高
 - deviation_severity (0-10)：偏離預期路徑的嚴重程度
-- trajectory_width：軌跡帶寬度視覺估算 narrow/medium/wide
-- entropy_grade：low/medium/high
+- shape_accuracy (0-100)：實際軌跡與目標路徑的吻合度
 - clinical_note：一句話臨床觀察
+- testType：從截圖頂部標題自動辨識，回傳 "circular_pursuit"、"horizontal_pursuit" 或 "horizontal_saccade" 之一
 
-只回傳 JSON，不要其他文字。`;
+只回傳 JSON，不要其他文字：
+{
+  "right_eye": { "chaos_score": 0-100, "consistency_score": 0-100, "deviation_severity": 0-10, "shape_accuracy": 0-100 },
+  "left_eye":  { "chaos_score": 0-100, "consistency_score": 0-100, "deviation_severity": 0-10, "shape_accuracy": 0-100 },
+  "overall_entropy_grade": "low/medium/high",
+  "worse_eye": "right/left/equal",
+  "clinical_note": "一句話臨床觀察",
+  "testType": "circular_pursuit/horizontal_pursuit/horizontal_saccade"
+}`;
 
 app.post('/api/analyze-trajectory-entropy', async (req, res) => {
   const { image, patientId, testType } = req.body;
