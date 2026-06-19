@@ -493,6 +493,20 @@ app.post('/api/analyze-righteye', async (req, res) => {
 
 9. 數值提取：仔細讀取圖片中所有數字，包括小數點。找不到的欄位填 null。
 
+10. 【Pursuit 軌跡熵分析】針對 Circular / Horizontal / Vertical Smooth Pursuit 截圖，
+    分析軌跡混亂程度，輸出 pursuit_entropy 物件：
+    { circular: {chaos_score, consistency_score, worse_eye, entropy_grade, clinical_note},
+      horizontal: {同上}, vertical: {同上} }
+    chaos_score 0-100（越混亂越高），正常平滑軌跡為0-20
+    worse_eye: "OD"|"OS"|"equal"|null
+    找不到對應截圖則該項為 null
+
+11. 【Saccade 方向性軌跡判讀】從水平/垂直掃視軌跡圖的線條走向判斷，
+    禁止使用OD/OS數字欄位，輸出 saccade_direction 物件：
+    { horizontal: {toward_right, toward_left, worse_direction},
+      vertical: {toward_up, toward_down, worse_direction} }
+    每個方向值為 "overshoot"|"undershoot"|"normal"
+
 只回傳 JSON，不附加任何說明文字。`,
       messages: [{ role: 'user', content: [...imageBlocks, { type: 'text', text: userPrompt }] }],
     });
