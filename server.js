@@ -675,6 +675,61 @@ app.post('/api/analyze-saccade-direction', async (req, res) => {
   }
 });
 
+const TRAJECTORY_ENTROPY_SYSTEM = `你是功能性神經科醫師助手，專門分析眼球運動軌跡的混亂程度。
+請分析這張 RightEye 眼動軌跡截圖，針對軌跡的視覺混亂度給出量化評估。
+
+評估規則：
+- trajectory_chaos_score (0-100)：軌跡越混亂越高，正常平滑軌跡為0-20，嚴重混亂為80-100
+- consistency_score (0-100)：軌跡一致性，越一致越高
+- deviation_severity (0-10)：偏離預期路徑的嚴重程度
+- trajectory_width：軌跡帶寬度視覺估算 narrow/medium/wide
+- entropy_grade：low/medium/high
+- clinical_note：一句話臨床觀察
+
+只回傳 JSON，不要其他文字。`;
+
+app.post('/api/analyze-trajectory-entropy', async (req, res) => {
+  const { image, patientId, testType } = req.body;
+  if (!image || !image.data) {
+    return res.status(400).json({ error: '未收到圖片資料' });
+  }
+  try {
+    const response = await anthropic.messages.create({
+      model: 'claude-sonnet-4-6',
+      max_tokens: 512,
+      system: TRAJECTORY_ENTROPY_SYSTEM,
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: image.mediaType || 'image/jpeg', data: image.data } },
+          { type: 'text', text: '請分析此張眼動軌跡圖，回傳 JSON 結果。' },
+        ],
+      }],
+    });
+    const raw = response.content[0].text.trim();
+    const jsonMatch = raw.match(/\{[\s\S]*\}/);
+    if (!jsonMatch) throw new Error('AI 回覆格式錯誤，請重試');
+    const metrics = JSON.parse(jsonMatch[0]);
+
+    if (BCFSession && patientId && testType) {
+      try {
+        await BCFSession.findOneAndUpdate(
+          { patientId },
+          { $set: { [`rightEyeRaw.trajectoryMetrics.${testType}`]: metrics } },
+          { sort: { createdAt: -1 }, upsert: false }
+        );
+      } catch (saveErr) {
+        console.error('BCFSession trajectoryMetrics save error:', saveErr.message);
+      }
+    }
+
+    res.json({ testType, metrics, patientId: patientId || null });
+  } catch (err) {
+    console.error('analyze-trajectory-entropy error:', err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
 app.post('/api/transcribe', upload.single('audio'), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: '未收到音檔' });
   const audioBase64 = req.file.buffer.toString('base64');
