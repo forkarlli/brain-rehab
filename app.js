@@ -5756,6 +5756,50 @@ function renderAISaccadeSummary() {
     </table>`;
 }
 
+function renderPursuitEntropyFromAI(entropy) {
+  const tbody = document.getElementById('te-results-tbody');
+  if (!tbody || !entropy) return;
+  const gradeColor = { low: '#16a34a', medium: '#d97706', high: '#dc2626' };
+  tbody.innerHTML = ['circular','horizontal','vertical'].map(type => {
+    const e = entropy[type];
+    if (!e) return '';
+    const grade = e.overall_entropy_grade || '-';
+    return `<tr>
+      <td style="padding:8px;border:1px solid #e2e8f0">${type.replace('_',' ')}</td>
+      <td style="padding:8px;border:1px solid #e2e8f0;text-align:center">${e.right_eye?.chaos_score ?? '-'}</td>
+      <td style="padding:8px;border:1px solid #e2e8f0;text-align:center">${e.left_eye?.chaos_score ?? '-'}</td>
+      <td style="padding:8px;border:1px solid #e2e8f0;text-align:center">${e.right_eye?.consistency_score ?? '-'} / ${e.left_eye?.consistency_score ?? '-'}</td>
+      <td style="padding:8px;border:1px solid #e2e8f0;text-align:center;color:${gradeColor[grade]||'#374151'};font-weight:700">${grade}</td>
+      <td style="padding:8px;border:1px solid #e2e8f0;text-align:center">${e.worse_eye || '-'}</td>
+      <td style="padding:8px;border:1px solid #e2e8f0;font-size:12px;color:#6b7280">${e.clinical_note || '-'}</td>
+    </tr>`;
+  }).join('');
+  const res = document.getElementById('te-results');
+  if (res) res.style.display = 'block';
+}
+
+function renderSaccadeDirectionFromAI(dir) {
+  if (!dir) return;
+  const h = dir.horizontal;
+  const v = dir.vertical;
+  if (h) {
+    const hBtn = document.getElementById('re-sacc-dir-btn-horizontal');
+    if (hBtn) hBtn.dataset.aiResult = JSON.stringify(h);
+    reSaccDirResultsH = [
+      h.toward_right !== 'normal' ? { direction: '往右', type: h.toward_right === 'overshoot' ? 'Overshoot' : 'Undershoot' } : null,
+      h.toward_left  !== 'normal' ? { direction: '往左', type: h.toward_left  === 'overshoot' ? 'Overshoot' : 'Undershoot' } : null,
+    ].filter(Boolean);
+    renderSaccDirResults();
+  }
+  if (v) {
+    reSaccDirResultsV = [
+      v.toward_up   !== 'normal' ? { direction: '往上', type: v.toward_up   === 'overshoot' ? 'Overshoot' : 'Undershoot' } : null,
+      v.toward_down !== 'normal' ? { direction: '往下', type: v.toward_down === 'overshoot' ? 'Overshoot' : 'Undershoot' } : null,
+    ].filter(Boolean);
+    renderSaccDirResults();
+  }
+}
+
 // ===== DIRECTIONAL SACCADE ANALYSIS =====
 function setupSaccDirUploadZone(direction) {
   const key   = direction === 'horizontal' ? 'h' : 'v';
@@ -6381,8 +6425,12 @@ async function readRightEyeWithAI() {
       rightward_undershoot: vals.rightward_undershoot || null,
       leftward_overshoot:   vals.leftward_overshoot   || null,
       leftward_undershoot:  vals.leftward_undershoot  || null,
+      saccade_direction:    vals.saccade_direction    || null,
+      pursuit_entropy:      vals.pursuit_entropy      || null,
     };
     renderAISaccadeSummary();
+    if (reAIGrades.pursuit_entropy)   renderPursuitEntropyFromAI(reAIGrades.pursuit_entropy);
+    if (reAIGrades.saccade_direction) renderSaccadeDirectionFromAI(reAIGrades.saccade_direction);
 
     showToast('AI 已自動填入數值，請確認後按「分析並產生處方」', 'success');
   } catch (err) {
