@@ -5760,21 +5760,29 @@ function renderPursuitEntropyFromAI(entropy) {
   const tbody = document.getElementById('te-results-tbody');
   if (!tbody || !entropy) return;
   const gradeColor = { low: '#16a34a', medium: '#d97706', high: '#dc2626' };
+  const teRes = document.getElementById('te-results');
+  const table = teRes?.querySelector('table');
+  if (table) table.querySelector('thead tr').innerHTML = `
+    <th style="padding:8px;border:1px solid #e2e8f0;text-align:left">測試類型</th>
+    <th style="padding:8px;border:1px solid #e2e8f0;text-align:center">混亂度</th>
+    <th style="padding:8px;border:1px solid #e2e8f0;text-align:center">一致性</th>
+    <th style="padding:8px;border:1px solid #e2e8f0;text-align:center">整體等級</th>
+    <th style="padding:8px;border:1px solid #e2e8f0;text-align:center">較差眼</th>
+    <th style="padding:8px;border:1px solid #e2e8f0;text-align:left">臨床備註</th>`;
   tbody.innerHTML = ['circular','horizontal','vertical'].map(type => {
     const e = entropy[type];
     if (!e) return '';
-    const grade = e.overall_entropy_grade || e.entropy_grade || '-';
+    const grade = e.entropy_grade || e.overall_entropy_grade || '-';
     return `<tr>
       <td style="padding:8px;border:1px solid #e2e8f0">${type.replace('_',' ')}</td>
-      <td style="padding:8px;border:1px solid #e2e8f0;text-align:center" colspan="2">${e.chaos_score ?? '-'}</td>
+      <td style="padding:8px;border:1px solid #e2e8f0;text-align:center">${e.chaos_score ?? '-'}</td>
       <td style="padding:8px;border:1px solid #e2e8f0;text-align:center">${e.consistency_score ?? '-'}</td>
-      <td style="padding:8px;border:1px solid #e2e8f0;text-align:center;color:${gradeColor[grade]||'#374151'};font-weight:700">${grade}</td>
+      <td style="padding:8px;border:1px solid #e2e8f0;text-align:center;font-weight:700;color:${gradeColor[grade]||'#374151'}">${grade}</td>
       <td style="padding:8px;border:1px solid #e2e8f0;text-align:center">${e.worse_eye || '-'}</td>
       <td style="padding:8px;border:1px solid #e2e8f0;font-size:12px;color:#6b7280">${e.clinical_note || '-'}</td>
     </tr>`;
   }).join('');
-  const res = document.getElementById('te-results');
-  if (res) res.style.display = 'block';
+  if (teRes) teRes.style.display = 'block';
 }
 
 function renderSaccadeDirectionFromAI(dir) {
