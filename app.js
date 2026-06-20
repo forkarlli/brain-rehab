@@ -297,7 +297,7 @@ const RE_IMAGES = [];
 const TE_IMAGES = [];
 
 // AI-detected directional saccade grades (filled by readRightEyeWithAI)
-let reAIGrades = { rightward_overshoot: null, rightward_undershoot: null, leftward_overshoot: null, leftward_undershoot: null };
+let reAIGrades = { rightward_overshoot: null, rightward_undershoot: null, leftward_overshoot: null, leftward_undershoot: null, saccade_direction: null, pursuit_entropy: null, hOvershootPct: null };
 
 // Directional saccade analysis state
 let RE_SACC_H_IMAGE = null;
