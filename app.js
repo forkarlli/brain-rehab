@@ -5270,7 +5270,7 @@ function clearBCFForm() {
 function renderRightEyeInterface() {
   const container = document.getElementById('righteye-interface');
   if (!container) { console.log('[BCF] renderRightEyeInterface: container not found'); return; }
-  if (container.querySelector("#re-opns-result")) { console.log('[BCF] renderRightEyeInterface: guard fired, already rendered'); return; }
+  if (container.querySelector("#re-opns-result")) { console.log('[BCF] renderRightEyeInterface: guard fired, already rendered'); if (reAIGrades.hOvershootPct !== null) renderAISaccadeSummary(); return; }
   console.log('[BCF] renderRightEyeInterface: setting innerHTML now');
 
   container.innerHTML = `
