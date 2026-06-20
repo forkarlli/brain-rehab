@@ -3558,6 +3558,9 @@ function computeRightEyeRx(data) {
   // helpers for indicator brain/note lookup
   function overBrain(st, severe, mild) { return (st === 'severe' || st === 'moderate') ? severe : st === 'mild' ? mild : []; }
   function overNote(st, sev, mod, mild) { return st === 'severe' ? sev : st === 'moderate' ? mod : st === 'mild' ? mild : ''; }
+  const hOvPctSt = reAIGrades.hOvershootPct !== null
+    ? (reAIGrades.hOvershootPct >= 30 ? 'severe' : reAIGrades.hOvershootPct >= 15 ? 'moderate' : reAIGrades.hOvershootPct >= 5 ? 'mild' : 'normal')
+    : 'na';
 
   const indicators = [
     {
@@ -3679,6 +3682,11 @@ function computeRightEyeRx(data) {
         brain: overBrain(hMissLSt, ['Left PPRF', 'Right SC'], ['Left PPRF', 'Right SC']),
         note:  overNote(hMissLSt, 'Left PPRF（同側執行端）+ Right SC（對側整合啟動端）嚴重不足 ⚠️', 'Left PPRF + Right SC 中度不足', 'Left PPRF + Right SC 輕度不足') },
     ] : []),
+    ...(reAIGrades.hOvershootPct !== null ? [{
+      label: '水平 Saccade Overshoot 總百分比', value: reAIGrades.hOvershootPct + '%', status: hOvPctSt,
+      brain: overBrain(hOvPctSt, ['CB Vermis（雙側）'], ['CB Vermis（雙側）']),
+      note:  overNote(hOvPctSt, '水平 Overshoot 總比率嚴重偏高 ⚠️，小腦校準功能嚴重不足', '水平 Overshoot 總比率中度偏高，小腦校準中度異常', '水平 Overshoot 總比率輕度偏高，建議小腦精準訓練')
+    }] : []),
     ...(vTotal ? [
       { label: '垂直 Saccade 上向 Overshoot',  value: vOverRPct  !== null ? vOverRPct  + '%' : '—', status: vOverRSt,
         brain: overBrain(vOverRSt, ['CB Vermis'], ['CB Vermis']),
