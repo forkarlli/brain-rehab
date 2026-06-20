@@ -3682,9 +3682,19 @@ function computeRightEyeRx(data) {
         brain: overBrain(hMissLSt, ['Left PPRF', 'Right SC'], ['Left PPRF', 'Right SC']),
         note:  overNote(hMissLSt, 'Left PPRF（同側執行端）+ Right SC（對側整合啟動端）嚴重不足 ⚠️', 'Left PPRF + Right SC 中度不足', 'Left PPRF + Right SC 輕度不足') },
     ] : []),
+    ...(hTotal ? [{
+      label: '水平 Saccade 右向 Overshoot', value: hOverRPct !== null ? hOverRPct + '%' : '—', status: hOverRSt,
+      brain: overBrain(hOverRSt, ['Right CB (Vermis)', 'Right Fastigial'], ['Right CB (Vermis)', 'Right Fastigial']),
+      note:  overNote(hOverRSt, 'Right CB Vermis 校準嚴重不足，右向過衝異常 ⚠️', 'Right CB Vermis 中度異常，建議精準控制訓練', 'Right CB Vermis 輕度異常')
+    }] : []),
+    ...(hTotal ? [{
+      label: '水平 Saccade 左向 Overshoot', value: hOverLPct !== null ? hOverLPct + '%' : '—', status: hOverLSt,
+      brain: overBrain(hOverLSt, ['Left CB (Vermis)', 'Left Fastigial'], ['Left CB (Vermis)', 'Left Fastigial']),
+      note:  overNote(hOverLSt, 'Left CB Vermis 校準嚴重不足，左向過衝異常 ⚠️', 'Left CB Vermis 中度異常，建議精準控制訓練', 'Left CB Vermis 輕度異常')
+    }] : []),
     ...(reAIGrades.hOvershootPct !== null ? [{
       label: '水平 Saccade Overshoot 總百分比', value: reAIGrades.hOvershootPct + '%', status: hOvPctSt,
-      brain: overBrain(hOvPctSt, ['CB Vermis（雙側）'], ['CB Vermis（雙側）']),
+      brain: overBrain(hOvPctSt, ['CB Vermis（雙側）', 'Bilateral Fastigial'], ['CB Vermis（雙側）', 'Bilateral Fastigial']),
       note:  overNote(hOvPctSt, '水平 Overshoot 總比率嚴重偏高 ⚠️，小腦校準功能嚴重不足', '水平 Overshoot 總比率中度偏高，小腦校準中度異常', '水平 Overshoot 總比率輕度偏高，建議小腦精準訓練')
     }] : []),
     ...(vTotal ? [
