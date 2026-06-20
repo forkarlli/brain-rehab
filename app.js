@@ -3503,10 +3503,10 @@ function computeRightEyeRx(data) {
   }
   function pct(num, total) { return (total > 0 && num !== null) ? Math.round(num / total * 1000) / 10 : null; }
 
-  const hOverRPct   = pct(hOverR,   hTotal);
+  const hOverRPct   = pct(hOverR,   hTotal / 2);
   const hUnderRPct  = pct(hUnderR,  hTotal);
   const hMissRPct   = pct(hMissedR, hTotal);
-  const hOverLPct   = pct(hOverL,   hTotal);
+  const hOverLPct   = pct(hOverL,   hTotal / 2);
   const hUnderLPct  = pct(hUnderL,  hTotal);
   const hMissLPct   = pct(hMissedL, hTotal);
   const vOverRPct   = pct(vOverR,   vTotal);
