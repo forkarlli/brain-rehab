@@ -5565,6 +5565,7 @@ function renderRightEyeInterface() {
     </div>`;
 
   console.log('[BCF] renderRightEyeInterface: innerHTML set, #re-opns-result =', document.getElementById('re-opns-result'));
+  if (reAIGrades.hOvershootPct !== null) renderAISaccadeSummary();
   const dropZone = document.getElementById('re-drop-zone');
   const fileInput = document.getElementById('re-file-input');
   dropZone.addEventListener('click', () => fileInput.click());
