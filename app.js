@@ -4214,39 +4214,6 @@ function renderRightEyeSection({ indicators, brainRegions, rx, priorityLines, ST
       }).join('')}
     </div>` : '';
 
-  const lateralAngle = r => standalone && /^[RL]\d/.test(r.angle) && r.angle.includes('/');
-  const rxHTML = rx.length > 0 ? `
-    <div>
-      ${standalone ? `<div style="margin-bottom:10px;padding:8px 12px;background:#fff7ed;border-left:3px solid #f97316;border-radius:4px;font-size:12px;color:#c2410c;font-weight:600">⚠️ 板面角度需配合肌肉張力測試才能確定側性。含 R/L 的角度為建議範圍，實際側性請依 BCF 評估結果決定。</div>` : ''}
-      <div style="font-size:12px;font-weight:600;color:var(--gray-600);margin-bottom:6px;letter-spacing:.3px">▶ RightEye 眼動機處方參數</div>
-      <div style="overflow-x:auto">
-        <table class="data-table" style="margin:0;font-size:12px">
-          <thead>
-            <tr><th>順序</th><th>模式</th><th>訓練類型</th><th>板面角度${standalone ? ' <span style="color:#ea580c;font-size:10px;font-weight:400">⚠️ 需配合BCF</span>' : ''}</th><th>速度</th><th>距離</th><th>次數</th><th>目標物</th><th>背板</th><th>處方依據</th></tr>
-          </thead>
-          <tbody>
-            ${rx.map(r => {
-              const icon = r.priority === 1 ? '🔴' : r.priority === 2 ? '🟡' : r.priority === 3 ? '🟢' : '🔵';
-              const aCell = lateralAngle(r)
-                ? '<span style="color:#ea580c;font-weight:700">' + r.angle + '</span><br><span style="font-size:10px;color:#ea580c">⚠️ 側性需BCF確認</span>'
-                : r.angle;
-              return '<tr>' +
-                '<td style="text-align:center;font-size:15px">' + icon + '</td>' +
-                '<td><span class="badge badge-primary" style="font-size:11px;font-weight:700">' + r.mode + '</span></td>' +
-                '<td><strong style="font-size:12px">' + r.name + '</strong></td>' +
-                '<td style="color:var(--gray-700);font-size:11px">' + aCell + '</td>' +
-                '<td><span class="badge badge-info">' + r.speed + '</span></td>' +
-                '<td><span class="badge badge-warning">' + r.dist + '</span></td>' +
-                '<td style="font-weight:600;color:var(--gray-800)">' + r.reps + '</td>' +
-                '<td style="color:var(--gray-700)">' + r.target + '</td>' +
-                '<td style="font-size:11px">' + r.bg + '</td>' +
-                '<td style="font-size:10px;color:#ea580c;font-weight:600">' + (r.notes || []).join('；') + '</td>' +
-                '</tr>';
-            }).join('')}
-          </tbody>
-        </table>
-      </div>
-    </div>` : '';
 
   return `
     <div class="bcf-result-section" style="border-top:2px solid #6366f1;margin-top:4px">
@@ -4259,7 +4226,7 @@ function renderRightEyeSection({ indicators, brainRegions, rx, priorityLines, ST
           <tbody>${rows}</tbody>
         </table>
       </div>
-      ${brainHTML}${priorityHTML}${rxHTML}
+      ${brainHTML}${priorityHTML}
     </div>`;
 }
 
@@ -8564,7 +8531,10 @@ function renderModuleCards(patientId) {
 
   document.getElementById('rxGen-card-balance').innerHTML  = _renderBalanceCard(getLatest('Romberg 測試（BTrackS）'));
   document.getElementById('rxGen-card-muscle').innerHTML   = _renderMuscleCard(getLatest('肌肉張力測試'));
-  document.getElementById('rxGen-card-righteye').innerHTML = _renderRightEyeCard(getLatest('RightEye眼動評估'));
+  const reRec = getLatest('RightEye眼動評估');
+  document.getElementById('rxGen-card-righteye').innerHTML = _renderRightEyeCard(reRec);
+  const reRxPanelEl = document.getElementById('rxGen-re-rx-panel');
+  if (reRxPanelEl) reRxPanelEl.innerHTML = _renderReRxPanel(reRec);
 
   // Zone 3: run integrated analysis
   const result = runIntegratedAnalysis(patientId);
@@ -9850,6 +9820,44 @@ function _renderMuscleCard(rec) {
           <span class="rx-module-label">訓練側性</span>
           <span class="rx-module-value" style="font-size:11px;color:#1d4ed8;font-weight:600">${trainSide}</span>
         </div>` : ''}
+      </div>
+    </div>`;
+}
+
+function _renderReRxPanel(rec) {
+  if (!rec || !rec.prescriptions || rec.prescriptions.length === 0) return '';
+  const rx = rec.prescriptions;
+  return `
+    <div style="border:1px solid #e5e7eb;border-radius:6px;overflow:hidden;margin-bottom:12px">
+      <button onclick="var d=document.getElementById('re-rx-panel-table');var o=d.style.display!=='none';d.style.display=o?'none':'block';this.textContent=(o?'▶':'▼')+' RightEye 眼動機處方參數（${rx.length} 項）'"
+        style="width:100%;text-align:left;background:#f9fafb;border:none;padding:10px 14px;cursor:pointer;font-size:13px;font-weight:600;color:#374151;letter-spacing:.3px">
+        ▶ RightEye 眼動機處方參數（${rx.length} 項）
+      </button>
+      <div id="re-rx-panel-table" style="display:none;padding:12px">
+        <div style="overflow-x:auto">
+          <table class="data-table" style="margin:0;font-size:12px">
+            <thead>
+              <tr><th>順序</th><th>模式</th><th>訓練類型</th><th>板面角度</th><th>速度</th><th>距離</th><th>次數</th><th>目標物</th><th>背板</th><th>處方依據</th></tr>
+            </thead>
+            <tbody>
+              ${rx.map(r => {
+                const icon = r.priority === 1 ? '🔴' : r.priority === 2 ? '🟡' : r.priority === 3 ? '🟢' : '🔵';
+                return '<tr>' +
+                  '<td style="text-align:center;font-size:15px">' + icon + '</td>' +
+                  '<td><span class="badge badge-primary" style="font-size:11px;font-weight:700">' + r.mode + '</span></td>' +
+                  '<td><strong style="font-size:12px">' + r.name + '</strong></td>' +
+                  '<td style="color:#374151;font-size:11px">' + r.angle + '</td>' +
+                  '<td><span class="badge badge-info">' + r.speed + '</span></td>' +
+                  '<td><span class="badge badge-warning">' + r.dist + '</span></td>' +
+                  '<td style="font-weight:600;color:#1f2937">' + r.reps + '</td>' +
+                  '<td style="color:#374151">' + r.target + '</td>' +
+                  '<td style="font-size:11px">' + r.bg + '</td>' +
+                  '<td style="font-size:10px;color:#ea580c;font-weight:600">' + (r.notes || []).join('；') + '</td>' +
+                  '</tr>';
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
       </div>
     </div>`;
 }
