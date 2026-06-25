@@ -10120,12 +10120,12 @@ function openTherapistManager() {
   const modal = document.getElementById('therapist-manager-modal');
   if (!modal) return;
   renderTherapistManager();
-  modal.classList.remove('hidden');
+  modal.style.display = 'flex';
 }
 
 function closeTherapistManager() {
   const modal = document.getElementById('therapist-manager-modal');
-  if (modal) modal.classList.add('hidden');
+  if (modal) modal.style.display = 'none';
 }
 
 function populateSessionPatientSelect() {
@@ -10146,13 +10146,15 @@ function populateSessionTherapistSelect() {
     ).join('');
 }
 
-function openAddTherapySessionModal() {
+async function openAddTherapySessionModal() {
+  if (DB.patients.length === 0) await loadPatientsFromServer();
+  if (DB.therapists.length === 0) await loadTherapistsFromServer();
   populateSessionPatientSelect();
   populateSessionTherapistSelect();
   const today = new Date().toISOString().slice(0, 10);
   const dateEl = document.getElementById('sessionDate');
   if (dateEl) dateEl.value = today;
-  openModal('addTherapySessionModal');
+  document.getElementById('addTherapySessionModal').style.display = 'flex';
 }
 
 async function submitAddSessionModal() {
@@ -10190,7 +10192,7 @@ async function submitAddSessionModal() {
 
   if (result.success) {
     showToast('治療記錄已儲存');
-    closeModal('addTherapySessionModal');
+    document.getElementById('addTherapySessionModal').style.display = 'none';
     await loadTherapySessionsFromServer(patientId);
     renderSessions();
   } else {
