@@ -10245,7 +10245,7 @@ fetch('./prescriptions.json')
   .catch(err => console.warn('[BCF] prescriptions.json load failed:', err));
 
 // ===== EVENT LISTENERS =====
-function initApp() {
+async function initApp() {
   // 根據角色顯示/隱藏導覽項目
   const allowed = ROLE_PAGES[currentRole()] || new Set();
   document.querySelectorAll('.nav-item[data-page]').forEach(item => {
@@ -10256,7 +10256,7 @@ function initApp() {
   updateDate();
   renderDashboard();
   populatePatientSelects();
-  loadPatientsFromServer();
+  await loadPatientsFromServer();
   loadAssessmentsFromServer();
 
   populateAssessDateDropdown('');
