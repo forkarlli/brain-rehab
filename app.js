@@ -113,8 +113,7 @@ async function loadPatientsFromServer() {
     const data = await resp.json();
     if (Array.isArray(data.patients) && data.patients.length > 0) {
       DB.patients = data.patients;
-      const activePage = document.querySelector('.page-section.active, [data-page].active');
-      if (activePage?.id === 'patients' || activePage?.dataset?.page === 'patients') {
+      if (document.getElementById('page-patients')?.classList.contains('active')) {
         renderPatients();
       }
     } else {
