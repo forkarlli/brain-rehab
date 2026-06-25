@@ -38,6 +38,7 @@ const DB = {
 
   integratedPrescriptions: [],
   therapists: [],
+  therapySessions: [],
 };
 
 // ===== LOCAL STORAGE PERSISTENCE =====
@@ -136,6 +137,39 @@ async function loadTherapistsFromServer() {
     if (Array.isArray(data.therapists)) DB.therapists = data.therapists;
   } catch (e) {
     console.error('載入治療師失敗:', e);
+  }
+}
+
+async function saveTherapySession(sessionData) {
+  try {
+    const res = await fetch('/api/therapy-sessions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(sessionData)
+    });
+    const data = await res.json();
+    if (data.session) {
+      if (!Array.isArray(DB.therapySessions)) DB.therapySessions = [];
+      DB.therapySessions.unshift(data.session);
+      return { success: true, session: data.session };
+    }
+    return { success: false, error: data.error };
+  } catch (e) {
+    console.error('儲存治療記錄失敗:', e);
+    return { success: false, error: e.message };
+  }
+}
+
+async function loadTherapySessionsFromServer(patientId) {
+  try {
+    const url = patientId
+      ? '/api/therapy-sessions?patientId=' + patientId
+      : '/api/therapy-sessions';
+    const res = await fetch(url);
+    const data = await res.json();
+    if (Array.isArray(data.sessions)) DB.therapySessions = data.sessions;
+  } catch (e) {
+    console.error('載入治療記錄失敗:', e);
   }
 }
 
@@ -10087,6 +10121,49 @@ function openTherapistManager() {
 function closeTherapistManager() {
   const modal = document.getElementById('therapist-manager-modal');
   if (modal) modal.classList.add('hidden');
+}
+
+async function submitAddSessionModal() {
+  const patientId = document.getElementById('sessionPatientId')?.value;
+  const date = document.getElementById('sessionDate')?.value;
+  const time = document.getElementById('sessionTime')?.value || '';
+  const therapist = document.getElementById('sessionTherapist')?.value;
+  const response = parseInt(document.getElementById('sessionResponse')?.value);
+  const notes = document.getElementById('sessionNotes')?.value || '';
+  const status = document.getElementById('sessionStatus')?.value || 'completed';
+
+  // 收集治療項目
+  const itemCheckboxes = document.querySelectorAll('.session-item-checkbox:checked');
+  const items = [];
+  itemCheckboxes.forEach(cb => {
+    const name = cb.value;
+    const durationEl = document.getElementById('duration-' + cb.value.replace(/\s/g, '-'));
+    const duration = durationEl ? parseInt(durationEl.value) || 0 : 0;
+    if (name === '其他') {
+      const customName = document.getElementById('session-item-custom')?.value || '';
+      if (customName) items.push({ name, customName, duration });
+    } else {
+      items.push({ name, duration });
+    }
+  });
+
+  if (!patientId || !date || !therapist) {
+    showToast('請填寫病人、日期和治療師', 'error');
+    return;
+  }
+
+  const result = await saveTherapySession({
+    patientId, date, time, therapist, items, response, notes, status
+  });
+
+  if (result.success) {
+    showToast('治療記錄已儲存');
+    closeModal('addTherapySessionModal');
+    await loadTherapySessionsFromServer(patientId);
+    renderSessions();
+  } else {
+    showToast('儲存失敗：' + result.error, 'error');
+  }
 }
 
 // ===== REPORTS =====

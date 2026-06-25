@@ -612,7 +612,7 @@
             </select>
           </div>
           <button class="btn-secondary" onclick="openTherapistManager()">管理治療師</button>
-          <button class="btn btn-primary" onclick="openModal('addSessionModal')">+ 新增記錄</button>
+          <button class="btn btn-primary" onclick="openModal('addTherapySessionModal')">+ 新增記錄</button>
         </div>
 
         <div class="card">
@@ -878,6 +878,114 @@
       <div style="display:flex;gap:8px;margin-top:16px;">
         <input type="text" id="new-therapist-name" class="input" placeholder="輸入治療師姓名" style="flex:1">
         <button class="btn-primary" onclick="addTherapist(document.getElementById('new-therapist-name').value); document.getElementById('new-therapist-name').value=''">新增</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="addTherapySessionModal" class="hidden" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:flex;align-items:center;justify-content:center;">
+    <div style="background:#fff;border-radius:12px;padding:24px;width:480px;max-height:90vh;overflow-y:auto;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+        <h3 style="margin:0">新增治療記錄</h3>
+        <button class="btn-icon" onclick="closeModal('addTherapySessionModal')">✕</button>
+      </div>
+
+      <!-- 病人 -->
+      <div class="form-group">
+        <label>病人</label>
+        <select id="sessionPatientId" class="select">
+          <option value="">— 請選擇病人 —</option>
+        </select>
+      </div>
+
+      <!-- 日期 / 時間 -->
+      <div style="display:flex;gap:12px;">
+        <div class="form-group" style="flex:1">
+          <label>日期</label>
+          <input type="date" id="sessionDate" class="input">
+        </div>
+        <div class="form-group" style="flex:1">
+          <label>時間</label>
+          <input type="time" id="sessionTime" class="input">
+        </div>
+      </div>
+
+      <!-- 治療師 -->
+      <div class="form-group">
+        <label>治療師</label>
+        <select id="sessionTherapist" class="select">
+          <option value="">— 請選擇治療師 —</option>
+        </select>
+      </div>
+
+      <!-- 治療項目 -->
+      <div class="form-group">
+        <label>治療項目（可多選，輸入分鐘數）</label>
+        <div style="display:flex;flex-direction:column;gap:8px;">
+          <!-- 每個項目一行：checkbox + 名稱 + 分鐘數輸入 -->
+          <label style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" class="session-item-checkbox" value="眼動機">
+            <span style="flex:1">眼動機</span>
+            <input type="number" id="duration-眼動機" class="input" style="width:70px" placeholder="分鐘" min="0">
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" class="session-item-checkbox" value="飛行椅">
+            <span style="flex:1">飛行椅</span>
+            <input type="number" id="duration-飛行椅" class="input" style="width:70px" placeholder="分鐘" min="0">
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" class="session-item-checkbox" value="雷射導引">
+            <span style="flex:1">雷射導引</span>
+            <input type="number" id="duration-雷射導引" class="input" style="width:70px" placeholder="分鐘" min="0">
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" class="session-item-checkbox" value="舒心椅">
+            <span style="flex:1">舒心椅</span>
+            <input type="number" id="duration-舒心椅" class="input" style="width:70px" placeholder="分鐘" min="0">
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" class="session-item-checkbox" value="前傾式前庭椅">
+            <span style="flex:1">前傾式前庭椅</span>
+            <input type="number" id="duration-前傾式前庭椅" class="input" style="width:70px" placeholder="分鐘" min="0">
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" class="session-item-checkbox" value="垂直律動">
+            <span style="flex:1">垂直律動</span>
+            <input type="number" id="duration-垂直律動" class="input" style="width:70px" placeholder="分鐘" min="0">
+          </label>
+          <label style="display:flex;align-items:center;gap:8px;">
+            <input type="checkbox" class="session-item-checkbox" value="其他">
+            <input type="text" id="session-item-custom" class="input" style="flex:1" placeholder="自訂項目名稱">
+            <input type="number" id="duration-其他" class="input" style="width:70px" placeholder="分鐘" min="0">
+          </label>
+        </div>
+      </div>
+
+      <!-- 治療反應 -->
+      <div class="form-group">
+        <label>治療反應（1-10）</label>
+        <input type="number" id="sessionResponse" class="input" min="1" max="10" placeholder="1-10">
+      </div>
+
+      <!-- 備註 -->
+      <div class="form-group">
+        <label>備註</label>
+        <textarea id="sessionNotes" class="input" rows="3" placeholder="輸入備註"></textarea>
+      </div>
+
+      <!-- 狀態 -->
+      <div class="form-group">
+        <label>狀態</label>
+        <select id="sessionStatus" class="select">
+          <option value="completed">已完成</option>
+          <option value="scheduled">已排程</option>
+          <option value="cancelled">已取消</option>
+          <option value="partial">部分完成</option>
+        </select>
+      </div>
+
+      <div style="display:flex;justify-content:flex-end;gap:8px;margin-top:16px;">
+        <button class="btn btn-outline" onclick="closeModal('addTherapySessionModal')">取消</button>
+        <button class="btn btn-primary" onclick="submitAddSessionModal()">儲存</button>
       </div>
     </div>
   </div>
