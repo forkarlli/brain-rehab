@@ -400,7 +400,7 @@ function compressImageToBase64(file, callback) {
 }
 
 // ===== NAVIGATION =====
-function navigateTo(page) {
+async function navigateTo(page) {
   if (ROLE_PAGES[currentRole()] && !ROLE_PAGES[currentRole()].has(page)) return;
   document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
@@ -430,7 +430,7 @@ function navigateTo(page) {
   if (page === 'patients') renderPatients();
   if (page === 'assessments') { renderAssessments(); populatePatientSelects(); }
   if (page === 'prescriptions') { switchRxTab('generator'); populatePatientSelects(); }
-  if (page === 'sessions') { renderSessions(); populatePatientSelects(); }
+  if (page === 'sessions') { await loadTherapySessionsFromServer(); renderSessions(); populatePatientSelects(); }
   if (page === 'reports') populatePatientSelects();
 }
 
@@ -9963,13 +9963,10 @@ function renderSessions() {
   const patientFilter = document.getElementById('sessionPatientFilter')?.value || '';
   const statusFilter = document.getElementById('sessionStatusFilter')?.value || '';
 
-  let data = DB.sessions;
+  let data = DB.therapySessions;
   if (dateFilter) data = data.filter(s => s.date === dateFilter);
   if (patientFilter) data = data.filter(s => s.patientId === patientFilter);
   if (statusFilter) data = data.filter(s => s.status === statusFilter);
-
-  const cooperationStars = n => '★'.repeat(n) + '☆'.repeat(5 - n);
-  const statusLabel = { completed: '已完成', scheduled: '待執行', cancelled: '已取消', partial: '部分完成' };
 
   if (data.length === 0) {
     tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--gray-400)">無符合條件的治療記錄</td></tr>';
@@ -9978,28 +9975,36 @@ function renderSessions() {
 
   tbody.innerHTML = data.map(s => {
     const pt = getPatient(s.patientId);
-    const duration = s.start && s.end ? (() => {
-      const [sh, sm] = s.start.split(':').map(Number);
-      const [eh, em] = s.end.split(':').map(Number);
-      return `${(eh * 60 + em) - (sh * 60 + sm)} 分鐘`;
-    })() : '—';
+    const itemsLabel = (s.items || []).map(i => i.customName || i.name).join('、');
+    const duration = (s.items || []).reduce((sum, i) => sum + (i.duration || 0), 0) + ' 分鐘';
     return `
       <tr>
-        <td>${formatDate(s.date)} ${s.start}–${s.end}</td>
+        <td>${formatDate(s.date)} ${s.time || ''}</td>
         <td>${pt ? pt.name : s.patientId}</td>
-        <td>${s.items}</td>
+        <td>${itemsLabel}</td>
         <td>${duration}</td>
         <td>${s.therapist}</td>
-        <td><span class="status-badge status-${s.status}">${statusLabel[s.status]}</span></td>
-        <td style="color:#f59e0b;letter-spacing:1px">${s.cooperation > 0 ? cooperationStars(s.cooperation) : '—'}</td>
+        <td>${s.response ?? '—'}</td>
+        <td>${s.notes || ''}</td>
+        <td><span class="status-badge status-${s.status}">${s.status === 'completed' ? '已完成' : '已取消'}</span></td>
         <td>
           <div class="action-btns">
-            <button class="btn-icon view" onclick="showToast('查看記錄詳細')">👁</button>
-            <button class="btn-icon edit" onclick="editSession('${s.id}')">✏️</button>
+            <button class="btn-icon delete" onclick="deleteTherapySession('${s._id}')">🗑</button>
           </div>
         </td>
       </tr>`;
   }).join('');
+}
+
+async function deleteTherapySession(id) {
+  if (!confirm('確定刪除此治療記錄？')) return;
+  try {
+    await fetch('/api/therapy-sessions/' + id, { method: 'DELETE' });
+    DB.therapySessions = DB.therapySessions.filter(s => s._id !== id);
+    renderSessions();
+  } catch (e) {
+    console.error('刪除治療記錄失敗:', e);
+  }
 }
 
 function editSession(id) {
@@ -10121,6 +10126,33 @@ function openTherapistManager() {
 function closeTherapistManager() {
   const modal = document.getElementById('therapist-manager-modal');
   if (modal) modal.classList.add('hidden');
+}
+
+function populateSessionPatientSelect() {
+  const sel = document.getElementById('sessionPatientId');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— 請選擇病人 —</option>' +
+    DB.patients.map(p =>
+      `<option value="${p.id}">${p.name} (${p.id})</option>`
+    ).join('');
+}
+
+function populateSessionTherapistSelect() {
+  const sel = document.getElementById('sessionTherapist');
+  if (!sel) return;
+  sel.innerHTML = '<option value="">— 請選擇治療師 —</option>' +
+    DB.therapists.map(t =>
+      `<option value="${t.name}">${t.name}</option>`
+    ).join('');
+}
+
+function openAddTherapySessionModal() {
+  populateSessionPatientSelect();
+  populateSessionTherapistSelect();
+  const today = new Date().toISOString().slice(0, 10);
+  const dateEl = document.getElementById('sessionDate');
+  if (dateEl) dateEl.value = today;
+  openModal('addTherapySessionModal');
 }
 
 async function submitAddSessionModal() {
