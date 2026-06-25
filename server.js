@@ -36,11 +36,13 @@ app.get('/api/version', (req, res) => res.json({ commit: process.env.RAILWAY_GIT
 const anthropic = new Anthropic({ apiKey: process.env.ANTHROPIC_API_KEY });
 
 // ===== MONGODB =====
-let Patient      = null;
-let Assessment   = null;
-let HomeTraining = null;
-let BCFSession   = null;
-let dbReady      = false;
+let Patient        = null;
+let Assessment     = null;
+let HomeTraining   = null;
+let BCFSession     = null;
+let Therapist      = null;
+let TherapySession = null;
+let dbReady        = false;
 
 if (process.env.MONGODB_URI) {
   const mongoose = require('mongoose');
@@ -111,6 +113,31 @@ if (process.env.MONGODB_URI) {
   }, { timestamps: true, versionKey: false });
 
   BCFSession = mongoose.model('BCFSession', bcfSessionSchema, 'bcf_sessions');
+
+  const therapistSchema = new mongoose.Schema({
+    name: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now }
+  }, { versionKey: false });
+  Therapist = mongoose.model('Therapist', therapistSchema, 'therapists');
+
+  const therapyItemSchema = new mongoose.Schema({
+    name: { type: String },
+    customName: { type: String },
+    duration: { type: Number }
+  }, { _id: false });
+
+  const therapySessionSchema = new mongoose.Schema({
+    patientId: { type: String, required: true },
+    date: { type: String },
+    time: { type: String },
+    therapist: { type: String },
+    items: [therapyItemSchema],
+    response: { type: Number, min: 1, max: 10 },
+    notes: { type: String },
+    status: { type: String, default: 'completed' },
+    createdAt: { type: Date, default: Date.now }
+  }, { versionKey: false });
+  TherapySession = mongoose.model('TherapySession', therapySessionSchema, 'therapy_sessions');
 
   mongoose.connect(process.env.MONGODB_URI)
     .then(async () => {
@@ -284,6 +311,81 @@ app.get('/api/home-training/:patientId', async (req, res) => {
     res.json(docs);
   } catch (e) {
     console.error('home-training GET 失敗:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 取得所有治療師
+app.get('/api/therapists', async (req, res) => {
+  if (!Therapist || !dbReady) return res.json({ therapists: [] });
+  try {
+    const docs = await Therapist.find().sort({ createdAt: 1 }).lean();
+    return res.json({ therapists: docs });
+  } catch (e) {
+    console.error('therapists GET 失敗:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 新增治療師
+app.post('/api/therapists', async (req, res) => {
+  if (!Therapist || !dbReady) return res.status(503).json({ error: 'DB not ready' });
+  try {
+    const { name } = req.body;
+    if (!name) return res.status(400).json({ error: '名稱不可空白' });
+    const doc = await Therapist.create({ name });
+    return res.json({ therapist: doc });
+  } catch (e) {
+    console.error('therapists POST 失敗:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 刪除治療師
+app.delete('/api/therapists/:id', async (req, res) => {
+  if (!Therapist || !dbReady) return res.status(503).json({ error: 'DB not ready' });
+  try {
+    await Therapist.findByIdAndDelete(req.params.id);
+    return res.json({ success: true });
+  } catch (e) {
+    console.error('therapists DELETE 失敗:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 取得治療記錄（可依 patientId 篩選）
+app.get('/api/therapy-sessions', async (req, res) => {
+  if (!TherapySession || !dbReady) return res.json({ sessions: [] });
+  try {
+    const filter = req.query.patientId ? { patientId: req.query.patientId } : {};
+    const docs = await TherapySession.find(filter).sort({ date: -1, time: -1 }).lean();
+    return res.json({ sessions: docs });
+  } catch (e) {
+    console.error('therapy-sessions GET 失敗:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 新增治療記錄
+app.post('/api/therapy-sessions', async (req, res) => {
+  if (!TherapySession || !dbReady) return res.status(503).json({ error: 'DB not ready' });
+  try {
+    const doc = await TherapySession.create(req.body);
+    return res.json({ session: doc });
+  } catch (e) {
+    console.error('therapy-sessions POST 失敗:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 刪除治療記錄
+app.delete('/api/therapy-sessions/:id', async (req, res) => {
+  if (!TherapySession || !dbReady) return res.status(503).json({ error: 'DB not ready' });
+  try {
+    await TherapySession.findByIdAndDelete(req.params.id);
+    return res.json({ success: true });
+  } catch (e) {
+    console.error('therapy-sessions DELETE 失敗:', e.message);
     res.status(500).json({ error: e.message });
   }
 });
