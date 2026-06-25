@@ -37,6 +37,7 @@ const DB = {
   ],
 
   integratedPrescriptions: [],
+  therapists: [],
 };
 
 // ===== LOCAL STORAGE PERSISTENCE =====
@@ -126,6 +127,16 @@ async function loadPatientsFromServer() {
   renderDashboard();
   const activePage = document.querySelector('.page.active');
   if (activePage?.id === 'patients') renderPatients();
+}
+
+async function loadTherapistsFromServer() {
+  try {
+    const res = await fetch('/api/therapists');
+    const data = await res.json();
+    if (Array.isArray(data.therapists)) DB.therapists = data.therapists;
+  } catch (e) {
+    console.error('載入治療師失敗:', e);
+  }
 }
 
 let pendingSaves = 0;
@@ -10026,6 +10037,58 @@ function saveSession() {
   renderSessions();
 }
 
+// ===== THERAPIST MANAGER =====
+async function addTherapist(name) {
+  if (!name) return;
+  try {
+    const res = await fetch('/api/therapists', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name })
+    });
+    const data = await res.json();
+    if (data.therapist) {
+      DB.therapists.push(data.therapist);
+      renderTherapistManager();
+    }
+  } catch (e) {
+    console.error('新增治療師失敗:', e);
+  }
+}
+
+async function deleteTherapist(id) {
+  try {
+    await fetch('/api/therapists/' + id, { method: 'DELETE' });
+    DB.therapists = DB.therapists.filter(t => t._id !== id);
+    renderTherapistManager();
+  } catch (e) {
+    console.error('刪除治療師失敗:', e);
+  }
+}
+
+function renderTherapistManager() {
+  const list = document.getElementById('therapist-manager-list');
+  if (!list) return;
+  list.innerHTML = DB.therapists.map(t => `
+    <div class="therapist-item" style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid #eee;">
+      <span style="flex:1">${t.name}</span>
+      <button class="btn-icon delete" onclick="deleteTherapist('${t._id}')" title="刪除">🗑</button>
+    </div>
+  `).join('') || '<p style="color:#999;font-size:14px;">尚無治療師</p>';
+}
+
+function openTherapistManager() {
+  const modal = document.getElementById('therapist-manager-modal');
+  if (!modal) return;
+  renderTherapistManager();
+  modal.classList.remove('hidden');
+}
+
+function closeTherapistManager() {
+  const modal = document.getElementById('therapist-manager-modal');
+  if (modal) modal.classList.add('hidden');
+}
+
 // ===== REPORTS =====
 function generateReport() {
   const patientId = document.getElementById('reportPatientFilter').value;
@@ -10260,6 +10323,7 @@ function initApp() {
   renderDashboard();
   populatePatientSelects();
   loadPatientsFromServer();
+  loadTherapistsFromServer();
   loadAssessmentsFromServer();
 
   populateAssessDateDropdown('');
