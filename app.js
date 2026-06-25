@@ -214,6 +214,8 @@ async function populateAssessDateDropdown(patientId) {
   const sel = document.getElementById('assess-date');
   if (!sel || sel.tagName !== 'SELECT') return;
   const custom = document.getElementById('assess-date-custom');
+  const selGroup = sel.closest('.form-group');
+  const customGroup = custom?.closest('.form-group');
 
   let sessions = [];
   if (patientId) {
@@ -227,11 +229,14 @@ async function populateAssessDateDropdown(patientId) {
   }
 
   if (sessions.length === 0) {
-    sel.innerHTML = '<option value="" disabled selected>尚無可選日期，請先至治療記錄新增</option>';
+    if (selGroup) selGroup.style.display = 'none';
+    if (customGroup) customGroup.style.display = '';
     if (custom) custom.value = '';
     return;
   }
 
+  if (selGroup) selGroup.style.display = '';
+  if (customGroup) customGroup.style.display = 'none';
   sel.innerHTML = sessions.map(s =>
     `<option value="${s.date}">${s.date}</option>`
   ).join('');
