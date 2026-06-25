@@ -1477,31 +1477,31 @@ const OVERSHOOT_RESOLVER_CONFIG = {
 
 const HORIZONTAL_OVERSHOOT_MATRIX = {
   right_overshoot: {
-    region: ['Right Fastigial Nucleus'],
+    region: ['Right CB'],
     brain:  ['Right CB'],
     tag:    'Cerebellar_Inhibition_Deficit',
     label:  '水平 Saccade 右向 Overshoot',
-    noteS:  'Right Fastigial Nucleus 過衝抑制嚴重異常 ⚠️',
-    noteM:  'Right Fastigial Nucleus 過衝中度，低速精準控制訓練',
-    noteLi: 'Right Fastigial Nucleus 過衝輕度，建議精準控制訓練',
+    noteS:  'Right CB 過衝抑制嚴重異常 ⚠️',
+    noteM:  'Right CB 過衝中度，低速精準控制訓練',
+    noteLi: 'Right CB 過衝輕度，建議精準控制訓練',
   },
   left_overshoot: {
-    region: ['Left Fastigial Nucleus'],
+    region: ['Left CB'],
     brain:  ['Left CB'],
     tag:    'Cerebellar_Inhibition_Deficit',
     label:  '水平 Saccade 左向 Overshoot',
-    noteS:  'Left Fastigial Nucleus 過衝抑制嚴重異常 ⚠️',
-    noteM:  'Left Fastigial Nucleus 過衝中度，低速精準控制訓練',
-    noteLi: 'Left Fastigial Nucleus 過衝輕度，建議精準控制訓練',
+    noteS:  'Left CB 過衝抑制嚴重異常 ⚠️',
+    noteM:  'Left CB 過衝中度，低速精準控制訓練',
+    noteLi: 'Left CB 過衝輕度，建議精準控制訓練',
   },
   bilateral_overshoot: {
-    region: ['Bilateral Fastigial Nucleus', 'Oculomotor Vermis'],
+    region: ['Bilateral CB', 'CB Vermis'],
     brain:  ['Right CB', 'Left CB', 'CB Vermis'],
     tag:    'Cerebellar_Inhibition_Deficit',
     label:  '水平 Saccade 雙側 Overshoot',
-    noteS:  'Bilateral Fastigial Nucleus + Oculomotor Vermis 過衝抑制嚴重異常 ⚠️',
-    noteM:  'Bilateral Fastigial Nucleus + Oculomotor Vermis 過衝中度，低速精準控制訓練',
-    noteLi: 'Bilateral Fastigial Nucleus + Oculomotor Vermis 過衝輕度，建議精準控制訓練',
+    noteS:  'Bilateral CB + Oculomotor Vermis 過衝抑制嚴重異常 ⚠️',
+    noteM:  'Bilateral CB + Oculomotor Vermis 過衝中度，低速精準控制訓練',
+    noteLi: 'Bilateral CB + Oculomotor Vermis 過衝輕度，建議精準控制訓練',
   },
 };
 
@@ -3549,7 +3549,7 @@ function computeRightEyeRx(data) {
   const lpSt = v => v === null ? 'na' : Math.abs(v) <= 2 ? 'normal' : Math.abs(v) <= 8 ? 'mild' : 'severe';
   const lpVPSt = lpSt(vpLateralDrift);
   const lpVSSt = lpSt(vsLateralDrift);
-  // 偏左（負）→ Right CB Vermis 不足；偏右（正）→ Left CB Vermis 不足
+  // 偏左（負）→ Left CB Vermis 不足；偏右（正）→ Right CB Vermis 不足
   const lpVPDir = vpLateralDrift != null && vpLateralDrift !== 0 ? (vpLateralDrift < 0 ? 'left' : 'right') : null;
   const lpVSDir = vsLateralDrift != null && vsLateralDrift !== 0 ? (vsLateralDrift < 0 ? 'left' : 'right') : null;
   const isAbnLP = s => s === 'mild' || s === 'severe';
@@ -3652,7 +3652,7 @@ function computeRightEyeRx(data) {
       ...(() => {
         // Pre-processing layer: resolve direction before indicator insertion
         // Replaces the former separate right/left overshoot entries — no double-count
-        const dir = resolveHorizontalOvershootDirection({ hOverRPct, hOverLPct, hOverRSt, hOverLSt });
+        const dir = resolveHorizontalOvershootDirection(saccDirResults, saccDirConfidence);
         if (!dir) return [];
         const mx = lookupOvershootFromMatrix(dir);
         if (!mx) return [];
@@ -3682,21 +3682,6 @@ function computeRightEyeRx(data) {
         brain: overBrain(hMissLSt, ['Left PPRF', 'Right SC'], ['Left PPRF', 'Right SC']),
         note:  overNote(hMissLSt, 'Left PPRF（同側執行端）+ Right SC（對側整合啟動端）嚴重不足 ⚠️', 'Left PPRF + Right SC 中度不足', 'Left PPRF + Right SC 輕度不足') },
     ] : []),
-    ...(hTotal ? [{
-      label: '水平 Saccade 右向 Overshoot', value: hOverRPct !== null ? hOverRPct + '%' : '—', status: hOverRSt,
-      brain: overBrain(hOverRSt, ['Right CB (Vermis)', 'Right Fastigial'], ['Right CB (Vermis)', 'Right Fastigial']),
-      note:  overNote(hOverRSt, 'Right CB Vermis 校準嚴重不足，右向過衝異常 ⚠️', 'Right CB Vermis 中度異常，建議精準控制訓練', 'Right CB Vermis 輕度異常')
-    }] : []),
-    ...(hTotal ? [{
-      label: '水平 Saccade 左向 Overshoot', value: hOverLPct !== null ? hOverLPct + '%' : '—', status: hOverLSt,
-      brain: overBrain(hOverLSt, ['Left CB (Vermis)', 'Left Fastigial'], ['Left CB (Vermis)', 'Left Fastigial']),
-      note:  overNote(hOverLSt, 'Left CB Vermis 校準嚴重不足，左向過衝異常 ⚠️', 'Left CB Vermis 中度異常，建議精準控制訓練', 'Left CB Vermis 輕度異常')
-    }] : []),
-    ...(reAIGrades.hOvershootPct !== null ? [{
-      label: '水平 Saccade Overshoot 總百分比', value: reAIGrades.hOvershootPct + '%', status: hOvPctSt,
-      brain: overBrain(hOvPctSt, ['CB Vermis（雙側）', 'Bilateral Fastigial'], ['CB Vermis（雙側）', 'Bilateral Fastigial']),
-      note:  overNote(hOvPctSt, '水平 Overshoot 總比率嚴重偏高 ⚠️，小腦校準功能嚴重不足', '水平 Overshoot 總比率中度偏高，小腦校準中度異常', '水平 Overshoot 總比率輕度偏高，建議小腦精準訓練')
-    }] : []),
     ...(vTotal ? [
       { label: '垂直 Saccade 上向 Overshoot',  value: vOverRPct  !== null ? vOverRPct  + '%' : '—', status: vOverRSt,
         brain: overBrain(vOverRSt, ['CB Vermis'], ['CB Vermis']),
@@ -3765,15 +3750,15 @@ function computeRightEyeRx(data) {
       label: '垂直追隨 Lateral Pulsion',
       value: vpLateralDrift === 0 ? '0mm（無偏移）' : `${vpLateralDrift > 0 ? '右偏 +' : '左偏 '}${vpLateralDrift}mm`,
       status: lpVPSt,
-      brain: isAbnLP(lpVPSt) ? (lpVPDir === 'left' ? ['Right CB Vermis', 'Vestibulocerebellum'] : ['Left CB Vermis', 'Vestibulocerebellum']) : [],
-      note: isAbnLP(lpVPSt) ? `${lpVPDir === 'left' ? '右側' : '左側'} CB Vermis 側向抑制不足，Vestibulocerebellum 對稱性失調${lpVPSt === 'severe' ? ' ⚠️' : ''}` : '',
+      brain: isAbnLP(lpVPSt) ? (lpVPDir === 'left' ? ['Left CB Vermis', 'Vestibulocerebellum'] : ['Right CB Vermis', 'Vestibulocerebellum']) : [],
+      note: isAbnLP(lpVPSt) ? `${lpVPDir === 'left' ? '左側' : '右側'} CB Vermis 側向抑制不足，Vestibulocerebellum 對稱性失調${lpVPSt === 'severe' ? ' ⚠️' : ''}` : '',
     }] : []),
     ...(vsLateralDrift !== null ? [{
       label: '垂直跳視 Lateral Pulsion',
       value: vsLateralDrift === 0 ? '0mm（無偏移）' : `${vsLateralDrift > 0 ? '右偏 +' : '左偏 '}${vsLateralDrift}mm`,
       status: lpVSSt,
       brain: isAbnLP(lpVSSt) ? [
-        ...(lpVSDir === 'left' ? ['Right CB Vermis'] : lpVSDir === 'right' ? ['Left CB Vermis'] : ['Bilateral CB Vermis']),
+        ...(lpVSDir === 'left' ? ['Left CB Vermis'] : lpVSDir === 'right' ? ['Right CB Vermis'] : ['Bilateral CB Vermis']),
         ...(lpVSSt === 'severe' ? ['riMLF'] : []),
       ] : [],
       note: isAbnLP(lpVSSt) ? `CB Vermis 垂直跳視側偏${lpVSSt === 'severe' ? ' + riMLF 垂直整合異常 ⚠️' : ''}` : '',
@@ -3954,7 +3939,7 @@ function computeRightEyeRx(data) {
   // === Overshoot / Undershoot / Missed → 處方 ===
   // Overshoot → CB → M3（低速精準抑制）— via resolveHorizontalOvershootDirection（防雙側重複計入）
   {
-    const dir = resolveHorizontalOvershootDirection({ hOverRPct, hOverLPct, hOverRSt, hOverLSt });
+    const dir = resolveHorizontalOvershootDirection(saccDirResults, saccDirConfidence);
     const mx  = dir ? lookupOvershootFromMatrix(dir) : null;
     if (mx) {
       const cfg      = OVERSHOOT_RESOLVER_CONFIG;
@@ -4060,7 +4045,7 @@ function computeRightEyeRx(data) {
   if (lateralPulsionDetected) {
     const lpSev = lpVPSt === 'severe' || lpVSSt === 'severe';
     const lateralCBDir = lpVPDir || lpVSDir;
-    const lpAngle = lateralCBDir === 'left' ? 'R45（Right CB Vermis 活化）' : lateralCBDir === 'right' ? 'L45（Left CB Vermis 活化）' : 'R0/L0（垂直向心）';
+    const lpAngle = lateralCBDir === 'left' ? 'L45（Left CB Vermis 活化）' : lateralCBDir === 'right' ? 'R45（Right CB Vermis 活化）' : 'R0/L0（垂直向心）';
     addRx({ mode: 'M7', name: '垂直向心複合Saccade（LP）', angle: lpAngle, speed: lpSev ? 'S4' : 'S3', dist: 'D4', reps: '10', target: '有', bg: '空白背板', notes: ['Lateral Pulsion：垂直向心穩定訓練，CB Vermis 對稱性重建', '建議 PBM 照射枕下/小腦區'], priority: lpSev ? 1 : 2 });
     addRx({ mode: 'M3', name: 'V-Saccade精準（LP）', angle: 'R0/L0（垂直，精準度優先）', speed: 'S2', dist: 'D3', reps: '15', target: '有（小目標）', bg: '空白背板', notes: ['Lateral Pulsion：速度降 15%，垂直跳視精準控制訓練'], priority: lpSev ? 2 : 3 });
     addRx({ mode: 'M4', name: 'V-Pursuit穩定（LP）', angle: 'U0/D0（垂直追隨側偏矯正）', speed: 'S2', dist: 'D3', reps: '15', target: '有', bg: '空白背板', notes: ['Lateral Pulsion：垂直追隨水平偏移訓練'], priority: lpSev ? 2 : 3 });
@@ -6177,18 +6162,8 @@ function _applyRightEyeAutoResult(d, screenshots) {
   // We use presence (1) as an indicator since Claude gives type, not count
   const hasFT = (ft, kw) => typeof ft === 'string' && ft.toLowerCase().includes(kw.toLowerCase());
 
-  const hOD = d.horizontalSaccades?.rightEye?.findingType || '';   // OD → rightward saccade
-  const hOS = d.horizontalSaccades?.leftEye?.findingType  || '';   // OS → leftward saccade
   const vUp = d.verticalSaccades?.upward?.findingType     || '';
   const vDn = d.verticalSaccades?.downward?.findingType   || '';
-
-  // Horizontal saccades (rightward = OD findings, leftward = OS findings)
-  if (hasFT(hOD, 'Overshoot'))  setVal('re-h-over-r',   1);
-  if (hasFT(hOD, 'Undershoot')) setVal('re-h-under-r',  1);
-  if (hasFT(hOD, 'Missed'))     setVal('re-h-missed-r', 1);
-  if (hasFT(hOS, 'Overshoot'))  setVal('re-h-over-l',   1);
-  if (hasFT(hOS, 'Undershoot')) setVal('re-h-under-l',  1);
-  if (hasFT(hOS, 'Missed'))     setVal('re-h-missed-l', 1);
 
   // Vertical saccades
   if (hasFT(vUp, 'Overshoot'))  setVal('re-v-over-r',   1);
