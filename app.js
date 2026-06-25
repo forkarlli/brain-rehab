@@ -236,10 +236,17 @@ async function populateAssessDateDropdown(patientId) {
   }
 
   if (selGroup) selGroup.style.display = '';
-  if (customGroup) customGroup.style.display = 'none';
+  if (customGroup) customGroup.style.display = '';
   sel.innerHTML = sessions.map(s =>
     `<option value="${s.date}">${s.date}</option>`
   ).join('');
+  sel.style.appearance = 'none';
+  sel.style.webkitAppearance = 'none';
+  sel.style.backgroundImage = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' stroke='%23555' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")";
+  sel.style.backgroundRepeat = 'no-repeat';
+  sel.style.backgroundPosition = 'right 10px center';
+  sel.style.paddingRight = '30px';
+  sel.style.cursor = 'pointer';
   sel.value = sessions[0].date;
   if (custom) custom.value = sessions[0].date;
 }
