@@ -9969,7 +9969,7 @@ function renderSessions() {
   if (statusFilter) data = data.filter(s => s.status === statusFilter);
 
   if (data.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--gray-400)">無符合條件的治療記錄</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--gray-400)">無符合條件的治療記錄</td></tr>';
     return;
   }
 
