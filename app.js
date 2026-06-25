@@ -227,7 +227,7 @@ async function populateAssessDateDropdown(patientId) {
   }
 
   if (sessions.length === 0) {
-    sel.innerHTML = '<option value="" disabled selected>尚無治療記錄</option>';
+    sel.innerHTML = '<option value="" disabled selected>尚無可選日期，請先至治療記錄新增</option>';
     if (custom) custom.value = '';
     return;
   }
