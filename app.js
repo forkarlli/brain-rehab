@@ -210,24 +210,33 @@ function saveAssessmentToServer(assessment) {
 
 const SAMPLE_ASSESSMENT_IDS = new Set(['A001','A002','A003','A004','A005','A006']);
 
-function populateAssessDateDropdown(patientId) {
+async function populateAssessDateDropdown(patientId) {
   const sel = document.getElementById('assess-date');
   if (!sel || sel.tagName !== 'SELECT') return;
-  const today = new Date().toISOString().slice(0, 10);
-  const prevVal = sel.value;
-  const dates = [...new Set(
-    DB.assessments
-      .filter(a => patientId ? a.patientId === patientId : true)
-      .map(a => a.date)
-      .filter(Boolean)
-  )].sort((a, b) => b.localeCompare(a));
-  const allDates = dates.includes(today) ? dates : [today, ...dates];
-  sel.innerHTML = '<option value="">— 請選擇日期 —</option>' +
-    allDates.map(d =>
-      `<option value="${d}">${d}${d === today ? '（今日）' : ''}</option>`
-    ).join('');
-  if (prevVal && allDates.includes(prevVal)) sel.value = prevVal;
-  else sel.value = today;
+  const custom = document.getElementById('assess-date-custom');
+
+  let sessions = [];
+  if (patientId) {
+    try {
+      const res = await fetch('/api/therapy-sessions?patientId=' + encodeURIComponent(patientId));
+      const data = await res.json();
+      if (Array.isArray(data.sessions)) sessions = data.sessions;
+    } catch (e) {
+      console.error('載入治療記錄日期失敗:', e);
+    }
+  }
+
+  if (sessions.length === 0) {
+    sel.innerHTML = '<option value="" disabled selected>尚無治療記錄</option>';
+    if (custom) custom.value = '';
+    return;
+  }
+
+  sel.innerHTML = sessions.map(s =>
+    `<option value="${s.date}">${s.date}</option>`
+  ).join('');
+  sel.value = sessions[0].date;
+  if (custom) custom.value = sessions[0].date;
 }
 
 async function loadAssessmentsFromServer() {
@@ -5247,6 +5256,7 @@ async function saveBCFAssessment() {
   showToast(`評估已儲存：肌肉張力測試${hasPrescriptions ? ' ＋ BCF眼動機評估' : ''}`, 'success');
   const saveBtn = document.getElementById('bcf-save-btn');
   if (saveBtn) saveBtn.style.display = 'none';
+  populateAssessDateDropdown(patientId);
 }
 
 function clearBCFForm() {
@@ -6711,6 +6721,7 @@ async function saveRightEyeAssessment() {
 
   showToast('RightEye評估已儲存', 'success');
   document.getElementById('re-save-btn').style.display = 'none';
+  populateAssessDateDropdown(patientId);
 }
 
 // ===== BTRACKS TAB — direct Romberg interface =====
@@ -10477,7 +10488,12 @@ function initApp() {
   });
 
   // Assessment date filter
-  document.getElementById('assess-date')?.addEventListener('change', renderAssessments);
+  document.getElementById('assess-date')?.addEventListener('change', () => {
+    const sel = document.getElementById('assess-date');
+    const custom = document.getElementById('assess-date-custom');
+    if (custom) custom.value = sel.value;
+    renderAssessments();
+  });
 
   // Rx patient filter
   document.getElementById('rxPatientFilter')?.addEventListener('change', renderPrescriptions);

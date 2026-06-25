@@ -6,6 +6,47 @@
   <meta http-equiv="Content-Security-Policy" content="connect-src 'self' https://brain-rehab-production.up.railway.app https://cdnjs.cloudflare.com;">
   <title>大腦活化復健管理系統 v2026.05.09</title>
   <link rel="stylesheet" href="styles.css">
+  <style>
+    .session-response-slider {
+      -webkit-appearance: none;
+      appearance: none;
+      height: 8px;
+      border-radius: 4px;
+      outline: none;
+      cursor: pointer;
+      background: linear-gradient(to right, #e74c3c 0%, #f39c12 50%, #27ae60 100%);
+    }
+    .session-response-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 2px solid #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+      cursor: pointer;
+      background: #f39c12;
+    }
+    .session-response-slider::-moz-range-track {
+      height: 8px;
+      border-radius: 4px;
+      background: linear-gradient(to right, #e74c3c 0%, #f39c12 50%, #27ae60 100%);
+    }
+    .session-response-slider::-moz-range-thumb {
+      width: 22px;
+      height: 22px;
+      border-radius: 50%;
+      border: 2px solid #fff;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+      cursor: pointer;
+      background: #f39c12;
+    }
+    .session-response-low::-webkit-slider-thumb  { background: #e74c3c; }
+    .session-response-low::-moz-range-thumb      { background: #e74c3c; }
+    .session-response-mid::-webkit-slider-thumb  { background: #f39c12; }
+    .session-response-mid::-moz-range-thumb      { background: #f39c12; }
+    .session-response-high::-webkit-slider-thumb { background: #27ae60; }
+    .session-response-high::-moz-range-thumb     { background: #27ae60; }
+  </style>
 </head>
 <body>
   <!-- Login Screen -->
@@ -345,7 +386,7 @@
             </div>
             <div class="form-group">
               <label>補登日期（留空＝用上方日期）</label>
-              <input type="date" id="assess-date-custom" class="input">
+              <input type="date" id="assess-date-custom" class="input" style="display:none">
             </div>
             <div class="form-group">
               <label>評估者</label>
@@ -964,7 +1005,17 @@
       <!-- 治療反應 -->
       <div class="form-group">
         <label>治療反應（1-10）</label>
-        <input type="number" id="sessionResponse" class="input" min="1" max="10" placeholder="1-10">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <input type="range" id="sessionResponse" class="session-response-slider session-response-mid"
+                 min="1" max="10" step="1" value="5" style="flex:1"
+                 oninput="document.getElementById('sessionResponseValue').textContent=this.value;this.classList.remove('session-response-low','session-response-mid','session-response-high');this.classList.add(this.value<=3?'session-response-low':(this.value<=7?'session-response-mid':'session-response-high'));">
+          <span id="sessionResponseValue" style="font-size:22px;font-weight:700;min-width:28px;text-align:center;color:#374151;">5</span>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#6b7280;margin-top:4px;">
+          <span>1　不佳</span>
+          <span>5-6　一般 / 良好</span>
+          <span>10　極佳</span>
+        </div>
       </div>
 
       <!-- 備註 -->
