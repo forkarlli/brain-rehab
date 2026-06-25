@@ -149,6 +149,7 @@ function saveAssessmentToServer(assessment) {
       return false;
     }
     alert('已儲存到雲端: ' + assessment.id);
+    const c = document.getElementById('assess-date-custom'); if (c) c.value = '';
     return true;
   } catch(e) {
     console.warn('saveAssessmentToServer error:', e);
@@ -5024,7 +5025,8 @@ function generateIntegratedPrescription() {
 
 async function saveBCFAssessment() {
   const patientId = document.getElementById('assess-patient-select').value;
-  const date = document.getElementById('assess-date').value;
+  const date = document.getElementById('assess-date-custom')?.value
+            || document.getElementById('assess-date').value;
   if (!patientId || !date) { showToast('請選擇病人和日期', 'error'); return; }
 
   // Collect all item results
@@ -6557,7 +6559,8 @@ function getRECircuit(reResult) {
 
 async function saveRightEyeAssessment() {
   const patientId = document.getElementById('assess-patient-select')?.value;
-  const date = document.getElementById('assess-date')?.value;
+  const date = document.getElementById('assess-date-custom')?.value
+            || document.getElementById('assess-date')?.value;
   if (!patientId || !date) { showToast('請選擇病人和日期', 'error'); return; }
 
   const parseNum = v => { const n = parseFloat(v); return isNaN(n) ? null : n; };
@@ -6988,7 +6991,8 @@ function renderRombergInterface() {
 
 async function saveBTracksAssessment() {
   const patientId = document.getElementById('assess-patient-select')?.value;
-  const date = document.getElementById('assess-date')?.value;
+  const date = document.getElementById('assess-date-custom')?.value
+            || document.getElementById('assess-date')?.value;
   if (!patientId) { showToast('請先選擇病人', 'error'); return; }
   if (!date) { showToast('請選擇評估日期', 'error'); return; }
   const direction = document.getElementById('romberg-direction')?.value;
