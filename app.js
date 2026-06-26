@@ -7942,7 +7942,7 @@ function renderAssessments() {
 
   // Special-interface tabs — these must NOT be gated by tbody existence
   if (activeTab === 'bcf') {
-    if (tableCard)  tableCard.style.display = 'none';
+    if (tableCard)  tableCard.style.display = '';
     if (bcfEl)      { bcfEl.style.display = 'block'; renderBCFInterface(); }
     if (reEl)       reEl.style.display = 'none';
     if (btracksEl)  btracksEl.style.display = 'none';
@@ -7951,7 +7951,7 @@ function renderAssessments() {
   }
 
   if (activeTab === 'righteye') {
-    if (tableCard)  tableCard.style.display = 'none';
+    if (tableCard)  tableCard.style.display = '';
     if (bcfEl)      bcfEl.style.display = 'none';
     if (reEl)       { reEl.style.display = 'block'; renderRightEyeInterface(); renderAISaccadeSummary(); }
     if (btracksEl)  btracksEl.style.display = 'none';
@@ -7960,7 +7960,7 @@ function renderAssessments() {
   }
 
   if (activeTab === 'btracks') {
-    if (tableCard)  tableCard.style.display = 'none';
+    if (tableCard)  tableCard.style.display = '';
     if (bcfEl)      bcfEl.style.display = 'none';
     if (reEl)       reEl.style.display = 'none';
     if (btracksEl)  { btracksEl.style.display = 'block'; renderBTracksInterface(); }
