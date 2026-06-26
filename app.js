@@ -361,6 +361,7 @@ function handleImportFile(e) {
 // ===== Edit tracking =====
 let editingId = null;
 let currentDetailPatient = null;
+let currentGlobalPatientId = null;
 
 // RightEye uploaded screenshots
 const RE_IMAGES = [];
@@ -541,7 +542,7 @@ function populatePatientSelects() {
       opt.textContent = `${p.name} (${p.id})`;
       el.appendChild(opt);
     });
-    if (currentVal) el.value = currentVal;
+    el.value = currentGlobalPatientId || currentVal || '';
   });
 }
 
@@ -10225,7 +10226,8 @@ async function submitAddSessionModal() {
 
 // ===== REPORTS =====
 function generateReport() {
-  const patientId = document.getElementById('reportPatientFilter').value;
+  const patientId = currentGlobalPatientId
+    || document.getElementById('reportPatientFilter')?.value || '';
   if (!patientId) { showToast('請選擇病人', 'error'); return; }
 
   const pt = getPatient(patientId);
@@ -10492,11 +10494,16 @@ function initApp() {
 
   // Assessment patient filter
   document.getElementById('assess-patient-select')?.addEventListener('change', () => {
+    currentGlobalPatientId = document.getElementById('assess-patient-select').value;
     const pid = document.getElementById('assess-patient-select').value;
     populateAssessDateDropdown(pid);
     renderAssessments();
     clearBCFForm();
     clearRightEyeForm();
+    const _sf = document.getElementById('sessionPatientFilter');
+    const _rf = document.getElementById('reportPatientFilter');
+    if (_sf) _sf.value = currentGlobalPatientId;
+    if (_rf) _rf.value = currentGlobalPatientId;
   });
 
   // Assessment date filter
@@ -10512,7 +10519,24 @@ function initApp() {
 
   // Session filters
   document.getElementById('sessionDateFilter')?.addEventListener('change', renderSessions);
-  document.getElementById('sessionPatientFilter')?.addEventListener('change', renderSessions);
+  document.getElementById('sessionPatientFilter')
+    ?.addEventListener('change', () => {
+      currentGlobalPatientId = document.getElementById('sessionPatientFilter').value;
+      const _as = document.getElementById('assess-patient-select');
+      const _rf = document.getElementById('reportPatientFilter');
+      if (_as) _as.value = currentGlobalPatientId;
+      if (_rf) _rf.value = currentGlobalPatientId;
+      renderSessions();
+    });
+
+  document.getElementById('reportPatientFilter')
+    ?.addEventListener('change', () => {
+      currentGlobalPatientId = document.getElementById('reportPatientFilter').value;
+      const _as = document.getElementById('assess-patient-select');
+      const _sf = document.getElementById('sessionPatientFilter');
+      if (_as) _as.value = currentGlobalPatientId;
+      if (_sf) _sf.value = currentGlobalPatientId;
+    });
   document.getElementById('sessionStatusFilter')?.addEventListener('change', renderSessions);
 
   // Detail modal tabs
