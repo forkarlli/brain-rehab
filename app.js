@@ -529,7 +529,7 @@ function getAvatarColor(name) {
 
 // ===== POPULATE PATIENT SELECTS =====
 function populatePatientSelects() {
-  const selects = ['global-patient-select', 'a-patient', 'rx-patient', 's-patient', 'rxPatientFilter', 'sessionPatientFilter', 'reportPatientFilter', 'assess-patient-select'];
+  const selects = ['global-patient-select', 'rxGen-patient', 'a-patient', 'rx-patient', 's-patient', 'rxPatientFilter', 'sessionPatientFilter', 'reportPatientFilter', 'assess-patient-select'];
   selects.forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -8242,7 +8242,7 @@ function initDailyGenerator() {
     DB.patients.map(p =>
       `<option value="${p.id}">${p.name}（${p.id}）</option>`
     ).join('');
-  if (prev) sel.value = prev;
+  sel.value = currentGlobalPatientId || prev || '';
   if (sel.value) renderModuleCards(sel.value);
 }
 
@@ -10567,6 +10567,9 @@ function initApp() {
         const pid = currentGlobalPatientId;
         document.getElementById('rx-patient').value = pid;
         renderPrescriptions();
+        const rxGenSel = document.getElementById('rxGen-patient');
+        if (rxGenSel) { rxGenSel.value = currentGlobalPatientId; }
+        if (currentGlobalPatientId) renderModuleCards(currentGlobalPatientId);
       }
     });
 
