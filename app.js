@@ -252,7 +252,7 @@ async function populateAssessDateDropdown(patientId) {
   }
 
   if (selGroup) selGroup.style.display = '';
-  if (customGroup) customGroup.style.display = '';
+  if (customGroup) customGroup.style.display = 'none';
   sel.innerHTML = sessions.map(s =>
     `<option value="${s.date}">${s.date}</option>`
   ).join('');
