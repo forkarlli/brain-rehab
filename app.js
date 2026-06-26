@@ -7957,7 +7957,7 @@ function renderAssessments() {
   const selectedPatient = document.getElementById('assess-patient-select')?.value;
   if (selectedPatient) data = data.filter(a => a.patientId === selectedPatient);
   const selectedDate = document.getElementById('assess-date')?.value;
-  if (selectedDate) data = data.filter(a => a.date === selectedDate);
+  // if (selectedDate) data = data.filter(a => a.date === selectedDate); // removed: therapy date should not filter assessment list
   if (activeTab && tabTypeMap[activeTab]) data = data.filter(a => tabTypeMap[activeTab].some(t => a.type.includes(t)));
 
   if (data.length === 0) {
