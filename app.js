@@ -8253,7 +8253,7 @@ function populateRxDateDropdown(patientId) {
       .filter(Boolean)
   )].sort((a, b) => b.localeCompare(a));
   sel.innerHTML = `<option value="new">今日（${today}）新增處方</option>` +
-    dates.map(d => `<option value="${d}">${d} 歷史處方</option>`).join('');
+    dates.map(d => `<option value="${d}">${d} 歷史訓練處方</option>`).join('');
   if (prevVal && (prevVal === 'new' || dates.includes(prevVal))) sel.value = prevVal;
   else sel.value = 'new';
   wrap.style.display = '';
