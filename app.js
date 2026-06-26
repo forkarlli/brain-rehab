@@ -7954,9 +7954,14 @@ function renderAssessments() {
 
   const tabTypeMap = { cognitive: ['MMSE','MoCA'], motor: ['Fugl-Meyer'], language: ['Barthel','語言'] };
 
-  let data = DB.assessments;
   const selectedPatient = currentGlobalPatientId
       || document.getElementById('assess-patient-select')?.value || '';
+  if (!selectedPatient) {
+    if (tbody) tbody.innerHTML =
+      '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--gray-400)">請先從左側選擇病人</td></tr>';
+    return;
+  }
+  let data = DB.assessments;
   if (selectedPatient) data = data.filter(a => a.patientId === selectedPatient);
   const selectedDate = document.getElementById('assess-date')?.value;
   // if (selectedDate) data = data.filter(a => a.date === selectedDate); // removed: therapy date should not filter assessment list
@@ -9989,6 +9994,11 @@ function renderSessions() {
       || document.getElementById('sessionPatientFilter')?.value || '';
   const statusFilter = document.getElementById('sessionStatusFilter')?.value || '';
 
+  if (!patientFilter) {
+    if (tbody) tbody.innerHTML =
+      '<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--gray-400)">請先從左側選擇病人</td></tr>';
+    return;
+  }
   let data = DB.therapySessions;
   // if (dateFilter) data = data.filter(s => s.date === dateFilter); // removed
   if (patientFilter) data = data.filter(s => s.patientId === patientFilter);
