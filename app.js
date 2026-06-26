@@ -231,7 +231,23 @@ async function populateAssessDateDropdown(patientId) {
   if (sessions.length === 0) {
     if (selGroup) selGroup.style.display = 'none';
     if (customGroup) customGroup.style.display = '';
-    if (custom) custom.value = '';
+    if (custom) {
+      const today = new Date().toISOString().split('T')[0];
+      const pastDates = patientId
+        ? [...new Set((DB.assessments || [])
+            .filter(a => a.patientId === patientId)
+            .map(a => a.date)
+            .filter(Boolean))]
+            .sort((a,b) => b.localeCompare(a))
+        : [];
+      custom.innerHTML =
+        `<option value="${today}">今日（${today}）</option>` +
+        pastDates
+          .filter(d => d !== today)
+          .map(d => `<option value="${d}">${d}</option>`)
+          .join('');
+      custom.value = today;
+    }
     return;
   }
 
