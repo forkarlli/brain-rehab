@@ -155,7 +155,7 @@ async function saveTherapySession(sessionData) {
     }
     return { success: false, error: data.error };
   } catch (e) {
-    console.error('儲存治療記錄失敗:', e);
+    console.error('儲存訓練記錄失敗:', e);
     return { success: false, error: e.message };
   }
 }
@@ -169,7 +169,7 @@ async function loadTherapySessionsFromServer(patientId) {
     const data = await res.json();
     if (Array.isArray(data.sessions)) DB.therapySessions = data.sessions;
   } catch (e) {
-    console.error('載入治療記錄失敗:', e);
+    console.error('載入訓練記錄失敗:', e);
   }
 }
 
@@ -224,7 +224,7 @@ async function populateAssessDateDropdown(patientId) {
       const data = await res.json();
       if (Array.isArray(data.sessions)) sessions = data.sessions;
     } catch (e) {
-      console.error('載入治療記錄日期失敗:', e);
+      console.error('載入訓練記錄日期失敗:', e);
     }
   }
 
@@ -340,7 +340,7 @@ function handleImportFile(e) {
     try {
       const data = JSON.parse(ev.target.result);
       if (!Array.isArray(data.patients)) throw new Error('格式錯誤');
-      if (!confirm(`確定要匯入備份？\n匯出時間：${data.exportedAt || '未知'}\n病人數：${data.patients.length}，治療記錄：${(data.sessions||[]).length}\n\n⚠️ 這會覆蓋目前所有資料！`)) return;
+      if (!confirm(`確定要匯入備份？\n匯出時間：${data.exportedAt || '未知'}\n病人數：${data.patients.length}，訓練記錄：${(data.sessions||[]).length}\n\n⚠️ 這會覆蓋目前所有資料！`)) return;
       if (Array.isArray(data.patients))      DB.patients      = data.patients;
       if (Array.isArray(data.assessments))   DB.assessments   = data.assessments;
       if (Array.isArray(data.prescriptions)) DB.prescriptions = data.prescriptions;
@@ -437,7 +437,7 @@ async function navigateTo(page) {
     patients: ['病人管理', '首頁 / 病人管理'],
     assessments: ['檢測記錄', '首頁 / 檢測記錄'],
     prescriptions: ['訓練處方', '首頁 / 訓練處方'],
-    sessions: ['治療記錄', '首頁 / 治療記錄'],
+    sessions: ['訓練記錄', '首頁 / 訓練記錄'],
     reports: ['成效報告', '首頁 / 成效報告'],
     settings: ['系統設定', '首頁 / 系統設定'],
   };
@@ -477,7 +477,7 @@ function closeModal(id) {
     const patTitle = document.getElementById('patientModalTitle');
     if (patTitle) patTitle.textContent = '新增病人資料';
     const sesTitle = document.getElementById('sessionModalTitle');
-    if (sesTitle) sesTitle.textContent = '新增治療記錄';
+    if (sesTitle) sesTitle.textContent = '新增訓練記錄';
   }
 }
 
@@ -801,13 +801,13 @@ function renderDetailTab(tab) {
       ${p.history ? `<div class="detail-section"><div class="detail-section-label">主訴與病史</div><div class="detail-section-text">${p.history}</div></div>` : ''}
       ${p.contraindications ? `<div class="detail-section" style="background:#fef2f2;border-left:3px solid var(--danger)"><div class="detail-section-label" style="color:var(--danger)">⚠️ 禁忌症與注意事項</div><div class="detail-section-text" style="color:#b91c1c">${p.contraindications}</div></div>` : ''}
       <div style="margin-top:16px">
-        <div style="font-size:13px;font-weight:600;color:var(--gray-600);margin-bottom:8px">近期治療記錄</div>
+        <div style="font-size:13px;font-weight:600;color:var(--gray-600);margin-bottom:8px">近期訓練記錄</div>
         ${ptSessions.slice(0,3).map(s=>`
           <div style="display:flex;align-items:center;gap:12px;padding:8px;border-radius:6px;background:var(--gray-50);margin-bottom:6px">
             <span style="font-size:12px;color:var(--gray-500);min-width:80px">${formatDate(s.date)}</span>
             <span style="font-size:12px;flex:1">${s.items}</span>
             <span class="status-badge status-${s.status}">${{completed:'已完成',scheduled:'待執行',cancelled:'已取消',partial:'部分完成'}[s.status]}</span>
-          </div>`).join('') || '<p style="color:var(--gray-400);font-size:13px;padding:8px">尚無治療記錄</p>'}
+          </div>`).join('') || '<p style="color:var(--gray-400);font-size:13px;padding:8px">尚無訓練記錄</p>'}
       </div>`;
   } else if (tab === 'assessments') {
     body.innerHTML = `<table class="data-table">
@@ -828,7 +828,7 @@ function renderDetailTab(tab) {
           <td style="color:#f59e0b">${s.cooperation>0?'★'.repeat(s.cooperation)+'☆'.repeat(5-s.cooperation):'—'}</td>
           <td>${s.bcf?`<span class="badge badge-info">${s.bcf.mode||'已使用'}</span>`:'<span style="color:var(--gray-300)">—</span>'}</td>
           <td><span class="status-badge status-${s.status}">${{completed:'已完成',scheduled:'待執行',cancelled:'已取消',partial:'部分完成'}[s.status]}</span></td></tr>`;
-      }).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--gray-400);padding:40px">尚無治療記錄</td></tr>'}</tbody></table>`;
+      }).join('')||'<tr><td colspan="6" style="text-align:center;color:var(--gray-400);padding:40px">尚無訓練記錄</td></tr>'}</tbody></table>`;
   } else if (tab === 'prescriptions') {
     body.innerHTML = ptRx.length>0 ? ptRx.map(rx=>`
       <div class="rx-card" style="margin-bottom:12px">
@@ -9992,7 +9992,7 @@ function renderSessions() {
   if (statusFilter) data = data.filter(s => s.status === statusFilter);
 
   if (data.length === 0) {
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--gray-400)">無符合條件的治療記錄</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;padding:40px;color:var(--gray-400)">無符合條件的訓練記錄</td></tr>';
     return;
   }
 
@@ -10020,13 +10020,13 @@ function renderSessions() {
 }
 
 async function deleteTherapySession(id) {
-  if (!confirm('確定刪除此治療記錄？')) return;
+  if (!confirm('確定刪除此訓練記錄？')) return;
   try {
     await fetch('/api/therapy-sessions/' + id, { method: 'DELETE' });
     DB.therapySessions = DB.therapySessions.filter(s => s._id !== id);
     renderSessions();
   } catch (e) {
-    console.error('刪除治療記錄失敗:', e);
+    console.error('刪除訓練記錄失敗:', e);
   }
 }
 
@@ -10035,7 +10035,7 @@ function editSession(id) {
   if (!s) return;
   editingId = id;
   populatePatientSelects();
-  document.getElementById('sessionModalTitle').textContent = '編輯治療記錄';
+  document.getElementById('sessionModalTitle').textContent = '編輯訓練記錄';
   document.getElementById('s-patient').value = s.patientId;
   document.getElementById('s-date').value = s.date;
   document.getElementById('s-start').value = s.start;
@@ -10085,13 +10085,13 @@ function saveSession() {
   if (editingId) {
     const idx = DB.sessions.findIndex(s => s.id === editingId);
     if (idx !== -1) { DB.sessions[idx] = { ...DB.sessions[idx], ...data }; }
-    showToast('治療記錄已更新', 'success');
+    showToast('訓練記錄已更新', 'success');
   } else {
     data.id = genId('S');
     DB.sessions.unshift(data);
     const pt = getPatient(patientId);
     if (pt && date > (pt.lastSession || '')) pt.lastSession = date;
-    showToast('治療記錄已儲存', 'success');
+    showToast('訓練記錄已儲存', 'success');
   }
 
   saveToStorage();
@@ -10214,7 +10214,7 @@ async function submitAddSessionModal() {
   });
 
   if (result.success) {
-    showToast('治療記錄已儲存');
+    showToast('訓練記錄已儲存');
     document.getElementById('addTherapySessionModal').style.display = 'none';
     await loadTherapySessionsFromServer(patientId);
     renderSessions();
@@ -10531,7 +10531,7 @@ function initApp() {
 
   // Close modal resets session title
   document.getElementById('addSessionModal')?.querySelector('.modal-overlay')?.addEventListener('click', () => {
-    document.getElementById('sessionModalTitle').textContent = '新增治療記錄';
+    document.getElementById('sessionModalTitle').textContent = '新增訓練記錄';
     editingId = null;
   });
 
