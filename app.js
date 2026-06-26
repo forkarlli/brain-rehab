@@ -7890,7 +7890,7 @@ function _switchAssessTab(tab) {
   const pageActions = document.querySelector('#page-assessments .page-actions');
 
   if (tab === 'btracks') {
-    if (tableCard)  tableCard.style.display = 'none';
+    if (tableCard)  tableCard.style.display = '';
     if (bcfEl)      bcfEl.style.display = 'none';
     if (reEl)       reEl.style.display = 'none';
     if (pageActions) pageActions.style.display = 'none';
@@ -7898,7 +7898,7 @@ function _switchAssessTab(tab) {
     return;
   }
   if (tab === 'bcf') {
-    if (tableCard)  tableCard.style.display = 'none';
+    if (tableCard)  tableCard.style.display = '';
     if (reEl)       reEl.style.display = 'none';
     if (btracksEl)  btracksEl.style.display = 'none';
     if (pageActions) pageActions.style.display = 'none';
@@ -7906,7 +7906,7 @@ function _switchAssessTab(tab) {
     return;
   }
   if (tab === 'righteye') {
-    if (tableCard)  tableCard.style.display = 'none';
+    if (tableCard)  tableCard.style.display = '';
     if (bcfEl)      bcfEl.style.display = 'none';
     if (btracksEl)  btracksEl.style.display = 'none';
     if (pageActions) pageActions.style.display = 'none';
@@ -7968,7 +7968,14 @@ function renderAssessments() {
   const tbody = document.getElementById('assessmentsTableBody');
   if (!tbody) return;
 
-  const tabTypeMap = { cognitive: ['MMSE','MoCA'], motor: ['Fugl-Meyer'], language: ['Barthel','語言'] };
+  const tabTypeMap = {
+    cognitive: ['MMSE','MoCA'],
+    motor:     ['Fugl-Meyer'],
+    language:  ['Barthel','語言'],
+    btracks:   ['BTrackS','Btracks','平衡'],
+    bcf:       ['肌肉張力測試','MTT'],
+    righteye:  ['RightEye','BCF眼動機評估','BCF眼動機']
+  };
 
   const selectedPatient = currentGlobalPatientId
       || document.getElementById('assess-patient-select')?.value || '';
