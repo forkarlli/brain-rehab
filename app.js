@@ -253,9 +253,16 @@ async function populateAssessDateDropdown(patientId) {
 
   if (selGroup) selGroup.style.display = '';
   if (customGroup) customGroup.style.display = 'none';
-  sel.innerHTML = sessions.map(s =>
-    `<option value="${s.date}">${s.date}</option>`
-  ).join('');
+  const sessionDates = sessions.map(s => s.date).filter(Boolean);
+  const assessDates = (DB.assessments || [])
+    .filter(a => a.patientId === patientId)
+    .map(a => a.date)
+    .filter(Boolean);
+  const allDates = [...new Set([...sessionDates, ...assessDates])]
+    .sort((a, b) => b.localeCompare(a));
+  sel.innerHTML = allDates
+    .map(d => `<option value="${d}">${d}</option>`)
+    .join('');
   sel.style.appearance = 'none';
   sel.style.webkitAppearance = 'none';
   sel.style.backgroundImage = "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2 4l4 4 4-4' stroke='%23555' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E\")";
@@ -7895,6 +7902,7 @@ function _switchAssessTab(tab) {
     if (reEl)       reEl.style.display = 'none';
     if (pageActions) pageActions.style.display = 'none';
     if (btracksEl)  { btracksEl.style.setProperty('display', 'block', 'important'); renderBTracksInterface(); }
+    renderAssessments();
     return;
   }
   if (tab === 'bcf') {
@@ -7903,6 +7911,7 @@ function _switchAssessTab(tab) {
     if (btracksEl)  btracksEl.style.display = 'none';
     if (pageActions) pageActions.style.display = 'none';
     if (bcfEl)      { bcfEl.style.display = 'block'; renderBCFInterface(); }
+    renderAssessments();
     return;
   }
   if (tab === 'righteye') {
@@ -7911,6 +7920,7 @@ function _switchAssessTab(tab) {
     if (btracksEl)  btracksEl.style.display = 'none';
     if (pageActions) pageActions.style.display = 'none';
     if (reEl)       { reEl.style.display = 'block'; renderRightEyeInterface(); renderAISaccadeSummary(); }
+    renderAssessments();
     return;
   }
   // Table tabs (cognitive / motor / language / default)
