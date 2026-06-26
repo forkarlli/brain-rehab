@@ -452,7 +452,7 @@ async function navigateTo(page) {
   if (page === 'patients') renderPatients();
   if (page === 'assessments') { renderAssessments(); populatePatientSelects(); }
   if (page === 'prescriptions') { switchRxTab('generator'); populatePatientSelects(); }
-  if (page === 'sessions') { await loadTherapySessionsFromServer(); renderSessions(); populatePatientSelects(); }
+  if (page === 'sessions') { await loadTherapySessionsFromServer(); populatePatientSelects(); renderSessions(); }
   if (page === 'reports') populatePatientSelects();
 }
 
@@ -7955,7 +7955,8 @@ function renderAssessments() {
   const tabTypeMap = { cognitive: ['MMSE','MoCA'], motor: ['Fugl-Meyer'], language: ['Barthel','語言'] };
 
   let data = DB.assessments;
-  const selectedPatient = document.getElementById('assess-patient-select')?.value;
+  const selectedPatient = currentGlobalPatientId
+      || document.getElementById('assess-patient-select')?.value || '';
   if (selectedPatient) data = data.filter(a => a.patientId === selectedPatient);
   const selectedDate = document.getElementById('assess-date')?.value;
   // if (selectedDate) data = data.filter(a => a.date === selectedDate); // removed: therapy date should not filter assessment list
@@ -9984,11 +9985,12 @@ function renderSessions() {
   if (!tbody) return;
 
   const dateFilter = document.getElementById('sessionDateFilter')?.value || '';
-  const patientFilter = document.getElementById('sessionPatientFilter')?.value || '';
+  const patientFilter = currentGlobalPatientId
+      || document.getElementById('sessionPatientFilter')?.value || '';
   const statusFilter = document.getElementById('sessionStatusFilter')?.value || '';
 
   let data = DB.therapySessions;
-  if (dateFilter) data = data.filter(s => s.date === dateFilter);
+  // if (dateFilter) data = data.filter(s => s.date === dateFilter); // removed
   if (patientFilter) data = data.filter(s => s.patientId === patientFilter);
   if (statusFilter) data = data.filter(s => s.status === statusFilter);
 
