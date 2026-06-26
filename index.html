@@ -96,7 +96,7 @@
       </li>
       <li class="nav-item" data-page="sessions">
         <span class="nav-icon">🏃</span>
-        <span class="nav-label">治療記錄</span>
+        <span class="nav-label">訓練記錄</span>
       </li>
       <li class="nav-item" data-page="reports">
         <span class="nav-icon">📈</span>
@@ -481,7 +481,7 @@
           <button class="rx-subtab active" id="rxTab-generator" onclick="switchRxTab('generator')">
             ⚡ 當日處方產生器
           </button>
-          <button class="rx-subtab" id="rxTab-history" onclick="switchRxTab('history')">
+          <button class="rx-subtab" id="rxTab-history" onclick="switchRxTab('history')" style="display:none">
             📋 歷史處方記錄
           </button>
         </div>
@@ -680,7 +680,7 @@
           <div class="modal-overlay" onclick="closeModal('addSessionModal')"></div>
           <div class="modal-content modal-lg">
             <div class="modal-header">
-              <h3 id="sessionModalTitle">新增治療記錄</h3>
+              <h3 id="sessionModalTitle">新增訓練記錄</h3>
               <button class="modal-close" onclick="closeModal('addSessionModal');editingId=null;document.getElementById('sessionModalTitle').textContent='新增治療記錄'">✕</button>
             </div>
             <div class="modal-body">
@@ -888,7 +888,7 @@
       <div class="detail-tabs">
         <button class="detail-tab active" data-detail-tab="overview">概覽</button>
         <button class="detail-tab" data-detail-tab="assessments">評估記錄</button>
-        <button class="detail-tab" data-detail-tab="sessions">治療記錄</button>
+        <button class="detail-tab" data-detail-tab="sessions">訓練記錄</button>
         <button class="detail-tab" data-detail-tab="prescriptions">訓練處方</button>
       </div>
       <div class="modal-body" id="patientDetailBody"></div>
@@ -927,7 +927,7 @@
   <div id="addTherapySessionModal" style="position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:1000;display:none;align-items:center;justify-content:center;">
     <div style="background:#fff;border-radius:12px;padding:24px;width:480px;max-height:90vh;overflow-y:auto;">
       <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
-        <h3 style="margin:0">新增治療記錄</h3>
+        <h3 style="margin:0">新增訓練記錄</h3>
         <button class="btn-icon" onclick="document.getElementById('addTherapySessionModal').style.display='none'">✕</button>
       </div>
 
