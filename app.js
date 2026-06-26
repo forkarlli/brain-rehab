@@ -529,7 +529,7 @@ function getAvatarColor(name) {
 
 // ===== POPULATE PATIENT SELECTS =====
 function populatePatientSelects() {
-  const selects = ['a-patient', 'rx-patient', 's-patient', 'rxPatientFilter', 'sessionPatientFilter', 'reportPatientFilter', 'assess-patient-select'];
+  const selects = ['global-patient-select', 'a-patient', 'rx-patient', 's-patient', 'rxPatientFilter', 'sessionPatientFilter', 'reportPatientFilter', 'assess-patient-select'];
   selects.forEach(id => {
     const el = document.getElementById(id);
     if (!el) return;
@@ -10537,6 +10537,27 @@ function initApp() {
       if (_as) _as.value = currentGlobalPatientId;
       if (_sf) _sf.value = currentGlobalPatientId;
     });
+
+  document.getElementById('global-patient-select')
+    ?.addEventListener('change', () => {
+      currentGlobalPatientId = document.getElementById('global-patient-select').value;
+      const selToSync = ['assess-patient-select','sessionPatientFilter',
+        'reportPatientFilter','a-patient','rx-patient','s-patient'];
+      selToSync.forEach(id => {
+        const el = document.getElementById(id);
+        if (el) el.value = currentGlobalPatientId;
+      });
+      populateAssessDateDropdown(currentGlobalPatientId);
+      const activePage = document.querySelector('.page.active')?.id?.replace('page-','');
+      if (activePage === 'assessments') renderAssessments();
+      else if (activePage === 'sessions') renderSessions();
+      else if (activePage === 'prescriptions') {
+        const pid = currentGlobalPatientId;
+        document.getElementById('rx-patient').value = pid;
+        renderPrescriptions();
+      }
+    });
+
   document.getElementById('sessionStatusFilter')?.addEventListener('change', renderSessions);
 
   // Detail modal tabs
