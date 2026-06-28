@@ -707,6 +707,147 @@ try { saccadeDiag = JSON.parse(fs.readFileSync(SACCADE_DIAG_FILE, 'utf8')); } ca
   console.warn('saccade_diagnosis.json 未找到:', e.message);
 }
 
+// Pure function — no side effects, not wired into any route.
+//
+// Inputs (rightMetria, leftMetria):
+//   Source A — /api/analyze-saccade-direction:
+//     analysis.toward_right_or_up.type  → rightMetria
+//     analysis.toward_left_or_down.type → leftMetria
+//   Source B — /api/analyze-righteye:
+//     parsed.saccade_direction.horizontal.toward_right → rightMetria
+//     parsed.saccade_direction.horizontal.toward_left  → leftMetria
+//   Both sources use the same enum: "overshoot" | "undershoot" | "normal"
+//
+// Pairing rules (cerebellar saccadic dysmetria):
+//   Rightward hypo  + Leftward hyper  → CONTRAPULSION  (ipsilateral pull toward lesion side)
+//   Rightward hyper + Leftward hypo   → IPSIPULSION    (ipsilateral push away from lesion)
+//   Exactly one direction abnormal    → UNPAIRED       (never synthesise the missing side)
+//   Both normal                       → NONE
+function classifyPairedSaccade(rightMetria, leftMetria) {
+  const rHypo  = rightMetria === 'undershoot';
+  const rHyper = rightMetria === 'overshoot';
+  const lHypo  = leftMetria  === 'undershoot';
+  const lHyper = leftMetria  === 'overshoot';
+
+  if (rHypo  && lHyper) return 'CONTRAPULSION';
+  if (rHyper && lHypo)  return 'IPSIPULSION';
+  if (rHypo || rHyper || lHypo || lHyper) return 'UNPAIRED';
+  return 'NONE';
+}
+
+// Static lookup: (pattern from classifyPairedSaccade) × (lesion level) → candidate CB side.
+//
+// level values:
+//   'cortex'  — dysmetria driven by cerebellar cortex (Purkinje cell layer); vermis/flocculus
+//   'nucleus' — dysmetria driven by deep cerebellar nucleus (fastigial / cFN output)
+//   'unknown' — level not yet determined → returns BOTH candidates, caller must ask clinician
+//
+// Region strings: canonical "Right CB" / "Left CB" per recon #5.
+//   No '↓' suffix — that suffix breaks downstream affectedRegions normalisation.
+//   No "Fastigial Nucleus" expansion — keep the short CB canonical until level is confirmed.
+//
+// level source: lesionProfile.level field (BCFSession schema); not yet in schema as of recon Q1
+//   — this table is written ahead of that field being added to the schema.
+//
+// Not wired into any route.
+const SIDE_LOOKUP = {
+  CONTRAPULSION: {
+    cortex:  { candidate: 'Right CB', needsLevelInput: false },
+    nucleus: { candidate: 'Left CB',  needsLevelInput: false },
+    unknown: { candidates: ['Right CB', 'Left CB'], needsLevelInput: true },
+  },
+  IPSIPULSION: {
+    cortex:  { candidate: 'Left CB',  needsLevelInput: false },
+    nucleus: { candidate: 'Right CB', needsLevelInput: false },
+    unknown: { candidates: ['Left CB', 'Right CB'], needsLevelInput: true },
+  },
+};
+
+// Ordered confidence tiers; index 0 = lowest.
+const CONFIDENCE_TIERS = ['none', 'low', 'moderate', 'high'];
+function _degrade(tier) {
+  return CONFIDENCE_TIERS[Math.max(0, CONFIDENCE_TIERS.indexOf(tier) - 1)];
+}
+
+// Resolves candidate CB lesion side from saccade dysmetria + lesion level, and wraps the
+// result in a confidence envelope.  Downstream prescription MUST inspect all three guards
+// (confidence / needsLevelInput / contralateralConfirmAbsent) before committing to a side.
+// Never returns a bare candidate string — callers that skip the envelope risk acting on
+// a low-confidence or unconfirmed localisation.
+//
+// Parameters
+//   rightMetria  "overshoot" | "undershoot" | "normal"  — toward-right saccade type
+//   leftMetria   "overshoot" | "undershoot" | "normal"  — toward-left saccade type
+//   level        "cortex" | "nucleus" | "unknown"        — lesion depth (default "unknown")
+//
+// Return shape
+//   {
+//     pattern,               // from classifyPairedSaccade
+//     candidate,             // string | null  (null when needsLevelInput or UNPAIRED)
+//     candidates,            // string[] | null  (set when needsLevelInput is true)
+//     confidence,            // "high" | "moderate" | "low" | "none"
+//     needsLevelInput,       // true → caller must ask clinician for cortex vs nucleus
+//     contralateralConfirmAbsent,  // true → expected paired evidence was absent
+//     singleAbnormalSide,    // "right" | "left" | null  (UNPAIRED only)
+//     singleAbnormalType,    // "overshoot" | "undershoot" | null  (UNPAIRED only)
+//   }
+//
+// UNPAIRED semantics:
+//   The contralateral confirmation expected for a paired cerebellar pattern is absent.
+//   candidate is forced to null — callers MUST NOT flip or infer the working hypothesis
+//   side from UNPAIRED alone.  Use singleAbnormalSide + singleAbnormalType to query
+//   saccade_diagnosis.json for the single-side region label if needed.
+//   Confidence is degraded one tier regardless of level.
+//
+// Not wired into any route.
+function resolveLesionSide(rightMetria, leftMetria, level = 'unknown') {
+  const pattern = classifyPairedSaccade(rightMetria, leftMetria);
+
+  if (pattern === 'NONE') {
+    return {
+      pattern,
+      candidate:  null,
+      candidates: null,
+      confidence: 'none',
+      needsLevelInput:            false,
+      contralateralConfirmAbsent: false,
+      singleAbnormalSide: null,
+      singleAbnormalType: null,
+    };
+  }
+
+  if (pattern === 'CONTRAPULSION' || pattern === 'IPSIPULSION') {
+    const entry = SIDE_LOOKUP[pattern][level] ?? SIDE_LOOKUP[pattern].unknown;
+    return {
+      pattern,
+      candidate:  entry.candidate  ?? null,
+      candidates: entry.candidates ?? null,
+      confidence: entry.needsLevelInput ? 'moderate' : 'high',
+      needsLevelInput:            entry.needsLevelInput,
+      contralateralConfirmAbsent: false,
+      singleAbnormalSide: null,
+      singleAbnormalType: null,
+    };
+  }
+
+  // UNPAIRED — one direction abnormal, the other normal; contralateral evidence absent.
+  // Base confidence is what a paired result at this level would have earned, then
+  // degraded one tier to reflect missing confirmation.
+  const singleAbnormalSide = rightMetria !== 'normal' ? 'right' : 'left';
+  const singleAbnormalType = rightMetria !== 'normal' ? rightMetria : leftMetria;
+  const baseConf = level === 'unknown' ? 'moderate' : 'high';
+  return {
+    pattern,
+    candidate:  null,
+    candidates: null,
+    confidence: _degrade(baseConf),
+    needsLevelInput:            level === 'unknown',
+    contralateralConfirmAbsent: true,
+    singleAbnormalSide,
+    singleAbnormalType,
+  };
+}
+
 const SACCADE_VISION_SYSTEM = `你是功能性神經科醫師助手，專門分析眼球運動軌跡圖。
 請分析這張 RightEye 掃視軌跡圖截圖。
 
@@ -821,7 +962,17 @@ app.post('/api/analyze-saccade-direction', async (req, res) => {
       }
     }
 
-    res.json({ analysis, confidence: analysis.confidence ?? null, diagnoses });
+    // Horizontal-only: toward_right_or_up/.toward_left_or_down are mixed-axis fields;
+    // when direction === 'vertical' they carry up/down semantics, not right/left.
+    // Skip pairing classification for vertical images to avoid mis-mapping.
+    let saccadeLateralization = { pattern: 'N/A' };
+    if (analysis?.direction === 'horizontal') {
+      const _rM = analysis?.toward_right_or_up?.type;
+      const _lM = analysis?.toward_left_or_down?.type;
+      saccadeLateralization = resolveLesionSide(_rM, _lM, 'unknown');
+    }
+
+    res.json({ analysis, confidence: analysis.confidence ?? null, diagnoses, saccadeLateralization });
   } catch (err) {
     console.error('analyze-saccade-direction error:', err.message);
     res.status(500).json({ error: err.message });
