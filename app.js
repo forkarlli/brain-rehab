@@ -5689,6 +5689,25 @@ function updateREImageLabel(id, label) {
   if (img) { img.label = label; saveREImages(); }
 }
 
+function clearBCFAssessmentForm() {
+  for (let i = 1; i <= 8; i++) {
+    const el = document.querySelector(`input[name="E${i}"][value="none"]`);
+    if (el) el.checked = true;
+  }
+  for (let i = 1; i <= 10; i++) {
+    const el = document.querySelector(`input[name="V${i}"][value="none"]`);
+    if (el) el.checked = true;
+  }
+  ['C2','C4','C6','C8'].forEach(name => {
+    const el = document.querySelector(`#bcf-interface input[type="checkbox"][name="${name}"]`);
+    if (el) el.checked = false;
+  });
+  ['conv-up','conv-mid','conv-dn'].forEach(name => {
+    const el = document.querySelector(`input[name="${name}"][value="normal"]`);
+    if (el) el.checked = true;
+  });
+}
+
 function clearRightEyeForm() {
   ['re-spH','re-spH-right','re-spH-left','re-spV','re-spC','re-eso','re-svH','re-svV','re-syncH','re-syncV',
    're-sv-right','re-sv-left','re-sv-up','re-sv-down','re-pld-right','re-pld-left',
@@ -10592,6 +10611,8 @@ function initApp() {
         const el = document.getElementById(id);
         if (el) el.value = currentGlobalPatientId;
       });
+      clearBCFAssessmentForm();
+      if (typeof clearRightEyeForm === 'function') clearRightEyeForm();
       populateAssessDateDropdown(currentGlobalPatientId);
       const activePage = document.querySelector('.page.active')?.id?.replace('page-','');
       if (activePage === 'assessments') renderAssessments();
