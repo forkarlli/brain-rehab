@@ -5690,6 +5690,9 @@ function updateREImageLabel(id, label) {
 }
 
 function clearBCFAssessmentForm() {
+  document.querySelectorAll('#bcf-interface .bcf-has-diff').forEach(function(el) {
+    el.classList.remove('bcf-has-diff');
+  });
   for (let i = 1; i <= 8; i++) {
     const el = document.querySelector(`input[name="E${i}"][value="none"]`);
     if (el) el.checked = true;
@@ -5698,11 +5701,11 @@ function clearBCFAssessmentForm() {
     const el = document.querySelector(`input[name="V${i}"][value="none"]`);
     if (el) el.checked = true;
   }
-  ['C2','C4','C6','C8'].forEach(name => {
+  ['C2','C4','C6','C8'].forEach(function(name) {
     const el = document.querySelector(`#bcf-interface input[type="checkbox"][name="${name}"]`);
     if (el) el.checked = false;
   });
-  ['conv-up','conv-mid','conv-dn'].forEach(name => {
+  ['conv-up','conv-mid','conv-dn'].forEach(function(name) {
     const el = document.querySelector(`input[name="${name}"][value="normal"]`);
     if (el) el.checked = true;
   });
@@ -10625,6 +10628,7 @@ function initApp() {
         if (rxGenSel) { rxGenSel.value = currentGlobalPatientId; }
         if (currentGlobalPatientId) renderModuleCards(currentGlobalPatientId);
       }
+      document.querySelectorAll('#bcf-interface .bcf-has-diff').forEach(function(el) { el.classList.remove('bcf-has-diff'); });
     });
 
   document.getElementById('sessionStatusFilter')?.addEventListener('change', renderSessions);
