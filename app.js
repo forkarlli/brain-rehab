@@ -10585,23 +10585,23 @@ function initApp() {
   document.getElementById('assess-date')?.addEventListener('change', () => {
     const sel = document.getElementById('assess-date');
     const custom = document.getElementById('assess-date-custom');
-    const customGroup = custom?.closest('.form-group');
     if (sel.value === '__other__') {
-      if (customGroup) customGroup.style.display = '';
+      const _cg = document.getElementById('assess-date-custom')?.closest('.form-group');
+      if (_cg) _cg.style.display = '';
       const existingInput = document.getElementById('assess-date-input');
       if (!existingInput) {
-        const fg = document.querySelector('#assess-date-custom')?.closest('.form-group');
-        if (fg) {
+        if (_cg) {
           const inp = document.createElement('input');
           inp.type = 'date';
           inp.id = 'assess-date-input';
           inp.className = 'form-control';
           inp.value = new Date().toISOString().slice(0, 10);
-          fg.appendChild(inp);
+          _cg.appendChild(inp);
         }
       }
     } else {
-      if (customGroup) customGroup.style.display = 'none';
+      const _cg2 = document.getElementById('assess-date-custom')?.closest('.form-group');
+      if (_cg2) _cg2.style.display = 'none';
       if (custom) custom.value = sel.value;
       renderAssessments();
     }
