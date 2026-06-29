@@ -198,6 +198,7 @@ function saveAssessmentToServer(assessment) {
     }
     alert('已儲存到雲端: ' + assessment.id);
     const c = document.getElementById('assess-date-custom'); if (c) c.value = '';
+    const inp = document.getElementById('assess-date-input'); if (inp) inp.value = '';
     return true;
   } catch(e) {
     console.warn('saveAssessmentToServer error:', e);
@@ -272,6 +273,10 @@ async function populateAssessDateDropdown(patientId) {
   sel.style.cursor = 'pointer';
   sel.value = sessions[0].date;
   if (custom) custom.value = sessions[0].date;
+  const otherOpt = document.createElement('option');
+  otherOpt.value = '__other__';
+  otherOpt.textContent = '其他日期…';
+  document.getElementById('assess-date').appendChild(otherOpt);
 }
 
 async function loadAssessmentsFromServer() {
@@ -5118,7 +5123,8 @@ function generateIntegratedPrescription() {
 
 async function saveBCFAssessment() {
   const patientId = document.getElementById('assess-patient-select').value;
-  const date = document.getElementById('assess-date-custom')?.value
+  const date = document.getElementById('assess-date-input')?.value
+            || document.getElementById('assess-date-custom')?.value
             || document.getElementById('assess-date').value;
   if (!patientId || !date) { showToast('請選擇病人和日期', 'error'); return; }
 
@@ -6675,7 +6681,8 @@ function getRECircuit(reResult) {
 
 async function saveRightEyeAssessment() {
   const patientId = document.getElementById('assess-patient-select')?.value;
-  const date = document.getElementById('assess-date-custom')?.value
+  const date = document.getElementById('assess-date-input')?.value
+            || document.getElementById('assess-date-custom')?.value
             || document.getElementById('assess-date')?.value;
   if (!patientId || !date) { showToast('請選擇病人和日期', 'error'); return; }
 
@@ -7108,7 +7115,8 @@ function renderRombergInterface() {
 
 async function saveBTracksAssessment() {
   const patientId = document.getElementById('assess-patient-select')?.value;
-  const date = document.getElementById('assess-date-custom')?.value
+  const date = document.getElementById('assess-date-input')?.value
+            || document.getElementById('assess-date-custom')?.value
             || document.getElementById('assess-date')?.value;
   if (!patientId) { showToast('請先選擇病人', 'error'); return; }
   if (!date) { showToast('請選擇評估日期', 'error'); return; }
@@ -10577,8 +10585,26 @@ function initApp() {
   document.getElementById('assess-date')?.addEventListener('change', () => {
     const sel = document.getElementById('assess-date');
     const custom = document.getElementById('assess-date-custom');
-    if (custom) custom.value = sel.value;
-    renderAssessments();
+    const customGroup = custom?.closest('.form-group');
+    if (sel.value === '__other__') {
+      if (customGroup) customGroup.style.display = '';
+      const existingInput = document.getElementById('assess-date-input');
+      if (!existingInput) {
+        const fg = document.querySelector('#assess-date-custom')?.closest('.form-group');
+        if (fg) {
+          const inp = document.createElement('input');
+          inp.type = 'date';
+          inp.id = 'assess-date-input';
+          inp.className = 'form-control';
+          inp.value = new Date().toISOString().slice(0, 10);
+          fg.appendChild(inp);
+        }
+      }
+    } else {
+      if (customGroup) customGroup.style.display = 'none';
+      if (custom) custom.value = sel.value;
+      renderAssessments();
+    }
   });
 
   // Rx patient filter
