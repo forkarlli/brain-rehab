@@ -5299,6 +5299,7 @@ async function saveBCFAssessment() {
   const saveBtn = document.getElementById('bcf-save-btn');
   if (saveBtn) saveBtn.style.display = 'none';
   populateAssessDateDropdown(patientId);
+  renderAssessments();
 }
 
 function clearBCFForm() {
@@ -5696,6 +5697,8 @@ function updateREImageLabel(id, label) {
 }
 
 function clearBCFAssessmentForm() {
+  const _bcfResults = document.getElementById('bcf-results');
+  if (_bcfResults) _bcfResults.style.display = 'none';
   document.querySelectorAll('#bcf-interface .bcf-has-diff').forEach(function(el) {
     el.classList.remove('bcf-has-diff');
   });
@@ -7973,6 +7976,40 @@ function renderAssessments() {
   // Special-interface tabs — these must NOT be gated by tbody existence
   if (activeTab === 'bcf') {
     if (tableCard)  tableCard.style.display = '';
+    const _tbody2 = document.getElementById('assessmentsTableBody');
+    const _pid2 = currentGlobalPatientId
+      || document.getElementById('assess-patient-select')?.value || '';
+    if (_tbody2) {
+      if (!_pid2) {
+        _tbody2.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--gray-400)">請先從左側選擇病人</td></tr>';
+      } else {
+        let _d2 = DB.assessments.filter(a => a.patientId === _pid2);
+        _d2 = _d2.filter(a => ['肌肉張力測試','MTT','BCF眼動機評估'].some(t => a.type.includes(t)));
+        if (_d2.length === 0) {
+          _tbody2.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--gray-400)">無符合條件的評估記錄</td></tr>';
+        } else {
+          _tbody2.innerHTML = _d2.map(a => {
+            const pt = getPatient(a.patientId);
+            const diff = a.score - a.prev;
+            const diffLabel = diff > 0 ? `<span style="color:var(--success)">↑ +${diff}</span>`
+              : diff < 0 ? `<span style="color:var(--danger)">↓ ${diff}</span>`
+              : `<span style="color:var(--gray-400)">—</span>`;
+            return `<tr>
+              <td>${formatDate(a.date)}</td>
+              <td>${pt ? pt.name : a.patientId}</td>
+              <td>${a.type}</td>
+              <td><strong>${a.score}</strong><span style="color:var(--gray-400);font-size:11px"> /${a.maxScore}</span></td>
+              <td>${diffLabel}</td>
+              <td>${a.therapist}</td>
+              <td><div class="action-btns">
+                <button class="btn-icon view" onclick="showToast('查看評估詳細')">👁</button>
+                <button class="btn-icon edit" onclick="showToast('編輯功能開發中')">✏️</button>
+              </div></td>
+            </tr>`;
+          }).join('');
+        }
+      }
+    }
     if (bcfEl)      { bcfEl.style.display = 'block'; renderBCFInterface(); }
     if (reEl)       reEl.style.display = 'none';
     if (btracksEl)  btracksEl.style.display = 'none';
