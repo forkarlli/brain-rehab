@@ -8047,8 +8047,6 @@ function renderAssessments() {
 
   const tabTypeMap = {
     cognitive: ['MMSE','MoCA'],
-    motor:     ['Fugl-Meyer'],
-    language:  ['Barthel','語言'],
     btracks:   ['BTrackS','Btracks','平衡'],
     bcf:       ['肌肉張力測試','MTT'],
     righteye:  ['RightEye','BCF眼動機評估','BCF眼動機']
@@ -8274,8 +8272,8 @@ async function saveAssessment() {
 
   if (!patientId || !type) { showToast('請填寫必填欄位', 'error'); return; }
 
-  const maxMap = { mmse: 30, moca: 30, fugl: 226, berg: 56, barthel: 100, romberg: 10 };
-  const typeNames = { mmse: 'MMSE 簡易心智狀態測驗', moca: 'MoCA 蒙特利爾認知評估', fugl: 'Fugl-Meyer 運動評估', berg: 'Berg 平衡量表', barthel: 'Barthel 日常生活指數', romberg: 'Romberg 測試（BTrackS）' };
+  const maxMap = { mmse: 30, moca: 30, berg: 56, romberg: 10 };
+  const typeNames = { mmse: 'MMSE 簡易心智狀態測驗', moca: 'MoCA 蒙特利爾認知評估', berg: 'Berg 平衡量表', romberg: 'Romberg 測試（BTrackS）' };
 
   let score, extraData = {};
   if (type === 'romberg') {
