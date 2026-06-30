@@ -10280,6 +10280,19 @@ function populateSessionTherapistSelect() {
     ).join('');
 }
 
+function populateLinkedRxSelect(patientId) {
+  const sel = document.getElementById('session-linked-rx');
+  if (!sel) return;
+  const list = patientId
+    ? DB.assessments.filter(a =>
+        a.patientId === patientId &&
+        (a.type === 'BCF眼動機評估' || a.type === 'RightEye眼動評估')
+      )
+    : [];
+  sel.innerHTML = '<option value="">不連結</option>' +
+    list.map(a => `<option value="${a.id || a._id}">${a.date} ${a.type}</option>`).join('');
+}
+
 async function openAddTherapySessionModal() {
   if (DB.patients.length === 0) await loadPatientsFromServer();
   if (DB.therapists.length === 0) await loadTherapistsFromServer();
@@ -10288,6 +10301,9 @@ async function openAddTherapySessionModal() {
   const today = new Date().toISOString().slice(0, 10);
   const dateEl = document.getElementById('sessionDate');
   if (dateEl) dateEl.value = today;
+  document.getElementById('sessionPatientId').onchange = function() {
+    populateLinkedRxSelect(this.value);
+  };
   document.getElementById('addTherapySessionModal').style.display = 'flex';
 }
 
@@ -10320,8 +10336,26 @@ async function submitAddSessionModal() {
     return;
   }
 
+  const linkedRxId = document.getElementById('session-linked-rx')?.value || null;
+  let linkedAssessmentSnapshot = null;
+  if (linkedRxId) {
+    const linkedRx = DB.assessments.find(a => (a.id || a._id) === linkedRxId);
+    if (linkedRx) {
+      linkedAssessmentSnapshot = {
+        type: linkedRx.type,
+        date: linkedRx.date,
+        label: `${linkedRx.date} ${linkedRx.type}`,
+        brainRegions: linkedRx.brainRegions || [],
+        prescriptions: linkedRx.eyeMachineRx ?? linkedRx.prescriptions ?? null,
+        cerebellarLat: linkedRx.cerebellarLat ?? null,
+      };
+    }
+  }
+
   const result = await saveTherapySession({
-    patientId, date, time, therapist, items, response, notes, status
+    patientId, date, time, therapist, items, response, notes, status,
+    linkedAssessmentId: linkedRxId,
+    linkedAssessmentSnapshot,
   });
 
   if (result.success) {
