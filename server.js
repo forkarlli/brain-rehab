@@ -126,6 +126,13 @@ if (process.env.MONGODB_URI) {
     duration: { type: Number }
   }, { _id: false });
 
+  const linkedRxSnapshotSchema = new mongoose.Schema({
+    type: String, date: String, label: String,
+    brainRegions: [String],
+    prescriptions: mongoose.Schema.Types.Mixed,
+    cerebellarLat: mongoose.Schema.Types.Mixed,
+  }, { _id: false });
+
   const therapySessionSchema = new mongoose.Schema({
     patientId: { type: String, required: true },
     date: { type: String },
@@ -135,7 +142,9 @@ if (process.env.MONGODB_URI) {
     response: { type: Number, min: 1, max: 10 },
     notes: { type: String },
     status: { type: String, default: 'completed' },
-    createdAt: { type: Date, default: Date.now }
+    createdAt: { type: Date, default: Date.now },
+    linkedAssessmentId:       { type: String, default: null },
+    linkedAssessmentSnapshot: { type: linkedRxSnapshotSchema, default: null },
   }, { versionKey: false });
   TherapySession = mongoose.model('TherapySession', therapySessionSchema, 'therapy_sessions');
 
