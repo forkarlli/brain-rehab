@@ -8002,7 +8002,7 @@ function renderAssessments() {
               <td>${diffLabel}</td>
               <td>${a.therapist}</td>
               <td><div class="action-btns">
-                <button class="btn-icon view" onclick="showToast('查看評估詳細')">👁</button>
+                <button class="btn-icon view" onclick="showAssessmentDetail('${a.id}')">👁</button>
                 <button class="btn-icon edit" onclick="showToast('編輯功能開發中')">✏️</button>
               </div></td>
             </tr>`;
@@ -8086,7 +8086,7 @@ function renderAssessments() {
         <td>${a.therapist}</td>
         <td>
           <div class="action-btns">
-            <button class="btn-icon view" onclick="showToast('查看評估詳細')">👁</button>
+            <button class="btn-icon view" onclick="showAssessmentDetail('${a.id}')">👁</button>
             <button class="btn-icon edit" onclick="showToast('編輯功能開發中')">✏️</button>
           </div>
         </td>
