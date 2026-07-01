@@ -348,6 +348,7 @@ async function loadBcfDiagnosesFromServer() {
   } catch(e) {
     console.error('loadBcfDiagnosesFromServer error:', e);
   }
+  renderBcfDiagnosisList();
 }
 
 function renderBcfDiagnosisList() {
@@ -515,7 +516,7 @@ async function navigateTo(page) {
   if (page === 'prescriptions') { switchRxTab('generator'); populatePatientSelects(); }
   if (page === 'sessions') { await loadTherapySessionsFromServer(); populatePatientSelects(); renderSessions(); }
   if (page === 'reports') populatePatientSelects();
-  if (page === 'bcf-diagnosis') { await loadBcfDiagnosesFromServer(); renderBcfDiagnosisList(); }
+  if (page === 'bcf-diagnosis') await loadBcfDiagnosesFromServer();
 }
 
 // ===== MODAL =====
@@ -914,7 +915,7 @@ function showAssessmentDetail(aid) {
 
   const isRE  = a.type?.includes('RightEye');
   const isMTT = a.type === '肌肉張力測試';
-  const isBCF = a.type === 'BCF眼動機評估';
+  const isBCF = a.type === 'BCF腦區判斷';
   const pt    = getPatient(a.patientId);
   const diff  = (a.score ?? 0) - (a.prev ?? 0);
   const scoreColor = a.maxScore > 0
@@ -5313,7 +5314,7 @@ async function saveBCFAssessment() {
   if (hasPrescriptions) {
     const rxCount = eyeMachineRx.length + eegPrescriptions.length + (flyingChairData ? 1 : 0);
     const prevBCF = DB.assessments
-      .filter(a => a.patientId === patientId && a.type === 'BCF眼動機評估')
+      .filter(a => a.patientId === patientId && a.type === 'BCF腦區判斷')
       .sort((a, b) => new Date(b.date) - new Date(a.date))[0]?.score ?? 0;
     const bcfRec = {
       id: genId('BCF'), patientId, date,
@@ -5333,7 +5334,7 @@ async function saveBCFAssessment() {
     });
   }
 
-  showToast(`評估已儲存：肌肉張力測試${hasPrescriptions ? ' + BCF眼動機評估' : ''}`, 'success');
+  showToast(`評估已儲存：肌肉張力測試${hasPrescriptions ? ' + BCF腦區判斷' : ''}`, 'success');
   const saveBtn = document.getElementById('bcf-save-btn');
   if (saveBtn) saveBtn.style.display = 'none';
   populateAssessDateDropdown(patientId);
@@ -8022,7 +8023,7 @@ function renderAssessments() {
         _tbody2.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--gray-400)">請先從左側選擇病人</td></tr>';
       } else {
         let _d2 = DB.assessments.filter(a => a.patientId === _pid2);
-        _d2 = _d2.filter(a => ['肌肉張力測試','MTT','BCF眼動機評估'].some(t => a.type.includes(t)));
+        _d2 = _d2.filter(a => ['肌肉張力測試','MTT'].some(t => a.type.includes(t)));
         if (_d2.length === 0) {
           _tbody2.innerHTML = '<tr><td colspan="7" style="text-align:center;padding:40px;color:var(--gray-400)">無符合條件的評估記錄</td></tr>';
         } else {
@@ -8087,7 +8088,7 @@ function renderAssessments() {
     cognitive: ['MMSE','MoCA'],
     btracks:   ['BTrackS','Btracks','平衡'],
     bcf:       ['肌肉張力測試','MTT'],
-    righteye:  ['RightEye','BCF眼動機評估','BCF眼動機']
+    righteye:  ['RightEye','BCF眼動機']
   };
 
   const selectedPatient = currentGlobalPatientId
@@ -10331,6 +10332,7 @@ function populateLinkedRxSelect(patientId) {
 async function openAddTherapySessionModal() {
   if (DB.patients.length === 0) await loadPatientsFromServer();
   if (DB.therapists.length === 0) await loadTherapistsFromServer();
+  await loadBcfDiagnosesFromServer();
   populateSessionPatientSelect();
   populateSessionTherapistSelect();
   const today = new Date().toISOString().slice(0, 10);
