@@ -105,6 +105,10 @@
         <span class="nav-icon">📋</span>
         <span class="nav-label">檢測記錄</span>
       </li>
+      <li class="nav-item" data-page="bcf-diagnosis">
+        <span class="nav-icon">🧠</span>
+        <span class="nav-label">BCF腦區判斷</span>
+      </li>
       <li class="nav-item" data-page="prescriptions">
         <span class="nav-icon">💊</span>
         <span class="nav-label">訓練處方</span>
@@ -479,6 +483,19 @@
                 <button class="btn btn-primary" onclick="saveAssessment()">儲存評估</button>
               </div>
             </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- ========== BCF DIAGNOSIS PAGE ========== -->
+      <section class="page" id="page-bcf-diagnosis" style="display:none">
+        <div class="page-header">
+          <h2>BCF腦區判斷</h2>
+          <p class="page-subtitle">整合檢測結果，建立腦區診斷與訓練策略</p>
+        </div>
+        <div class="page-content">
+          <div id="bcf-diagnosis-list">
+            <p style="color:#888;text-align:center;padding:2rem">載入中...</p>
           </div>
         </div>
       </section>
