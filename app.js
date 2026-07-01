@@ -340,7 +340,10 @@ async function loadAssessmentsFromServer() {
 }
 
 async function loadBcfDiagnosesFromServer() {
-  if (!currentGlobalPatientId) return;
+  if (!currentGlobalPatientId) {
+    renderBcfDiagnosisList();
+    return;
+  }
   try {
     const res = await fetch(`/api/bcf-diagnoses?patientId=${currentGlobalPatientId}`);
     const data = await res.json();
@@ -10326,7 +10329,12 @@ function populateLinkedRxSelect(patientId) {
   const reList  = patientId ? DB.assessments.filter(a => a.patientId === patientId && a.type === 'RightEye眼動評估') : [];
   const list = [...bcfList, ...reList];
   sel.innerHTML = '<option value="">不連結</option>' +
-    list.map(a => `<option value="${a.id || a._id}">${a.date} ${a.type}</option>`).join('');
+    list.map(a => {
+      const label = a.type === 'BCF腦區判斷' || !a.type
+        ? `${a.date} BCF腦區判斷`
+        : `${a.date} ${a.type}`;
+      return `<option value="${a.id || a._id}">${label}</option>`;
+    }).join('');
 }
 
 async function openAddTherapySessionModal() {
@@ -10738,7 +10746,7 @@ function initApp() {
     });
 
   document.getElementById('global-patient-select')
-    ?.addEventListener('change', () => {
+    ?.addEventListener('change', async () => {
       currentGlobalPatientId = document.getElementById('global-patient-select').value;
       const selToSync = ['assess-patient-select','sessionPatientFilter',
         'reportPatientFilter','a-patient','rx-patient','s-patient'];
@@ -10759,6 +10767,9 @@ function initApp() {
         const rxGenSel = document.getElementById('rxGen-patient');
         if (rxGenSel) { rxGenSel.value = currentGlobalPatientId; }
         if (currentGlobalPatientId) renderModuleCards(currentGlobalPatientId);
+      }
+      else if (activePage === 'bcf-diagnosis') {
+        await loadBcfDiagnosesFromServer();
       }
       document.querySelectorAll('#bcf-interface .bcf-has-diff').forEach(function(el) { el.classList.remove('bcf-has-diff'); });
     });
