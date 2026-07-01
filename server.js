@@ -40,6 +40,7 @@ let Patient        = null;
 let Assessment     = null;
 let HomeTraining   = null;
 let BCFSession     = null;
+let BcfDiagnosis   = null;
 let Therapist      = null;
 let TherapySession = null;
 let dbReady        = false;
@@ -113,6 +114,21 @@ if (process.env.MONGODB_URI) {
   }, { timestamps: true, versionKey: false });
 
   BCFSession = mongoose.model('BCFSession', bcfSessionSchema, 'bcf_sessions');
+
+  const bcfDiagnosisSchema = new mongoose.Schema({
+    patientId:           { type: String, required: true, index: true },
+    date:                { type: String },
+    clinicianId:         { type: String },
+    sourceAssessmentIds: { type: [String], default: [] },
+    brainRegions:        { type: [String], default: [] },
+    decision:            { type: mongoose.Schema.Types.Mixed, default: null },
+    indicators:          { type: mongoose.Schema.Types.Mixed, default: null },
+    eyeMachineRx:        { type: mongoose.Schema.Types.Mixed, default: null },
+    flyingChairData:     { type: mongoose.Schema.Types.Mixed, default: null },
+    notes:               { type: String, default: '' },
+    createdAt:           { type: Date, default: Date.now },
+  }, { versionKey: false });
+  BcfDiagnosis = mongoose.model('BcfDiagnosis', bcfDiagnosisSchema, 'bcf_diagnoses');
 
   const therapistSchema = new mongoose.Schema({
     name: { type: String, required: true },
@@ -383,6 +399,28 @@ app.post('/api/therapy-sessions', async (req, res) => {
     return res.json({ session: doc });
   } catch (e) {
     console.error('therapy-sessions POST 失敗:', e.message);
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.get('/api/bcf-diagnoses', async (req, res) => {
+  if (!BcfDiagnosis || !dbReady) return res.status(503).json({ error: 'DB not ready' });
+  try {
+    const query = {};
+    if (req.query.patientId) query.patientId = req.query.patientId;
+    const diagnoses = await BcfDiagnosis.find(query).sort({ date: -1 });
+    res.json({ diagnoses });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+app.post('/api/bcf-diagnoses', async (req, res) => {
+  if (!BcfDiagnosis || !dbReady) return res.status(503).json({ error: 'DB not ready' });
+  try {
+    const doc = await BcfDiagnosis.create(req.body);
+    res.json({ diagnosis: doc });
+  } catch (e) {
     res.status(500).json({ error: e.message });
   }
 });
