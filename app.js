@@ -5317,7 +5317,7 @@ async function saveBCFAssessment() {
       .sort((a, b) => new Date(b.date) - new Date(a.date))[0]?.score ?? 0;
     const bcfRec = {
       id: genId('BCF'), patientId, date,
-      type: 'BCF眼動機評估',
+      type: 'BCF腦區判斷',
       score: rxCount, maxScore: rxCount, prev: prevBCF,
       therapist, notes: '',
       brainRegions,
@@ -5325,11 +5325,15 @@ async function saveBCFAssessment() {
       eyeMachineRx, eegPrescriptions, functionalTrainings, flyingChairData,
     };
     console.log('saveBCF:', JSON.stringify(bcfRec));
-    DB.assessments.unshift(bcfRec);
-    await saveAssessmentToServer(bcfRec);
+    DB.bcfDiagnoses.unshift(bcfRec);
+    await fetch('/api/bcf-diagnoses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bcfRec)
+    });
   }
 
-  showToast(`評估已儲存：肌肉張力測試${hasPrescriptions ? ' ＋ BCF眼動機評估' : ''}`, 'success');
+  showToast(`評估已儲存：肌肉張力測試${hasPrescriptions ? ' + BCF眼動機評估' : ''}`, 'success');
   const saveBtn = document.getElementById('bcf-save-btn');
   if (saveBtn) saveBtn.style.display = 'none';
   populateAssessDateDropdown(patientId);
@@ -10317,12 +10321,9 @@ function populateSessionTherapistSelect() {
 function populateLinkedRxSelect(patientId) {
   const sel = document.getElementById('session-linked-rx');
   if (!sel) return;
-  const list = patientId
-    ? DB.assessments.filter(a =>
-        a.patientId === patientId &&
-        (a.type === 'BCF眼動機評估' || a.type === 'RightEye眼動評估')
-      )
-    : [];
+  const bcfList = patientId ? DB.bcfDiagnoses.filter(d => d.patientId === patientId) : [];
+  const reList  = patientId ? DB.assessments.filter(a => a.patientId === patientId && a.type === 'RightEye眼動評估') : [];
+  const list = [...bcfList, ...reList];
   sel.innerHTML = '<option value="">不連結</option>' +
     list.map(a => `<option value="${a.id || a._id}">${a.date} ${a.type}</option>`).join('');
 }
