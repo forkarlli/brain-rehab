@@ -39,6 +39,7 @@ const DB = {
   integratedPrescriptions: [],
   therapists: [],
   therapySessions: [],
+  bcfDiagnoses: [],
 };
 
 // ===== LOCAL STORAGE PERSISTENCE =====
@@ -338,6 +339,37 @@ async function loadAssessmentsFromServer() {
   }
 }
 
+async function loadBcfDiagnosesFromServer() {
+  if (!currentGlobalPatientId) return;
+  try {
+    const res = await fetch(`/api/bcf-diagnoses?patientId=${currentGlobalPatientId}`);
+    const data = await res.json();
+    if (data.diagnoses) DB.bcfDiagnoses = data.diagnoses;
+  } catch(e) {
+    console.error('loadBcfDiagnosesFromServer error:', e);
+  }
+}
+
+function renderBcfDiagnosisList() {
+  const container = document.getElementById('bcf-diagnosis-list');
+  if (!container) return;
+  if (!currentGlobalPatientId) {
+    container.innerHTML = '<p style="color:#888;text-align:center;padding:2rem">請先從左側選擇病人</p>';
+    return;
+  }
+  if (DB.bcfDiagnoses.length === 0) {
+    container.innerHTML = '<p style="color:#888;text-align:center;padding:2rem">尚無 BCF 腦區判斷記錄</p>';
+    return;
+  }
+  container.innerHTML = DB.bcfDiagnoses.map(d => `
+    <div class="card" style="margin-bottom:1rem;padding:1rem">
+      <div style="font-weight:600">${d.date || ''} BCF腦區判斷</div>
+      <div style="color:#666;font-size:0.9em">腦區：${(d.brainRegions||[]).join('、') || '—'}</div>
+      <div style="color:#666;font-size:0.9em">備註：${d.notes || '—'}</div>
+    </div>
+  `).join('');
+}
+
 function exportBackup() {
   const data = {
     exportedAt:    new Date().toISOString(),
@@ -468,6 +500,7 @@ async function navigateTo(page) {
     prescriptions: ['訓練處方', '首頁 / 訓練處方'],
     sessions: ['訓練記錄', '首頁 / 訓練記錄'],
     reports: ['成效報告', '首頁 / 成效報告'],
+    'bcf-diagnosis': ['BCF腦區判斷', '首頁 / BCF腦區判斷'],
     settings: ['系統設定', '首頁 / 系統設定'],
   };
 
@@ -482,6 +515,7 @@ async function navigateTo(page) {
   if (page === 'prescriptions') { switchRxTab('generator'); populatePatientSelects(); }
   if (page === 'sessions') { await loadTherapySessionsFromServer(); populatePatientSelects(); renderSessions(); }
   if (page === 'reports') populatePatientSelects();
+  if (page === 'bcf-diagnosis') { await loadBcfDiagnosesFromServer(); renderBcfDiagnosisList(); }
 }
 
 // ===== MODAL =====
@@ -10516,8 +10550,8 @@ function printReport() {
 
 // ===== AUTH =====
 const ROLE_PAGES = {
-  admin:     new Set(['dashboard','patients','assessments','prescriptions','sessions','reports','settings']),
-  therapist: new Set(['dashboard','patients','assessments','prescriptions','sessions','reports']),
+  admin:     new Set(['dashboard','patients','assessments','bcf-diagnosis','prescriptions','sessions','reports','settings']),
+  therapist: new Set(['dashboard','patients','assessments','bcf-diagnosis','prescriptions','sessions','reports']),
   reception: new Set(['patients']),
 };
 
