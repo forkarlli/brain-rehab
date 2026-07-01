@@ -425,22 +425,6 @@ app.post('/api/bcf-diagnoses', async (req, res) => {
   }
 });
 
-// ONE-TIME MIGRATION: move BCF眼動機評估 from assessments → bcf_diagnoses
-app.post('/api/migrate-bcf-to-diagnoses', async (req, res) => {
-  if (!Assessment || !BcfDiagnosis || !dbReady) return res.status(503).json({ error: 'DB not ready' });
-  try {
-    const docs = await Assessment.find({ type: 'BCF眼動機評估' }).lean();
-    if (docs.length === 0) return res.json({ migrated: 0, deleted: 0 });
-    const toInsert = docs.map(d => ({ ...d, _id: undefined, type: 'BCF腦區判斷' }));
-    await BcfDiagnosis.insertMany(toInsert, { ordered: false });
-    const ids = docs.map(d => d._id);
-    const del = await Assessment.deleteMany({ _id: { $in: ids } });
-    res.json({ migrated: toInsert.length, deleted: del.deletedCount });
-  } catch (e) {
-    res.status(500).json({ error: e.message });
-  }
-});
-
 // 刪除治療記錄
 app.delete('/api/therapy-sessions/:id', async (req, res) => {
   if (!TherapySession || !dbReady) return res.status(503).json({ error: 'DB not ready' });
