@@ -1,0 +1,64 @@
+{
+  "_meta": {
+    "purpose": "Rule-based template lookup for DTO.narrativeHints. MUST be looked up verbatim by buildClinicalReportDTO() / a template-lookup helper — never generated or altered by any LLM call, including internal server-side ones. Mirrors the prescriptions.json lookup pattern (code -> fixed content).",
+    "version": "1.0.0"
+  },
+
+  "romberg": {
+    "_key_format": "{sway_direction}_{mode}, sway_direction matches ROMBERG_MATRIX codes (RF/RB/PR/PL/LF/LB/PF/PBk), mode is FAILURE|COMPENSATORY (see app.js computeRombergRx)",
+
+    "RF_FAILURE":       "本次姿勢平衡測試顯示，患者在閉眼站立時身體有往右前方傾倒的傾向，且前庭系統對此方向的代償機制尚未有效啟動（失效模式）。",
+    "RF_COMPENSATORY":  "本次姿勢平衡測試顯示，患者在閉眼站立時身體有往右前方傾倒的傾向，前庭系統已啟動代償機制，但仍存在殘餘的不對稱反應（代償模式）。",
+
+    "RB_FAILURE":       "本次姿勢平衡測試顯示，患者在閉眼站立時身體有往右後方傾倒的傾向，且前庭系統對此方向的代償機制尚未有效啟動（失效模式）。",
+    "RB_COMPENSATORY":  "本次姿勢平衡測試顯示，患者在閉眼站立時身體有往右後方傾倒的傾向，前庭系統已啟動代償機制，但仍存在殘餘的不對稱反應（代償模式）。",
+
+    "PR_FAILURE":       "本次姿勢平衡測試顯示，患者在閉眼站立時身體有純粹往右側傾倒的傾向，且前庭系統對此方向的代償機制尚未有效啟動（失效模式）。",
+    "PR_COMPENSATORY":  "本次姿勢平衡測試顯示，患者在閉眼站立時身體有純粹往右側傾倒的傾向，前庭系統已啟動代償機制，但仍存在殘餘的不對稱反應（代償模式）。",
+
+    "PL_FAILURE":       "本次姿勢平衡測試顯示，患者在閉眼站立時身體有純粹往左側傾倒的傾向，且前庭系統對此方向的代償機制尚未有效啟動（失效模式）。",
+    "PL_COMPENSATORY":  "本次姿勢平衡測試顯示，患者在閉眼站立時身體有純粹往左側傾倒的傾向，前庭系統已啟動代償機制，但仍存在殘餘的不對稱反應（代償模式）。",
+
+    "LF_FAILURE":       "本次姿勢平衡測試顯示，患者在閉眼站立時身體有往左前方傾倒的傾向，且前庭系統對此方向的代償機制尚未有效啟動（失效模式）。",
+    "LF_COMPENSATORY":  "本次姿勢平衡測試顯示，患者在閉眼站立時身體有往左前方傾倒的傾向，前庭系統已啟動代償機制，但仍存在殘餘的不對稱反應（代償模式）。",
+
+    "LB_FAILURE":       "本次姿勢平衡測試顯示，患者在閉眼站立時身體有往左後方傾倒的傾向，且前庭系統對此方向的代償機制尚未有效啟動（失效模式）。",
+    "LB_COMPENSATORY":  "本次姿勢平衡測試顯示，患者在閉眼站立時身體有往左後方傾倒的傾向，前庭系統已啟動代償機制，但仍存在殘餘的不對稱反應（代償模式）。",
+
+    "PF_FAILURE":       "本次姿勢平衡測試顯示，患者在閉眼站立時身體有純粹往前方傾倒的傾向，且前庭系統對此方向的代償機制尚未有效啟動（失效模式）。",
+    "PF_COMPENSATORY":  "本次姿勢平衡測試顯示，患者在閉眼站立時身體有純粹往前方傾倒的傾向，前庭系統已啟動代償機制，但仍存在殘餘的不對稱反應（代償模式）。",
+
+    "PBk_FAILURE":      "本次姿勢平衡測試顯示，患者在閉眼站立時身體有純粹往後方傾倒的傾向，且前庭系統對此方向的代償機制尚未有效啟動（失效模式）。",
+    "PBk_COMPENSATORY": "本次姿勢平衡測試顯示，患者在閉眼站立時身體有純粹往後方傾倒的傾向，前庭系統已啟動代償機制，但仍存在殘餘的不對稱反應（代償模式）。",
+
+    "_unknown": "本次姿勢平衡測試已完成資料收集，詳細方向性結果將由臨床人員於報告中補充說明。"
+  },
+
+  "eyeTracking": {
+    "_key_format": "canonical brain region name, matching the canonical keys in app.js BRAIN_REGION_ALIASES / bcf_diagnoses.brainRegions",
+
+    "Left CB":              "眼動追蹤資料顯示，與左側小腦相關的眼球協調功能較弱，可能影響追視與跳視的精準度。",
+    "Right CB":              "眼動追蹤資料顯示，與右側小腦相關的眼球協調功能較弱，可能影響追視與跳視的精準度。",
+    "CB Vermis":             "眼動追蹤資料顯示，與小腦蚓部相關的眼球穩定功能較弱，可能影響平順追視的表現。",
+    "CB Flocculus":          "眼動追蹤資料顯示，與小腦絨球相關的凝視穩定功能較弱，可能影響固視與前庭眼反射的協調。",
+    "Left FEF":              "眼動追蹤資料顯示，與左側額葉眼動區相關的自主性掃視功能較弱。",
+    "Right FEF":             "眼動追蹤資料顯示，與右側額葉眼動區相關的自主性掃視功能較弱。",
+    "Left PPRF":             "眼動追蹤資料顯示，與左側腦橋旁正中網狀結構相關的水平掃視功能較弱。",
+    "Right PPRF":            "眼動追蹤資料顯示，與右側腦橋旁正中網狀結構相關的水平掃視功能較弱。",
+    "riMLF":                 "眼動追蹤資料顯示，與中腦垂直眼動中樞相關的垂直眼球運動功能較弱。",
+    "Bilateral Midbrain":    "眼動追蹤資料顯示，與雙側中腦相關的眼球運動功能較弱。",
+    "Right Midbrain":        "眼動追蹤資料顯示，與右側中腦相關的眼球運動功能較弱。",
+    "Left Midbrain":         "眼動追蹤資料顯示，與左側中腦相關的眼球運動功能較弱。",
+    "Superior Colliculus":   "眼動追蹤資料顯示，與上丘相關的反射性眼球運動功能較弱。",
+    "Left SC":               "眼動追蹤資料顯示，與左側上丘相關的反射性眼球運動功能較弱。",
+    "Right SC":              "眼動追蹤資料顯示，與右側上丘相關的反射性眼球運動功能較弱。",
+    "Left Vestibular":       "眼動追蹤資料顯示，與左側前庭核相關的眼球穩定功能較弱。",
+    "Right Vestibular":      "眼動追蹤資料顯示，與右側前庭核相關的眼球穩定功能較弱。",
+    "Left Parietal":         "眼動追蹤資料顯示，與左側頂葉相關的視覺注意與追視協調功能較弱。",
+    "Right Parietal":        "眼動追蹤資料顯示，與右側頂葉相關的視覺注意與追視協調功能較弱。",
+    "Left Temporal Lobe":    "眼動追蹤資料顯示，與左側顳葉相關的視覺處理功能較弱。",
+    "Right Temporal Lobe":   "眼動追蹤資料顯示，與右側顳葉相關的視覺處理功能較弱。",
+
+    "_default": "眼動追蹤資料顯示部分區域功能異常，詳細區域將由臨床人員於報告中補充說明。"
+  }
+}
