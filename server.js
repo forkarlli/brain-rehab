@@ -84,6 +84,11 @@ if (process.env.MONGODB_URI) {
       pursuit:  { gain: Number },
       fixation: { stabilityIndex: Number, bcea: Number },
     },
+    // @deprecated — legacy/experimental field. Only ever written by
+    // /api/analyze-saccade-direction with status hardcoded to 'unknown' and
+    // laterality/confidence never populated; nothing reads it (see
+    // Clinical_Logic_Deferred_0707 recon). NOT used for clinical report
+    // generation. Left as-is: no migration, no field removal, no new reads.
     lesionProfile: {
       status:          { type: String, enum: ['functional','structural','mixed','unknown'], default: 'unknown' },
       confidence:      Number,
@@ -1450,12 +1455,16 @@ async function buildClinicalReportDTO({ patientId, patientName, reportType, asse
 
       bcfDiagnosis: {
         brainRegions: Object.freeze({ value: brainRegions, immutable: true }),
-        // GAP (v1.1): no lesionProfile is persisted on bcf_diagnoses today.
-        // `decision` ({trainSide, reason, balanced, noData, counts}) exists but
-        // is a different shape and is not substituted here without Karl's sign-off.
-        lesionProfile: Object.freeze({ value: null, immutable: true }),
-        // GAP (v1.1): no severity classification is computed/stored anywhere yet.
-        severity: Object.freeze({ value: null, immutable: true }),
+        // Deferred per Clinical_Logic_Deferred_0707 (Handover B recon): building
+        // a real laterality/dominantSystem/pattern classification would be new
+        // diagnosis-engine logic, not a persistence fix (computeBCFDecision's
+        // trainSide/counts don't map onto it — see recon findings). Moved to
+        // Phase 2 Clinical Logic Design backlog; not part of v1.1.
+        lesionProfile: Object.freeze({ implemented: false }),
+        // Deferred per Clinical_Logic_Deferred_0707 — no severity classification
+        // is computed anywhere upstream; moved to Phase 2 Clinical Logic Design
+        // backlog alongside lesionProfile.
+        severity: Object.freeze({ implemented: false }),
       },
     }),
 
@@ -1477,6 +1486,15 @@ async function buildClinicalReportDTO({ patientId, patientName, reportType, asse
         '計算任何數值差異',
         '臆測空值欄位',
         '使用 DTO 以外的腦區/側化詞彙',
+      ],
+      // Per Clinical_Logic_Deferred_0707: when a field carries `implemented: false`,
+      // the narrative generator must silently omit that section entirely — no
+      // explanatory text, no filled-in reasoning, no "this could not be
+      // determined" / anomaly framing. Silence, not a stated absence, to avoid
+      // the patient reading a skipped section as a flagged abnormal finding.
+      sectionSkipRules: [
+        { field: 'currentAssessment.bcfDiagnosis.lesionProfile', when: 'implemented === false', action: 'omit section, no text' },
+        { field: 'currentAssessment.bcfDiagnosis.severity',      when: 'implemented === false', action: 'omit section, no text' },
       ],
       requiredDisclaimer: '本報告由 AI 輔助生成語言敘述，臨床結論經 Karl Li DC PT 審核確認',
     },
