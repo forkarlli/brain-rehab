@@ -1238,6 +1238,7 @@ body {
 @media print {
   body.printing-report .sidebar,
   body.printing-report .topbar,
+  body.printing-report .page,
   body.printing-report .modal-header,
   body.printing-report .detail-tabs,
   body.printing-report .modal-overlay,
