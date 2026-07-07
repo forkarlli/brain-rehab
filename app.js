@@ -74,7 +74,7 @@ function loadFromStorage() {
 
 async function savePatientsToServer() {
   try {
-    await fetch('https://brain-rehab-production.up.railway.app/api/patients', {
+    await fetch('/api/patients', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ patients: DB.patients }),
@@ -90,7 +90,7 @@ async function migrateLocalStoragePatients() {
     if (!raw) return false;
     const saved = JSON.parse(raw);
     if (!Array.isArray(saved.patients) || saved.patients.length === 0) return false;
-    const resp = await fetch('https://brain-rehab-production.up.railway.app/api/migrate-patients', {
+    const resp = await fetch('/api/migrate-patients', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ patients: saved.patients }),
@@ -111,7 +111,7 @@ async function migrateLocalStoragePatients() {
 
 async function loadPatientsFromServer() {
   try {
-    const resp = await fetch('https://brain-rehab-production.up.railway.app/api/patients');
+    const resp = await fetch('/api/patients');
     if (!resp.ok) return;
     const data = await resp.json();
     if (Array.isArray(data.patients) && data.patients.length > 0) {
@@ -181,7 +181,7 @@ function saveAssessmentToServer(assessment) {
   pendingSaves++;
   try {
     const xhr = new XMLHttpRequest();
-    xhr.open('POST', 'https://brain-rehab-production.up.railway.app/api/assessments', false); // synchronous
+    xhr.open('POST', '/api/assessments', false); // synchronous
     xhr.setRequestHeader('Content-Type', 'application/json');
     xhr.send(JSON.stringify(assessment));
     console.log('response status:', xhr.status, 'ok:', xhr.status >= 200 && xhr.status < 300);
@@ -282,7 +282,7 @@ async function populateAssessDateDropdown(patientId) {
 
 async function loadAssessmentsFromServer() {
   try {
-    const resp = await fetch('https://brain-rehab-production.up.railway.app/api/assessments');
+    const resp = await fetch('/api/assessments');
     if (!resp.ok) return;
     const data = await resp.json();
     const serverList = Array.isArray(data.assessments) ? data.assessments : [];
@@ -294,7 +294,7 @@ async function loadAssessmentsFromServer() {
       return aid && !SAMPLE_ASSESSMENT_IDS.has(aid) && !serverIds.has(aid);
     });
     if (toUpload.length > 0) {
-      const mResp = await fetch('https://brain-rehab-production.up.railway.app/api/assessments/bulk', {
+      const mResp = await fetch('/api/assessments/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ assessments: toUpload }),
@@ -324,7 +324,7 @@ async function loadAssessmentsFromServer() {
       return aid && !SAMPLE_ASSESSMENT_IDS.has(aid);
     });
     if (toMigrate.length > 0) {
-      const mResp = await fetch('https://brain-rehab-production.up.railway.app/api/assessments/bulk', {
+      const mResp = await fetch('/api/assessments/bulk', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ assessments: toMigrate }),
