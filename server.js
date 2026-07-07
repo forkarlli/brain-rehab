@@ -43,6 +43,7 @@ let BCFSession     = null;
 let BcfDiagnosis   = null;
 let Therapist      = null;
 let TherapySession = null;
+let PatientReport  = null;
 let dbReady        = false;
 
 if (process.env.MONGODB_URI) {
@@ -163,6 +164,26 @@ if (process.env.MONGODB_URI) {
     linkedAssessmentSnapshot: { type: linkedRxSnapshotSchema, default: null },
   }, { versionKey: false });
   TherapySession = mongoose.model('TherapySession', therapySessionSchema, 'therapy_sessions');
+
+  // BCF Clinical Report DTO v1.0 — audit trail for patient-facing reports.
+  // dto/narrativeText are stored as-generated (pre-review); reviewedByKarl gates
+  // whether the report may ever be sent/printed. See buildClinicalReportDTO() below.
+  const patientReportSchema = new mongoose.Schema({
+    patientId:      { type: String, required: true, index: true },
+    reportType:     { type: String, enum: ['initial', 'reevaluation', 'progress'], required: true },
+    reportVersion:  { type: String, default: 'BCF-4.0.0' },
+    dto:            { type: mongoose.Schema.Types.Mixed, required: true },
+    narrativeText:  { type: String, default: '' },
+    validation: {
+      ok:            { type: Boolean, default: false },
+      flaggedTerms:  { type: [String], default: [] },
+      checkedAt:     { type: Date, default: null },
+    },
+    reviewedByKarl: { type: Boolean, default: false },
+    reviewedAt:     { type: Date, default: null },
+    createdAt:      { type: Date, default: Date.now },
+  }, { versionKey: false });
+  PatientReport = mongoose.model('PatientReport', patientReportSchema, 'patient_reports');
 
   mongoose.connect(process.env.MONGODB_URI)
     .then(async () => {
@@ -1151,6 +1172,361 @@ app.post('/api/righteye/fetch', async (req, res) => {
     res.status(503).json({ success: false, error: `righteye-service 無法連線：${err.message}` });
   }
 });
+
+// ============================================================
+// ===== BCF CLINICAL REPORT DTO v1.0 (BCF-4.0.0) =====
+// ============================================================
+// Architecture (per 2026-07-07 handoff packet, reviewed by ChatGPT/System Architect):
+//   Clinical Engine (this file) = sole source of clinical truth.
+//   Narrative AI (LLM, wired in separately) = language layer only, may not add
+//   any clinical conclusion, direction/laterality, or numeric computation.
+//
+// Everything below is pure scaffolding: buildClinicalReportDTO(), the
+// narrative_templates.json lookup, and the region/laterality validator.
+// No new HTTP routes are added in this pass — that is a deliberate scope
+// decision (see handoff step list ①–⑤, which asks only for the function,
+// the template file, the validator, and the patient_reports schema).
+//
+// IMPORTANT — data-model reality check done during recon (Stage 0):
+// The v1.0 DTO schema names several fields that do not exist anywhere in the
+// current data model (bcf_diagnoses has no lesionProfile/severity; no
+// collection stores a "swayMode" or per-item {code,direction,result} array).
+// Rather than invent values for those fields — which would defeat the whole
+// point of this architecture — they are explicitly set to null and marked
+// with a `// GAP (v1.1):` comment. grep for "GAP (v1.1)" to find all of them.
+// ============================================================
+
+const NARRATIVE_TEMPLATES_FILE = path.join(__dirname, 'narrative_templates.json');
+let narrativeTemplates = null;
+try { narrativeTemplates = JSON.parse(fs.readFileSync(NARRATIVE_TEMPLATES_FILE, 'utf8')); } catch (e) {
+  console.warn('narrative_templates.json 未找到:', e.message);
+}
+
+// Rule-based template lookup ONLY — never call an LLM from inside this function
+// or from anything that feeds narrativeHints. category: 'romberg' | 'eyeTracking'.
+function lookupNarrativeHint(category, key) {
+  const table = narrativeTemplates?.[category];
+  if (!table) return null;
+  return table[key] ?? table._default ?? table._unknown ?? null;
+}
+
+// Ported (data only, not logic) from app.js BRAIN_REGION_ALIASES so the keyword
+// validator below can recognise the same Chinese/English region names the
+// clinical engine already uses. Keep in sync with app.js if that table changes.
+const REGION_ALIASES = {
+  'Left CB':              ['左側小腦', 'Left Cerebellum', '左CB', 'Left Cb', 'Left CB Vermis'],
+  'Right CB':             ['右側小腦', 'Right Cerebellum', '右CB', 'Right Cb', 'Right CB Vermis'],
+  'CB Vermis':            ['小腦蚓部', 'Vermis', '蚓部', 'Bilateral CB Vermis'],
+  'CB Flocculus':         ['小腦絨球', 'Flocculus', 'Vestibulocerebellum'],
+  'Left FEF':             ['左額葉眼動區', 'Left Frontal Eye Field'],
+  'Right FEF':            ['右額葉眼動區', 'Right Frontal Eye Field'],
+  'Left PPRF':            ['左側PPRF', '左側腦橋旁正中網狀結構'],
+  'Right PPRF':           ['右側PPRF', '右側腦橋旁正中網狀結構', 'Bilateral Pons'],
+  'riMLF':                ['內側縱束嘴側間質核', '垂直眼動中樞', '中腦上視中樞', 'rostral interstitial MLF', 'Bilateral riMLF'],
+  'Bilateral Midbrain':   ['雙側中腦', 'Midbrain', '中腦', 'Bilateral Midbrain（雙側）', '中腦上視中樞（雙側）'],
+  'Right Midbrain':       ['右側中腦', 'Right Mesencephalon', 'ipsilateral Midbrain（Right）'],
+  'Left Midbrain':        ['左側中腦', 'Left Mesencephalon', 'ipsilateral Midbrain（Left）'],
+  'Superior Colliculus':  ['上丘', '上視丘', 'SC', 'Bilateral SC', '上直肌神經支配中樞', '動眼神經核上方'],
+  'Left SC':              ['左上丘', 'Left Superior Colliculus'],
+  'Right SC':             ['右上丘', 'Right Superior Colliculus'],
+  'CN III':               ['動眼神經核', '上直肌神經支配', 'Oculomotor Nucleus', 'CN3'],
+  'Left Vestibular':      ['左側前庭核', 'Left Vest'],
+  'Right Vestibular':     ['右側前庭核', 'Right Vest'],
+  'Left Parietal':        ['Left Parietal Cortex', 'Left Parietal Lobe', '左頂葉'],
+  'Right Parietal':       ['Right Parietal Cortex', 'Right Parietal Lobe', '右頂葉'],
+  'Left Temporal Lobe':   ['左顳葉', 'Left Temporal', 'Left Temporal Cortex'],
+  'Right Temporal Lobe':  ['右顳葉', 'Right Temporal', 'Right Temporal Cortex'],
+  'Left Mes':             ['左中腦', 'Left Mesencephalon'],
+  'Right Mes':            ['右中腦', 'Right Mesencephalon'],
+  'Bilateral Fastigial Nucleus': ['Cerebellar Fastigial Nucleus', 'Bilateral Fastigial', 'Fastigial Nucleus（雙側）', '雙側齒狀核'],
+  'Oculomotor Vermis':    ['Oculomotor Vermis ↓', '眼動蚓部', 'Oculomotor Cerebellar Vermis'],
+};
+
+// Generic laterality/direction words the narrative must not introduce on its own —
+// their presence is only legitimate if the matched canonical region (above) that
+// carries that side is already inside dto brainRegions / lesionProfile.
+const LATERALITY_KEYWORDS = ['左', '右', 'left', 'right', 'ipsilateral', 'contralateral', 'bilateral', '同側', '對側', '雙側'];
+
+function normalizeRegionName(name) {
+  if (!name) return name;
+  for (const [canonical, aliases] of Object.entries(REGION_ALIASES)) {
+    if (name === canonical || aliases.includes(name)) return canonical;
+  }
+  return name;
+}
+
+// Scans AI-generated narrative text for brain-region / laterality vocabulary and
+// confirms every recognised region is one that's actually present in the DTO's
+// brainRegions list. Per handoff §⑥: any recognised region NOT in the DTO's
+// allowed set must block the report rather than auto-pass.
+//
+// This is a keyword-membership check, not an NLP/semantic check — it will not
+// catch prose that implies laterality without naming a canonical region string
+// or one of its aliases. That limitation should be called out to Karl, not hidden.
+function validateNarrativeAgainstDTO(narrativeText, dto) {
+  const allowedRegions = new Set(
+    (dto?.currentAssessment?.bcfDiagnosis?.brainRegions?.value || []).map(normalizeRegionName)
+  );
+
+  const flaggedTerms = [];
+  const text = narrativeText || '';
+
+  for (const canonical of Object.keys(REGION_ALIASES)) {
+    const candidates = [canonical, ...REGION_ALIASES[canonical]];
+    const mentioned = candidates.some(term => text.includes(term));
+    if (mentioned && !allowedRegions.has(canonical)) {
+      flaggedTerms.push(canonical);
+    }
+  }
+
+  return {
+    ok: flaggedTerms.length === 0,
+    flaggedTerms,
+    allowedRegions: [...allowedRegions],
+    checkedAt: new Date().toISOString(),
+  };
+}
+
+// Ported from app.js ROMBERG_CONFIG.rq_threshold (value: 2.0) — this single
+// numeric threshold is duplicated here (not the surrounding diagnosis logic)
+// solely so narrativeHints.rombergInterpretation can be looked up, since the
+// template keys are {sway_direction}_{FAILURE|COMPENSATORY}. If app.js's
+// threshold ever changes, this must be updated too — v1.1 should centralize
+// this in one place instead of duplicating it.
+const ROMBERG_RQ_THRESHOLD = 2.0;
+
+const ASSESSMENT_TYPE = {
+  MTT:     '肌肉張力測試',
+  RIGHTEYE: 'RightEye眼動評估',
+  ROMBERG: 'Romberg 測試（BTrackS）',
+};
+
+const REPORT_TYPE_RULES = {
+  initial:      { comparisonData: 'forbidden', prescriptionHistory: 'forbidden' },
+  reevaluation: { comparisonData: 'required',  prescriptionHistory: 'optional'  },
+  progress:     { comparisonData: 'required',  prescriptionHistory: 'required'  },
+};
+
+// Flattens the raw MTT per-item state (eyeItems/cervicalItems/stanceItems/
+// convergenceItems/gazeItems/tongueItems, as saved by app.js saveMTT()) into
+// the DTO's muscleTensionTest.findings: array of {code, direction, result}.
+// This is a reshape of already-stored data, not a new clinical judgment.
+function flattenMttFindings(mttDoc) {
+  if (!mttDoc) return [];
+  const findings = [];
+  const pushFlat = (group, obj) => {
+    if (!obj) return;
+    for (const [code, val] of Object.entries(obj)) {
+      if (val == null || val === 'none') continue;
+      if (typeof val === 'object') {
+        findings.push({ code, group, direction: val.weakSide ?? null, result: val.hasDiff ? 'abnormal' : 'normal', note: val.note });
+      } else {
+        findings.push({ code, group, direction: val, result: 'abnormal' });
+      }
+    }
+  };
+  pushFlat('eye',         mttDoc.eyeItems);
+  pushFlat('cervical',    mttDoc.cervicalItems);
+  pushFlat('stance',      mttDoc.stanceItems);
+  pushFlat('convergence', mttDoc.convergenceItems);
+  pushFlat('gaze',        mttDoc.gazeItems);
+  pushFlat('tongue',      mttDoc.tongueItems);
+  return findings;
+}
+
+// Fetches the three same-visit Assessment docs (MTT / RightEye / Romberg, keyed
+// by patientId+date — there is no single combined "assessment" record in the
+// current data model) plus the most recent bcf_diagnoses doc for that date.
+async function _fetchSessionDocs(patientId, date) {
+  if (!Assessment || !dbReady) return { mtt: null, rightEye: null, romberg: null, bcf: null };
+  const [mtt, rightEye, romberg, bcf] = await Promise.all([
+    Assessment.findOne({ patientId, date, type: ASSESSMENT_TYPE.MTT }).sort({ createdAt: -1 }).lean(),
+    Assessment.findOne({ patientId, date, type: ASSESSMENT_TYPE.RIGHTEYE }).sort({ createdAt: -1 }).lean(),
+    Assessment.findOne({ patientId, date, type: ASSESSMENT_TYPE.ROMBERG }).sort({ createdAt: -1 }).lean(),
+    BcfDiagnosis ? BcfDiagnosis.findOne({ patientId, date }).sort({ createdAt: -1 }).lean() : null,
+  ]);
+  return { mtt, rightEye, romberg, bcf };
+}
+
+function _rombergSwayMode(rq) {
+  if (rq == null) return null;
+  return rq >= ROMBERG_RQ_THRESHOLD ? 'FAILURE' : 'COMPENSATORY';
+}
+
+// Numeric RightEye fields eligible for arithmetic delta comparison between two
+// visits. Deltas are plain subtraction — no interpretation is attached here;
+// per handoff §④ that stays server-side and pre-computed, but which fields are
+// "clinically meaningful deltas" beyond raw arithmetic is not decided in v1.0.
+const SACCADE_DELTA_METRICS = ['spH', 'spV', 'spC', 'svH', 'svV', 'syncH', 'syncV'];
+
+function _computeSaccadeMetricDeltas(currentRE, baselineRE) {
+  if (!currentRE || !baselineRE) return [];
+  return SACCADE_DELTA_METRICS
+    .filter(m => currentRE[m] != null && baselineRE[m] != null)
+    .map(m => ({ metric: m, current: currentRE[m], baseline: baselineRE[m], delta: currentRE[m] - baselineRE[m] }));
+}
+
+// Builds the frozen Clinical Report DTO (schema v1.0 / BCF-4.0.0).
+//
+// Params:
+//   patientId, patientName  — identify the patient (patientName is caller-supplied;
+//                              this function does not look patients up).
+//   reportType              — 'initial' | 'reevaluation' | 'progress'
+//   assessDate               — ISO date string identifying the current visit's
+//                              Assessment/BcfDiagnosis docs (see _fetchSessionDocs).
+//   baselineDate            — required for 'reevaluation'/'progress'; ISO date
+//                              string identifying the comparison visit.
+//
+// Throws on report-type/section-requirement violations (handoff §⑧). Does not
+// call any LLM and does not touch patient_reports — persistence is the caller's
+// responsibility once Karl's review flow exists.
+async function buildClinicalReportDTO({ patientId, patientName, reportType, assessDate, baselineDate } = {}) {
+  if (!REPORT_TYPE_RULES[reportType]) {
+    throw new Error(`Invalid reportType: ${reportType}`);
+  }
+  if (!patientId || !assessDate) {
+    throw new Error('patientId and assessDate are required');
+  }
+
+  const rules = REPORT_TYPE_RULES[reportType];
+  if (rules.comparisonData === 'required' && !baselineDate) {
+    throw new Error(`reportType "${reportType}" requires baselineDate for comparisonData`);
+  }
+  if (rules.comparisonData === 'forbidden' && baselineDate) {
+    throw new Error(`reportType "${reportType}" must not include comparisonData (baselineDate was provided)`);
+  }
+
+  const { mtt, rightEye, romberg, bcf } = await _fetchSessionDocs(patientId, assessDate);
+
+  const brainRegions = bcf?.brainRegions || [];
+  const swayMode = _rombergSwayMode(romberg?.rq ?? null);
+
+  const dto = {
+    reportMeta: {
+      reportVersion: 'BCF-4.0.0',
+      clinicalRuleVersion: 'BCF-RULESET-4.0.0',
+      reportType,
+      patientId,
+      patientName: patientName ?? null,
+      reportDate: new Date().toISOString().slice(0, 10),
+      reviewedByKarl: false,
+    },
+
+    currentAssessment: Object.freeze({
+      assessDate,
+      linkedAssessmentId: mtt?._id ?? mtt?.id ?? null,
+
+      rightEye: {
+        saccadeLateralization: Object.freeze({ value: rightEye?.cerebellarLat ?? null, immutable: true }),
+        smoothPursuitFindings: Object.freeze({
+          value: rightEye ? {
+            spH: rightEye.spH ?? null, spV: rightEye.spV ?? null, spC: rightEye.spC ?? null,
+            spHRight: rightEye.spHRight ?? null, spHLeft: rightEye.spHLeft ?? null,
+            syncH: rightEye.syncH ?? null, syncV: rightEye.syncV ?? null,
+          } : null,
+          source: 'server.js', immutable: true,
+        }),
+        // GAP (v1.1): fixation-specific findings are not tagged separately from
+        // intrusion data in the current RightEye assessment record; using the
+        // intrusion/lateral-drift fields as the closest available proxy.
+        fixationFindings: Object.freeze({
+          value: rightEye ? {
+            intrusion: rightEye.intrusion ?? null, intrusionAmp: rightEye.intrusionAmp ?? null,
+            vpLateralDrift: rightEye.vpLateralDrift ?? null, vsLateralDrift: rightEye.vsLateralDrift ?? null,
+          } : null,
+          source: 'server.js', immutable: true,
+        }),
+      },
+
+      bTracks: {
+        romperbergQuotient: romberg?.rq ?? null,
+        copSwayDirection: romberg?.sway_direction ?? null,
+        swayMode,
+      },
+
+      muscleTensionTest: {
+        findings: flattenMttFindings(mtt),
+      },
+
+      bcfDiagnosis: {
+        brainRegions: Object.freeze({ value: brainRegions, immutable: true }),
+        // GAP (v1.1): no lesionProfile is persisted on bcf_diagnoses today.
+        // `decision` ({trainSide, reason, balanced, noData, counts}) exists but
+        // is a different shape and is not substituted here without Karl's sign-off.
+        lesionProfile: Object.freeze({ value: null, immutable: true }),
+        // GAP (v1.1): no severity classification is computed/stored anywhere yet.
+        severity: Object.freeze({ value: null, immutable: true }),
+      },
+    }),
+
+    narrativeHints: {
+      source: 'narrative_templates.json (rule-based lookup only)',
+      rombergInterpretation: romberg?.sway_direction && swayMode
+        ? lookupNarrativeHint('romberg', `${romberg.sway_direction}_${swayMode}`)
+        : lookupNarrativeHint('romberg', '_unknown'),
+      eyeTrackingInterpretation: brainRegions.length
+        ? brainRegions.map(r => lookupNarrativeHint('eyeTracking', normalizeRegionName(r))).filter(Boolean).join(' ')
+        : lookupNarrativeHint('eyeTracking', '_default'),
+    },
+
+    aiNarrativeConstraints: {
+      allowedActions: ['改寫成病人可讀語言', '整理段落結構', '術語白話化'],
+      forbiddenActions: [
+        '新增未在 DTO 中的臨床判斷',
+        '推論方向性或側化',
+        '計算任何數值差異',
+        '臆測空值欄位',
+        '使用 DTO 以外的腦區/側化詞彙',
+      ],
+      requiredDisclaimer: '本報告由 AI 輔助生成語言敘述，臨床結論經 Karl Li DC PT 審核確認',
+    },
+  };
+
+  if (rules.comparisonData === 'required') {
+    const baseline = await _fetchSessionDocs(patientId, baselineDate);
+    const baselineSwayMode = _rombergSwayMode(baseline.romberg?.rq ?? null);
+    dto.comparisonData = {
+      applicableToTypes: ['reevaluation', 'progress'],
+      baselineAssessmentId: baseline.mtt?._id ?? baseline.mtt?.id ?? null,
+      baselineDate,
+      deltas: {
+        romperbergQuotientDelta: (romberg?.rq != null && baseline.romberg?.rq != null)
+          ? parseFloat((romberg.rq - baseline.romberg.rq).toFixed(3)) : null,
+        // GAP (v1.1): severity is not computed upstream (see bcfDiagnosis.severity),
+        // so a severity *change* cannot be derived without inventing a scale.
+        severityChange: null,
+        saccadeMetricDeltas: _computeSaccadeMetricDeltas(rightEye, baseline.rightEye),
+      },
+    };
+  }
+
+  if (rules.prescriptionHistory === 'required' || (rules.prescriptionHistory === 'optional' && TherapySession)) {
+    const sessions = (TherapySession && dbReady)
+      ? await TherapySession.find({
+          patientId,
+          date: { $gte: baselineDate || assessDate, $lte: assessDate },
+        }).sort({ date: 1 }).lean()
+      : [];
+    if (sessions.length || rules.prescriptionHistory === 'required') {
+      dto.prescriptionHistory = {
+        applicableToTypes: ['progress'],
+        sessions: sessions.map(s => ({
+          sessionDate: s.date,
+          // GAP (v1.1): TherapySession.items stores free-text exercise names,
+          // not a normalised deviceUsed ("眼動機"/"飛行椅") or modeUsed (M1-M8) field.
+          deviceUsed: null,
+          modeUsed: null,
+          completionStatus: s.status ?? null,
+          // GAP (v1.1): compliance rate is not tracked in TherapySession today.
+          complianceRate: null,
+          patientReportedResponse: s.response != null ? String(s.response) : (s.notes || null),
+        })),
+      };
+    }
+  }
+
+  return dto;
+}
 
 // ===== START SERVER =====
 const keyPath  = path.join(__dirname, 'key.pem');
