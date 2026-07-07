@@ -173,10 +173,17 @@ if (process.env.MONGODB_URI) {
   // BCF Clinical Report DTO v1.0 — audit trail for patient-facing reports.
   // dto/narrativeText are stored as-generated (pre-review); reviewedByKarl gates
   // whether the report may ever be sent/printed. See buildClinicalReportDTO() below.
+  //
+  // Lifecycle (Patient Report Phase 1): draft -> reviewed -> released.
+  // reportVersion (String) is the DTO/clinical-rule version (e.g. 'BCF-4.0.0'),
+  // unrelated to revisionNumber (Number) below — kept distinct on purpose so
+  // the two don't collide (see Patient Report Phase 1 recon).
   const patientReportSchema = new mongoose.Schema({
     patientId:      { type: String, required: true, index: true },
     reportType:     { type: String, enum: ['initial', 'reevaluation', 'progress'], required: true },
     reportVersion:  { type: String, default: 'BCF-4.0.0' },
+    assessmentId:   { type: String, default: null },
+    language:       { type: String, default: 'zh-TW' },
     dto:            { type: mongoose.Schema.Types.Mixed, required: true },
     narrativeText:  { type: String, default: '' },
     validation: {
@@ -184,8 +191,16 @@ if (process.env.MONGODB_URI) {
       flaggedTerms:  { type: [String], default: [] },
       checkedAt:     { type: Date, default: null },
     },
+    status:         { type: String, enum: ['draft', 'reviewed', 'released'], default: 'draft' },
+    // Re-issue chain for post-review corrections (Phase 1 only reserves these
+    // fields — the "must create a new version instead of editing" flow itself
+    // is out of scope this pass).
+    revisionNumber: { type: Number, default: 1 },
+    parentReportId: { type: String, default: null },
     reviewedByKarl: { type: Boolean, default: false },
     reviewedAt:     { type: Date, default: null },
+    reviewedBy:     { type: String, default: null },
+    releasedAt:     { type: Date, default: null },
     createdAt:      { type: Date, default: Date.now },
   }, { versionKey: false });
   PatientReport = mongoose.model('PatientReport', patientReportSchema, 'patient_reports');
@@ -1545,6 +1560,178 @@ async function buildClinicalReportDTO({ patientId, patientName, reportType, asse
 
   return dto;
 }
+
+// ============================================================
+// ===== PATIENT REPORT PHASE 1 (draft -> reviewed -> released) =====
+// ============================================================
+// Narrative text generation (the actual LLM call) is deliberately NOT wired
+// in this pass — patient_reports.narrativeText stays '' and the preview
+// renders structured DTO facts via ReportViewModel, not AI prose. Wiring the
+// real Anthropic call + validateNarrativeAgainstDTO() gate is a separate,
+// later step, consistent with how every prior handover gated that call.
+
+// Single evaluator for dto.aiNarrativeConstraints.sectionSkipRules. Both
+// ReportViewModel (below) and the eventual narrative generator MUST call this
+// rather than re-interpreting `rule.when` themselves — two independent
+// interpretations of the same rule is exactly how ROMBERG_RQ_THRESHOLD-style
+// drift happens. Only understands the one condition shape buildClinicalReportDTO()
+// currently produces ("implemented === false" on the field's own `.implemented`
+// property); deliberately not a general expression evaluator — extend this
+// function, don't eval() the `when` string.
+function resolveSkippedSections(dto) {
+  const rules = dto?.aiNarrativeConstraints?.sectionSkipRules || [];
+  const skipped = new Set();
+  for (const rule of rules) {
+    const node = rule.field.split('.').reduce((acc, key) => acc?.[key], dto);
+    if (rule.when === 'implemented === false' && node?.implemented === false) {
+      skipped.add(rule.field);
+    }
+  }
+  return skipped;
+}
+
+// Transforms a stored patient_reports document into the flat, render-ready
+// shape the HTML preview/print template consumes. This is the only thing the
+// template is allowed to read — it must not reach into reportDoc.dto directly,
+// so section-skip handling stays centralized here instead of being
+// re-implemented per template.
+function buildReportViewModel(reportDoc) {
+  const dto = reportDoc.dto || {};
+  const ca = dto.currentAssessment || {};
+  const skipped = resolveSkippedSections(dto);
+
+  const sections = [];
+
+  if (ca.muscleTensionTest?.findings?.length) {
+    sections.push({ id: 'muscleTensionTest', title: '肌肉張力測試', kind: 'findings', findings: ca.muscleTensionTest.findings });
+  }
+
+  sections.push({ id: 'rightEye', title: '眼動追蹤分析', kind: 'rightEye', data: ca.rightEye || null });
+  sections.push({ id: 'bTracks', title: '姿勢平衡測試（Romberg/BTrackS）', kind: 'bTracks', data: ca.bTracks || null });
+
+  const brainRegions = ca.bcfDiagnosis?.brainRegions?.value || [];
+  if (brainRegions.length) {
+    sections.push({ id: 'brainRegions', title: '受影響腦區', kind: 'list', items: brainRegions });
+  }
+
+  // lesionProfile / severity: omitted entirely (not rendered as empty/"not
+  // implemented" sections) when sectionSkipRules says so — see
+  // Clinical_Logic_Deferred_0707. Not gated at all if a rule doesn't apply.
+  if (ca.bcfDiagnosis?.lesionProfile && !skipped.has('currentAssessment.bcfDiagnosis.lesionProfile')) {
+    sections.push({ id: 'lesionProfile', title: '病灶側化分析', kind: 'lesionProfile', data: ca.bcfDiagnosis.lesionProfile });
+  }
+  if (ca.bcfDiagnosis?.severity && !skipped.has('currentAssessment.bcfDiagnosis.severity')) {
+    sections.push({ id: 'severity', title: '嚴重程度', kind: 'severity', data: ca.bcfDiagnosis.severity });
+  }
+
+  if (dto.narrativeHints?.rombergInterpretation || dto.narrativeHints?.eyeTrackingInterpretation) {
+    sections.push({
+      id: 'narrativeHints', title: '白話說明', kind: 'narrativeHints',
+      romberg: dto.narrativeHints.rombergInterpretation || null,
+      eyeTracking: dto.narrativeHints.eyeTrackingInterpretation || null,
+    });
+  }
+
+  return {
+    reportId: String(reportDoc._id),
+    reportMeta: dto.reportMeta || null,
+    status: reportDoc.status,
+    revisionNumber: reportDoc.revisionNumber,
+    isDraft: reportDoc.status === 'draft',
+    printable: reportDoc.status !== 'draft',
+    sections,
+    narrativeText: reportDoc.narrativeText || null,
+    disclaimer: dto.aiNarrativeConstraints?.requiredDisclaimer || null,
+  };
+}
+
+// POST /api/patients/:patientId/reports — generate a draft report.
+// Phase 1 only supports reportType 'initial' (no comparisonData/prescriptionHistory).
+// body.assessmentId is an Assessment _id (any of that visit's MTT/RightEye/Romberg
+// docs) — its `date` is used to bundle the same-visit docs, since there is no
+// single combined "assessment" record in the data model (see Handover A recon).
+app.post('/api/patients/:patientId/reports', async (req, res) => {
+  if (!PatientReport || !Assessment || !dbReady) return res.status(503).json({ error: 'DB not ready' });
+  const { patientId } = req.params;
+  const { reportType, assessmentId, language } = req.body;
+  if (reportType !== 'initial') {
+    return res.status(400).json({ error: 'Patient Report Phase 1 只支援 reportType "initial"' });
+  }
+  if (!assessmentId) return res.status(400).json({ error: '缺少 assessmentId' });
+  try {
+    const anchor = await Assessment.findOne({ _id: assessmentId, patientId }).lean();
+    if (!anchor) return res.status(404).json({ error: '找不到對應的評估記錄' });
+
+    const dto = await buildClinicalReportDTO({ patientId, reportType: 'initial', assessDate: anchor.date });
+    const doc = await PatientReport.create({
+      patientId,
+      reportType: 'initial',
+      assessmentId,
+      language: language || 'zh-TW',
+      dto,
+      narrativeText: '',
+      status: 'draft',
+      revisionNumber: 1,
+      parentReportId: null,
+    });
+    res.json({ report: doc, viewModel: buildReportViewModel(doc) });
+  } catch (err) {
+    console.error('generate patient report error:', err.message);
+    res.status(400).json({ error: err.message });
+  }
+});
+
+// GET /api/reports/:reportId — frozen dto + narrativeText + render-ready viewModel.
+app.get('/api/reports/:reportId', async (req, res) => {
+  if (!PatientReport || !dbReady) return res.status(503).json({ error: 'DB not ready' });
+  try {
+    const doc = await PatientReport.findById(req.params.reportId).lean();
+    if (!doc) return res.status(404).json({ error: '報告不存在' });
+    res.json({ report: doc, viewModel: buildReportViewModel(doc) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/reports/:reportId/review — draft -> reviewed. Locks the snapshot.
+app.post('/api/reports/:reportId/review', async (req, res) => {
+  if (!PatientReport || !dbReady) return res.status(503).json({ error: 'DB not ready' });
+  const { reviewedBy } = req.body;
+  if (!reviewedBy) return res.status(400).json({ error: '缺少 reviewedBy' });
+  try {
+    const doc = await PatientReport.findById(req.params.reportId);
+    if (!doc) return res.status(404).json({ error: '報告不存在' });
+    if (doc.status !== 'draft') {
+      return res.status(409).json({ error: `報告狀態為 ${doc.status}，僅 draft 可審核通過` });
+    }
+    doc.status = 'reviewed';
+    doc.reviewedByKarl = true;
+    doc.reviewedAt = new Date();
+    doc.reviewedBy = reviewedBy;
+    await doc.save();
+    res.json({ report: doc, viewModel: buildReportViewModel(doc) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// POST /api/reports/:reportId/release — reviewed -> released.
+app.post('/api/reports/:reportId/release', async (req, res) => {
+  if (!PatientReport || !dbReady) return res.status(503).json({ error: 'DB not ready' });
+  try {
+    const doc = await PatientReport.findById(req.params.reportId);
+    if (!doc) return res.status(404).json({ error: '報告不存在' });
+    if (doc.status !== 'reviewed') {
+      return res.status(409).json({ error: `報告狀態為 ${doc.status}，僅 reviewed 可標記釋出` });
+    }
+    doc.status = 'released';
+    doc.releasedAt = new Date();
+    await doc.save();
+    res.json({ report: doc, viewModel: buildReportViewModel(doc) });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
 
 // ===== START SERVER =====
 const keyPath  = path.join(__dirname, 'key.pem');
