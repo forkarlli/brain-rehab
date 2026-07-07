@@ -1213,6 +1213,41 @@ body {
   .content-area { padding: 0; }
 }
 
+/* ===== PATIENT REPORT (Phase 1: draft -> reviewed -> released) ===== */
+.report-draft-banner {
+  background: #fef3c7; color: #92400e; border: 1px solid #fcd34d;
+  border-radius: 6px; padding: 10px 14px; font-size: 13px; font-weight: 600;
+  margin-bottom: 12px;
+}
+.report-print-area { background: #fff; border: 1px solid var(--gray-200); border-radius: 8px; padding: 20px; }
+.report-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 12px; }
+.report-section-title {
+  font-size: 12px; font-weight: 700; letter-spacing: .5px; text-transform: uppercase;
+  color: var(--gray-600); margin: 16px 0 8px; padding-bottom: 4px; border-bottom: 1px solid var(--gray-200);
+}
+.report-kv-grid { display: grid; gap: 6px; font-size: 13px; }
+.report-tag-list { display: flex; flex-wrap: wrap; gap: 6px; }
+.report-disclaimer {
+  margin-top: 20px; padding-top: 12px; border-top: 1px solid var(--gray-200);
+  font-size: 11px; color: var(--gray-500);
+}
+
+/* window.print() is invoked while the patient detail modal is open — hide
+   everything except #reportPrintArea rather than relying on the modal's own
+   (non-print-aware) overlay/positioning. */
+@media print {
+  body.printing-report .sidebar,
+  body.printing-report .topbar,
+  body.printing-report .modal-header,
+  body.printing-report .detail-tabs,
+  body.printing-report .modal-overlay,
+  body.printing-report .report-draft-banner,
+  body.printing-report .report-actions { display: none !important; }
+  body.printing-report .modal { position: static; background: none; }
+  body.printing-report .modal-content { box-shadow: none; max-width: 100%; max-height: none; overflow: visible; }
+  body.printing-report .modal-body > *:not(#patientReportPreviewArea) { display: none !important; }
+}
+
 /* ===== PATIENT DETAIL MODAL ===== */
 .modal-xl { max-width: 860px; }
 

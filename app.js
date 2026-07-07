@@ -426,6 +426,8 @@ function handleImportFile(e) {
 let editingId = null;
 let currentDetailPatient = null;
 let currentGlobalPatientId = null;
+let _currentPatientReportId = null;
+let _currentPatientReportViewModel = null;
 
 // RightEye uploaded screenshots
 const RE_IMAGES = [];
@@ -908,7 +910,140 @@ function renderDetailTab(tab) {
           ${rx.notes?`<p style="font-size:11px;color:var(--gray-400);margin-top:8px">注意：${rx.notes}</p>`:''}
         </div>
       </div>`).join('') : '<p style="text-align:center;color:var(--gray-400);padding:40px;font-size:13px">尚無訓練處方</p>';
+  } else if (tab === 'patientReport') {
+    const options = ptAssess.map(a => `<option value="${a.id || a._id}">${formatDate(a.date)} ｜ ${a.type}</option>`).join('');
+    body.innerHTML = `
+      <div class="page-actions" style="margin-bottom:12px">
+        <select class="select" id="pr-assessment-select">${options || '<option value="">尚無評估記錄</option>'}</select>
+        <button class="btn btn-primary" onclick="generateInitialReport()" ${ptAssess.length ? '' : 'disabled'}>產生 Initial Report</button>
+      </div>
+      <div id="patientReportPreviewArea"></div>`;
+    _currentPatientReportId = null;
+    _currentPatientReportViewModel = null;
   }
+}
+
+// ===== Patient Report Phase 1 (draft -> reviewed -> released) =====
+// Narrative text is not LLM-generated yet (see server.js buildReportViewModel
+// comment) — the preview renders structured DTO facts via ReportViewModel.
+
+async function generateInitialReport() {
+  const patientId = currentDetailPatient;
+  const assessmentId = document.getElementById('pr-assessment-select')?.value;
+  if (!patientId || !assessmentId) { showToast('請先選擇一筆評估記錄', 'error'); return; }
+  try {
+    const res = await fetch(`/api/patients/${patientId}/reports`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reportType: 'initial', assessmentId, language: 'zh-TW' }),
+    });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || '產生報告失敗', 'error'); return; }
+    _currentPatientReportId = data.report._id;
+    renderPatientReportPreview(data.viewModel);
+    showToast('報告草稿已產生', 'success');
+  } catch (e) {
+    showToast('產生報告失敗：' + e.message, 'error');
+  }
+}
+
+async function reviewPatientReportNow() {
+  if (!_currentPatientReportId) return;
+  try {
+    const res = await fetch(`/api/reports/${_currentPatientReportId}/review`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ reviewedBy: 'Karl Li' }),
+    });
+    const data = await res.json();
+    if (!res.ok) { showToast(data.error || '審核失敗', 'error'); return; }
+    renderPatientReportPreview(data.viewModel);
+    showToast('報告已審核通過，可列印', 'success');
+  } catch (e) {
+    showToast('審核失敗：' + e.message, 'error');
+  }
+}
+
+// Print button doubles as the release trigger the first time it's used on a
+// freshly-reviewed report (packet §③ defines 'released' as "patient actually
+// received/exported it" — printing is that event). Re-printing an already
+// released report just reprints the same locked snapshot, no second release call.
+async function printPatientReport() {
+  if (!_currentPatientReportId || !_currentPatientReportViewModel?.printable) return;
+  try {
+    if (_currentPatientReportViewModel.status === 'reviewed') {
+      const res = await fetch(`/api/reports/${_currentPatientReportId}/release`, { method: 'POST' });
+      const data = await res.json();
+      if (!res.ok) { showToast(data.error || '標記釋出失敗', 'error'); return; }
+      renderPatientReportPreview(data.viewModel);
+    }
+    document.body.classList.add('printing-report');
+    window.print();
+  } catch (e) {
+    showToast('列印失敗：' + e.message, 'error');
+  }
+}
+window.addEventListener('afterprint', () => document.body.classList.remove('printing-report'));
+
+function _renderReportSection(sec) {
+  const title = `<div class="report-section-title">${sec.title}</div>`;
+  const kv = obj => Object.entries(obj || {}).filter(([, v]) => v !== null && v !== undefined)
+    .map(([k, v]) => `${k}=${typeof v === 'object' ? JSON.stringify(v) : v}`).join('、') || '—';
+
+  if (sec.kind === 'findings') {
+    return title + `<table class="data-table"><thead><tr><th>代碼</th><th>方向</th><th>結果</th></tr></thead><tbody>${
+      sec.findings.map(f => `<tr><td>${f.code}</td><td>${f.direction ?? '—'}</td><td>${f.result ?? '—'}</td></tr>`).join('')
+    }</tbody></table>`;
+  }
+  if (sec.kind === 'rightEye') {
+    const d = sec.data || {};
+    return title + `<div class="report-kv-grid">
+      ${d.saccadeLateralization?.value ? `<div>側性化：${kv(d.saccadeLateralization.value)}</div>` : ''}
+      ${d.smoothPursuitFindings?.value ? `<div>平順追視：${kv(d.smoothPursuitFindings.value)}</div>` : ''}
+      ${d.fixationFindings?.value ? `<div>固視/侵入：${kv(d.fixationFindings.value)}</div>` : ''}
+    </div>`;
+  }
+  if (sec.kind === 'bTracks') {
+    const d = sec.data || {};
+    return title + `<div class="report-kv-grid">
+      <div>Romberg Quotient：${d.romperbergQuotient ?? '—'}</div>
+      <div>偏移方向：${d.copSwayDirection ?? '—'}</div>
+    </div>`;
+  }
+  if (sec.kind === 'list') {
+    return title + `<div class="report-tag-list">${sec.items.map(i => `<span class="badge badge-info">${i}</span>`).join(' ')}</div>`;
+  }
+  if (sec.kind === 'narrativeHints') {
+    return title + `${sec.romberg ? `<p>${sec.romberg}</p>` : ''}${sec.eyeTracking ? `<p>${sec.eyeTracking}</p>` : ''}`;
+  }
+  // lesionProfile / severity: currently always skipped upstream (Handover B
+  // {implemented:false}) so this never renders in practice — kept for when
+  // Phase 2 Clinical Logic Design turns them back on.
+  return title + `<div>${JSON.stringify(sec.data)}</div>`;
+}
+
+function renderPatientReportPreview(vm) {
+  _currentPatientReportViewModel = vm;
+  const el = document.getElementById('patientReportPreviewArea');
+  if (!el) return;
+  const statusLabel = { draft: '草稿', reviewed: '已審核', released: '已釋出' }[vm.status] || vm.status;
+  const draftBanner = vm.isDraft
+    ? `<div class="report-draft-banner">⚠️ 草稿預覽，尚未完成臨床審核，請勿列印或交付病人。</div>` : '';
+
+  el.innerHTML = `
+    ${draftBanner}
+    <div id="reportPrintArea" class="report-print-area">
+      <div class="report-header">
+        <h3>BCF 臨床報告（初次評估）</h3>
+        <span class="status-badge">${statusLabel}${vm.revisionNumber > 1 ? ' · v' + vm.revisionNumber : ''}</span>
+      </div>
+      ${vm.sections.map(_renderReportSection).join('')}
+      ${!vm.isDraft && vm.disclaimer ? `<div class="report-disclaimer">${vm.disclaimer}</div>` : ''}
+    </div>
+    <div class="report-actions" style="margin-top:12px;display:flex;gap:8px">
+      ${vm.isDraft ? `<button class="btn btn-primary" onclick="reviewPatientReportNow()">✅ 審核通過</button>` : ''}
+      ${vm.printable ? `<button class="btn btn-outline" onclick="printPatientReport()">🖨️ 列印正式報告</button>` : ''}
+    </div>`;
 }
 
 function showAssessmentDetail(aid) {
