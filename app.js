@@ -1655,12 +1655,37 @@ const BRAIN_REGION_ALIASES = {
   'Oculomotor Vermis':           ['Oculomotor Vermis ↓', '眼動蚓部', 'Oculomotor Cerebellar Vermis'],
 };
 
+// P0-A schema (PM-approved, ChatGPT §⑦/⑩): only these two canonicals get a regionId.
+// Everything else stays regionId: null until a later phase extends the enum.
+const REGION_ID_MAP = {
+  'Bilateral Fastigial Nucleus': 'FASTIGIAL_NUCLEUS',
+  'Bilateral Dentate Nucleus':   'DENTATE_NUCLEUS',
+};
+
+// side is derived purely from the canonical label's side wording (Bilateral/Right/Left
+// prefix) — same convention already used by computeLaterality() below. No inference from
+// OD/OS, tested-eye, or field position (P0-A hard rule ③).
+function sideFromCanonical(canonical) {
+  if (canonical.startsWith('Bilateral ')) return 'BILATERAL';
+  if (canonical.startsWith('Right ') || canonical.includes(' Right ')) return 'RIGHT';
+  if (canonical.startsWith('Left ')  || canonical.includes(' Left '))  return 'LEFT';
+  return 'UNSPECIFIED';
+}
+
 function normalizeBrainRegion(name) {
   if (!name) return name;
-  for (const [canonical, aliases] of Object.entries(BRAIN_REGION_ALIASES)) {
-    if (name === canonical || aliases.includes(name)) return canonical;
+  let canonical = name;
+  for (const [c, aliases] of Object.entries(BRAIN_REGION_ALIASES)) {
+    if (name === c || aliases.includes(name)) { canonical = c; break; }
   }
-  return name;
+  return {
+    regionId: REGION_ID_MAP[canonical] ?? null,
+    side: sideFromCanonical(canonical),
+    subregion: 'UNSPECIFIED',
+    mechanismModel: null,
+    confidence: null,
+    legacyRegionLabel: canonical,
+  };
 }
 
 const BRAIN_REGION_RX = {
@@ -8716,7 +8741,7 @@ function computeConsistency(moduleOutputs) {
   function computeLaterality(weakRegions) {
     let leftCount = 0, rightCount = 0, bilateralCount = 0;
     for (const r of (weakRegions ?? [])) {
-      const name = normalizeBrainRegion(r.name);
+      const name = normalizeBrainRegion(r.name).legacyRegionLabel;
       if (name.startsWith('Left ') || name.includes(' Left ')) leftCount++;
       else if (name.startsWith('Right ') || name.includes(' Right ')) rightCount++;
       else bilateralCount++;
@@ -8764,7 +8789,7 @@ function computeConsistency(moduleOutputs) {
   for (const [mod, out] of Object.entries(moduleOutputs)) {
     if (!out || (out.weakRegions?.length ?? 0) === 0) continue;
     const s = new Set();
-    for (const r of out.weakRegions) s.add(getSideGroup(normalizeBrainRegion(r.name)));
+    for (const r of out.weakRegions) s.add(getSideGroup(normalizeBrainRegion(r.name).legacyRegionLabel));
     moduleGroupSets[mod] = s;
   }
   const groupMods = Object.keys(moduleGroupSets);
@@ -8778,7 +8803,7 @@ function computeConsistency(moduleOutputs) {
   const moduleSets = {};
   for (const [mod, out] of Object.entries(moduleOutputs)) {
     if (out && (out.abnormalCount ?? 0) > 0 && (out.weakRegions?.length ?? 0) > 0) {
-      moduleSets[mod] = new Set((out.weakRegions ?? []).map(r => normalizeBrainRegion(r.name)));
+      moduleSets[mod] = new Set((out.weakRegions ?? []).map(r => normalizeBrainRegion(r.name).legacyRegionLabel));
     }
   }
   const jMods = Object.keys(moduleSets);
@@ -8884,7 +8909,7 @@ function runIntegratedAnalysis(patientId) {
   for (const [mod, out] of Object.entries(moduleOutputs)) {
     if (!out) continue;
     for (const region of (out.weakRegions ?? [])) {
-      const canonical = normalizeBrainRegion(region.name);
+      const canonical = normalizeBrainRegion(region.name).legacyRegionLabel;
       if (!brainRegionMap[canonical]) {
         brainRegionMap[canonical] = { sources: [], confidence: 0, evidence: [] };
       }
@@ -8927,7 +8952,7 @@ function extractDomainRegions(moduleOutput, domain) {
   const targetList = domainRegions[domain] ?? [];
   return [...new Set(
     (moduleOutput?.weakRegions ?? [])
-      .map(r => normalizeBrainRegion(r.name))
+      .map(r => normalizeBrainRegion(r.name).legacyRegionLabel)
       .filter(canonical => targetList.some(t => canonical === t || canonical.includes(t) || t.includes(canonical)))
   )];
 }
