@@ -1,5 +1,5 @@
 # BCF White Paper
-Version: 1.0
+Version: 1.1
 Date: 2026-07-10
 Status: SSOT 首次落地版
 Governance: ChatGPT架構審 ✔ / Gemini獨立審 ✔ / PM(Karl)核准 ✔
@@ -85,12 +85,22 @@ mechanismModel 列舉：
   [ADOPT]  phenotype-first + lesion-level 雙模型
   [REJECT] 全系統單一「過早煞車模型」（原提案已撤回）
   [PURGE]  偽造引用「國立衛生研究院公共醫學中心」
+- v1.1 (2026-07-10) P0 alias normalization 落地
+  [FIX] 雙側齒狀核(dentate) 從 Fastigial alias 移除，
+        自成 Bilateral Dentate Nucleus canonical
+        （實測 normalize 確認不再誤映 Fastigial，4/4 通過）
+  [ADD] Fastigial alias 補齊：Fastigial / Fastigial Nucleus /
+        cFN / Fastigial Oculomotor Region
+        （app.js 另含 FOR；server.js 刻意省 FOR — 該表為
+        case-sensitive substring 掃描，全大寫 FOR 會誤命中）
+  commits: 5a693fc[app.js] / ae57d37[server.js]
+  deployed: /api/version = ae57d37 ✔
 
 ## Open Items（未解，實作前處理）
-- [BLOCK] Fastigial alias 正規化＝Hard Blocker
-  canonical: CAUDAL_FASTIGIAL_NUCLEUS
-  label: Caudal Fastigial Nucleus (FOR)
-  Fastigial/cFN/FOR 皆 alias，不新增獨立 region
+- [PARTIAL] Fastigial alias 已補齊(v1.1)；CAUDAL/單側
+  fastigial canonical 命名 scheme 退 P1（bilateral≠caudal、
+  白皮書需單側候選但現表僅 bilateral）由 ChatGPT 併 P1 設計
+- [RESOLVED v1.1] 雙側齒狀核→fastigial 誤映 已修
 - [CONFIRMED GAP] §3 雙候選/mechanismModel enum/CAUDAL_FASTIGIAL_NUCLEUS
   於 server.js 均未實作；現行 UNPAIRED 回 candidate:null 並轉
   saccade_diagnosis.json，undershoot 指向 FEF/BG/PPRF（非小腦）
