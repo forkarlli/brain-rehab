@@ -1648,8 +1648,10 @@ const BRAIN_REGION_ALIASES = {
   'Right Temporal Lobe':  ['右顳葉', 'Right Temporal', 'Right Temporal Cortex'],
   'Left Mes':                    ['左中腦', 'Left Mesencephalon'],
   'Right Mes':                   ['右中腦', 'Right Mesencephalon'],
-  // TODO: '雙側齒狀核' (bilateral dentate) ≠ fastigial — dentate 與 fastigial 是不同的小腦深部核，需拆開各自建立 canonical key
-  'Bilateral Fastigial Nucleus': ['Cerebellar Fastigial Nucleus', 'Bilateral Fastigial', 'Fastigial Nucleus（雙側）', '雙側齒狀核'],
+  // FIX (P0 2026-07-10): dentate split into its own canonical below — was
+  // mismapped as a Fastigial alias. See WHITE_PAPER.md Open Items (CAUDAL_FASTIGIAL_NUCLEUS).
+  'Bilateral Fastigial Nucleus': ['Cerebellar Fastigial Nucleus', 'Bilateral Fastigial', 'Fastigial Nucleus（雙側）', 'Fastigial', 'Fastigial Nucleus', 'cFN', 'FOR', 'Fastigial Oculomotor Region'],
+  'Bilateral Dentate Nucleus':   ['雙側齒狀核', 'Dentate Nucleus', 'Bilateral Dentate', 'Dentate'],
   'Oculomotor Vermis':           ['Oculomotor Vermis ↓', '眼動蚓部', 'Oculomotor Cerebellar Vermis'],
 };
 
