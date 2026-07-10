@@ -1,5 +1,5 @@
 # BCF White Paper
-Version: 1.1
+Version: 1.2
 Date: 2026-07-10
 Status: SSOT 首次落地版
 Governance: ChatGPT架構審 ✔ / Gemini獨立審 ✔ / PM(Karl)核准 ✔
@@ -95,6 +95,31 @@ mechanismModel 列舉：
         case-sensitive substring 掃描，全大寫 FOR 會誤命中）
   commits: 5a693fc[app.js] / ae57d37[server.js]
   deployed: /api/version = ae57d37 ✔
+- v1.2 (2026-07-10) P0-C CLOSED as no-op + FP contract
+  [NO-OP] P0-C 標記 ARCHITECTURALLY INAPPLICABLE
+    原因：BILATERAL_REGIONS.has() 對 fastigial 是 dead code
+    （真正放行的是 !REGION_SIDE_TYPE[r]）；且 fastigial
+    結構上不進 legacy form pipeline 的 affectedBrainRegions
+  [CONTRACT] 新增 FP-1/2/3 邊界契約：
+    FP-1 fastigial candidates（R/L/Bilateral/unspecified）
+      在 FORM_PIPELINE 整合前不得 merge 進 legacy form
+      pipeline 的 affectedBrainRegions
+    FP-2 intrusion/saccade 產生的 fastigial 候選只可進
+      analysis result / diagnostic DTO / narrative /
+      經核准的 EyeRx resolver；不得自動進 legacy 三函式
+    FP-3 若未來 fastigial 即將 merge 進 legacy form
+      pipeline → HARD STOP，須先完成 structured schema
+      接入 + side-aware resolver + 單側 Rx validation +
+      R1 regression + PM 核准
+  [TEST] contract test 固化（commit b5551bd）：
+    T-FP-A REGION_SIDE_TYPE 禁含 fastigial（static assertion，
+      未來若有人加入→測試失敗提示須先做 pipeline 整合）
+    T-FP-B fastigial 不進 legacy affectedBrainRegions
+      （source-contract 掃描，非 DOM 執行；mutation 驗證非 vacuous）
+    app.js 架構註解（commit c5e1776）：REGION_SIDE_TYPE 定義處
+  [FIX-DOC] P0-C recon 更正：saveBCFAssessment 為獨立
+    top-level async 函式（非早前描述的 nested closure）；
+    substantive finding（fastigial 到不了）不變
 
 ## Open Items（未解，實作前處理）
 - [PARTIAL] Fastigial alias 已補齊(v1.1)；CAUDAL/單側
@@ -106,6 +131,14 @@ mechanismModel 列舉：
   saccade_diagnosis.json，undershoot 指向 FEF/BG/PPRF（非小腦）
   → 與 §3.2 不一致。（recon 2026-07-10 確認，見下方 Verification Log）
 - [GATE] §1/§2 進實作前流程已過審；alias blocker 解除後才排
+- [OPEN] FORM_PIPELINE_STRUCTURED_REGION_INTEGRATION
+  = MAJOR ARCHITECTURE CHANGE。現存兩套 region 表示法
+  （analysis 線結構化 vs form 線純字串）。整合須保留
+  舊 assessment 可讀 / bilateral 行為 / side filtering /
+  Rx 字面值 / save-load round-trip / 臨床輸出 parity。
+  需 Gemini 獨立審。P0 後處理。
+- [STATUS] P0 進度：P0-A ✔ / P0-B ✔ / P0-C CLOSED(no-op) /
+  P0-D NEXT(recon) / P0-E pending / P0-F conditional
 
 ---
 
