@@ -1748,6 +1748,12 @@ const BRAIN_REGION_RX = {
 };
 
 // Classifies lateralized brain regions for the side-decision system
+// Fastigial is NOT governed by this legacy form-pipeline
+// side filter. Do NOT add Fastigial to REGION_SIDE_TYPE
+// without structured-region pipeline integration and
+// prescription regression review. (FP contract, P0-C recon)
+// Adding it would flip BILATERAL_REGIONS.has() from dead
+// code to an active gate — silent Rx behavior change.
 const REGION_SIDE_TYPE = {
   'Left FEF':   { side: 'left',  type: 'cortex' },
   'Right FEF':  { side: 'right', type: 'cortex' },
