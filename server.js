@@ -1258,7 +1258,16 @@ const REGION_ALIASES = {
   'Right Temporal Lobe':  ['右顳葉', 'Right Temporal', 'Right Temporal Cortex'],
   'Left Mes':             ['左中腦', 'Left Mesencephalon'],
   'Right Mes':            ['右中腦', 'Right Mesencephalon'],
-  'Bilateral Fastigial Nucleus': ['Cerebellar Fastigial Nucleus', 'Bilateral Fastigial', 'Fastigial Nucleus（雙側）', '雙側齒狀核'],
+  // FIX (P0 2026-07-10): dentate split into its own canonical below —
+  // was mismapped as a Fastigial alias.
+  // 'FOR' intentionally omitted (unlike app.js): this table is
+  // substring-scanned by validateNarrativeAgainstDTO() (case-SENSITIVE
+  // text.includes). Lowercase for/before/therefore do NOT collide,
+  // but a literal all-caps 'FOR' in generated narrative would
+  // false-flag a Fastigial mention. app.js carries 'FOR' because
+  // normalizeBrainRegion() does exact-key matching, not substring scan.
+  'Bilateral Fastigial Nucleus': ['Cerebellar Fastigial Nucleus', 'Bilateral Fastigial', 'Fastigial Nucleus（雙側）', 'Fastigial', 'Fastigial Nucleus', 'cFN', 'Fastigial Oculomotor Region'],
+  'Bilateral Dentate Nucleus':   ['雙側齒狀核', 'Dentate Nucleus', 'Bilateral Dentate', 'Dentate'],
   'Oculomotor Vermis':    ['Oculomotor Vermis ↓', '眼動蚓部', 'Oculomotor Cerebellar Vermis'],
 };
 
