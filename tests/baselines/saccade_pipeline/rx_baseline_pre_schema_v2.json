@@ -1,0 +1,956 @@
+{
+  "_meta": {
+    "purpose": "Golden baseline for the fastigial/dentate-triggered Rx pipeline (intrusion layer + cross-module normalization layer + EYERX/computeEyeMachineRx layer), frozen for R1+ regression comparison.",
+    "generated_from": "Runtime dump (real execution via Node vm), NOT a manual code trace. Source text extracted verbatim from the target commit via git show, not reimplemented.",
+    "source_commit": "0a27543 (= ddd14b4^, immediate parent of the P0-A commit ddd14b4). Confirmed byte-identical app.js blob back through 5a693fc/ae57d37 (SHA256 1dc7f95fd544a743df4d3bcbe30c18c1bda9e729f23a3aeda9d32ac9a5afe157).",
+    "p0a_commit": "ddd14b4 — normalizeBrainRegion returns structured object + legacyRegionLabel; Fastigial/Dentate regionId, others null. This baseline predates that commit and captures pre-P0-A/pre-schema behavior.",
+    "covered_layers": [
+      "Intrusion layer (computeRightEyeRx): S1-S4b — direct addRx generation from RightEye intrusion readings.",
+      "Cross-module normalization layer (runIntegratedAnalysis brainRegionMap loop, computeConsistency, extractDomainRegions): S5-S7 — normalizeBrainRegion() consumers, the layer P0-A actually changed.",
+      "EYERX/computeEyeMachineRx layer (EYERX_ALIASES expansion -> computeEyeMachineRx M1/M3/M4/M8 gates): eyerx_layer field inside each S5-S7 scenario — the layer P0-D is expected to change."
+    ],
+    "node_version": "v24.17.0",
+    "generated_at": "2026-07-10T23:11:02.703Z",
+    "rerun_command": "node tests/baselines/saccade_pipeline/harness/dump_baseline.js 0a27543",
+    "compare_command": "node tests/baselines/saccade_pipeline/harness/dump_baseline.js <ref-to-check> --compare tests/baselines/saccade_pipeline/rx_baseline_pre_schema_v2.json",
+    "expected_policy": "P0-C through P0-F must reproduce zero clinical diff against this baseline via the compare command above, unless a diff is explicitly approved by PM/ChatGPT as an intended behavior change for that phase.",
+    "anti_overwrite_clause": "This file must never be silently regenerated/overwritten by a test run. It is a frozen snapshot. Any intentional update requires a new PM-approved packet, a new commit, and a fresh SHA-256 recorded in the README — never an in-place overwrite.",
+    "supersedes": "rx_baseline_pre_schema.json (manual code-trace baseline, kept only as historical reference in scratchpad, not committed to repo) and rx_baseline_pre_schema_v2_executed.json (early runtime-dump draft, superseded by this consolidated-harness version — see README for the two corrections found along the way: a missing generic M1 addRx entry in the manual trace, later confirmed present via real execution)."
+  },
+  "rx_scenarios": {
+    "S1_intrusion_horizontal_large": {
+      "input": {
+        "spH": null,
+        "spV": null,
+        "spC": null,
+        "eso": null,
+        "svH": null,
+        "svV": null,
+        "syncH": null,
+        "syncV": null,
+        "intrusion": "horizontal",
+        "intrusionAmp": "大",
+        "intrusionType": "saccadic",
+        "pldRight": null,
+        "pldLeft": null,
+        "orthRight": null,
+        "orthLeft": null,
+        "svRight": null,
+        "svLeft": null,
+        "svUp": null,
+        "svDown": null,
+        "spHRight": null,
+        "spHLeft": null,
+        "hTotal": 0,
+        "hOverR": 0,
+        "hUnderR": 0,
+        "hMissedR": 0,
+        "hOverL": 0,
+        "hUnderL": 0,
+        "hMissedL": 0,
+        "vTotal": 0,
+        "vOverR": 0,
+        "vUnderR": 0,
+        "vMissedR": 0,
+        "vOverL": 0,
+        "vUnderL": 0,
+        "vMissedL": 0,
+        "hOverRGrade": null,
+        "hUnderRGrade": null,
+        "hOverLGrade": null,
+        "hUnderLGrade": null,
+        "vpLateralDrift": null,
+        "vsLateralDrift": null,
+        "latOD": null,
+        "latOS": null,
+        "saccDirResults": [],
+        "saccDirConfidence": null
+      },
+      "intrusion_indicator": {
+        "label": "Intrusion",
+        "status": "severe",
+        "value": "Horizontal（水平）｜大振幅｜掃視侵入",
+        "brain": [
+          "CB Flocculus",
+          "Superior Colliculus",
+          "Bilateral Fastigial Nucleus",
+          "BG"
+        ],
+        "note": "CB Flocculus掃視抑制弱化 + SC過度放電 — 建議 Gaze Holding + Stare OPK；Bilateral Fastigial Nucleus/BG抑制喪失 ⚠️"
+      },
+      "rx": [
+        {
+          "mode": "M2",
+          "name": "Saccade左右（SC/Flocculus抑制）",
+          "angle": "R90/L90（Horizontal Intrusion）",
+          "speed": "S3",
+          "dist": "D3",
+          "reps": "15",
+          "target": "有",
+          "bg": "空白背板",
+          "notes": [
+            "RightEye: Horizontal Intrusion → CB Flocculus掃視抑制弱化 + SC過度放電"
+          ],
+          "priority": 2
+        },
+        {
+          "mode": "M1",
+          "name": "Gaze Holding固視保持",
+          "angle": "0°（Flocculus抑制重建）",
+          "speed": "S1",
+          "dist": "D2",
+          "reps": "20",
+          "target": "有（點狀小目標）",
+          "bg": "空白背板",
+          "notes": [
+            "建議優先 Gaze Holding 凝視保持訓練，重新建立 Flocculus 對掃視發射器的抑制；可加入 Stare OPK 減少中腦過度徵召"
+          ],
+          "priority": 2
+        },
+        {
+          "mode": "M7",
+          "name": "複合Saccade交叉整合",
+          "angle": "R45/L45（Bilateral Fastigial Nucleus/BG）",
+          "speed": "S4",
+          "dist": "D4",
+          "reps": "10",
+          "target": "有",
+          "bg": "空白背板",
+          "notes": [
+            "Intrusion振幅大 → Bilateral Fastigial Nucleus + BG 注視抑制嚴重喪失 — 交叉整合訓練（M7）"
+          ],
+          "priority": 2
+        },
+        {
+          "mode": "M1",
+          "name": "Pursuit均速",
+          "angle": "0°（固視穩定訓練）",
+          "speed": "S1",
+          "dist": "D3",
+          "reps": "15",
+          "target": "有（小目標）",
+          "bg": "空白背板",
+          "notes": [
+            "RightEye: Intrusion/Sync低 → 固視穩定訓練"
+          ],
+          "priority": 3
+        }
+      ]
+    },
+    "S2_intrusion_up_large": {
+      "input": {
+        "spH": null,
+        "spV": null,
+        "spC": null,
+        "eso": null,
+        "svH": null,
+        "svV": null,
+        "syncH": null,
+        "syncV": null,
+        "intrusion": "up",
+        "intrusionAmp": "大",
+        "intrusionType": null,
+        "pldRight": null,
+        "pldLeft": null,
+        "orthRight": null,
+        "orthLeft": null,
+        "svRight": null,
+        "svLeft": null,
+        "svUp": null,
+        "svDown": null,
+        "spHRight": null,
+        "spHLeft": null,
+        "hTotal": 0,
+        "hOverR": 0,
+        "hUnderR": 0,
+        "hMissedR": 0,
+        "hOverL": 0,
+        "hUnderL": 0,
+        "hMissedL": 0,
+        "vTotal": 0,
+        "vOverR": 0,
+        "vUnderR": 0,
+        "vMissedR": 0,
+        "vOverL": 0,
+        "vUnderL": 0,
+        "vMissedL": 0,
+        "hOverRGrade": null,
+        "hUnderRGrade": null,
+        "hOverLGrade": null,
+        "hUnderLGrade": null,
+        "vpLateralDrift": null,
+        "vsLateralDrift": null,
+        "latOD": null,
+        "latOS": null,
+        "saccDirResults": [],
+        "saccDirConfidence": null
+      },
+      "intrusion_indicator": {
+        "label": "Intrusion",
+        "status": "severe",
+        "value": "Up（向上）｜大振幅",
+        "brain": [
+          "Midbrain",
+          "CB Flocculus",
+          "Bilateral Fastigial Nucleus",
+          "BG"
+        ],
+        "note": "INC/中腦垂直整合中樞失能 — 建議 Vertical Anti-Saccade + Gaze Holding；Bilateral Fastigial Nucleus/BG抑制喪失 ⚠️"
+      },
+      "rx": [
+        {
+          "mode": "M3",
+          "name": "Saccade↓+Pursuit↑",
+          "angle": "R0/L0（垂直Intrusion-Midbrain/INC）",
+          "speed": "S3",
+          "dist": "D3",
+          "reps": "15",
+          "target": "有",
+          "bg": "空白背板",
+          "notes": [
+            "RightEye: Up Intrusion → Midbrain INC/CB Flocculus失能",
+            "建議加入 Vertical Anti-Saccade 訓練，提升中腦對垂直眼球移動的煞車力"
+          ],
+          "priority": 2
+        },
+        {
+          "mode": "M1",
+          "name": "Gaze Holding固視保持",
+          "angle": "0°（Flocculus抑制重建）",
+          "speed": "S1",
+          "dist": "D2",
+          "reps": "20",
+          "target": "有（點狀小目標）",
+          "bg": "空白背板",
+          "notes": [
+            "建議優先 Gaze Holding 凝視保持訓練，重新建立 Flocculus 對掃視發射器的抑制；可加入 Stare OPK 減少中腦過度徵召"
+          ],
+          "priority": 2
+        },
+        {
+          "mode": "M7",
+          "name": "複合Saccade交叉整合",
+          "angle": "R45/L45（Bilateral Fastigial Nucleus/BG）",
+          "speed": "S4",
+          "dist": "D4",
+          "reps": "10",
+          "target": "有",
+          "bg": "空白背板",
+          "notes": [
+            "Intrusion振幅大 → Bilateral Fastigial Nucleus + BG 注視抑制嚴重喪失 — 交叉整合訓練（M7）"
+          ],
+          "priority": 2
+        },
+        {
+          "mode": "M1",
+          "name": "Pursuit均速",
+          "angle": "0°（固視穩定訓練）",
+          "speed": "S1",
+          "dist": "D3",
+          "reps": "15",
+          "target": "有（小目標）",
+          "bg": "空白背板",
+          "notes": [
+            "RightEye: Intrusion/Sync低 → 固視穩定訓練"
+          ],
+          "priority": 3
+        }
+      ]
+    },
+    "S3_intrusion_down_large": {
+      "input": {
+        "spH": null,
+        "spV": null,
+        "spC": null,
+        "eso": null,
+        "svH": null,
+        "svV": null,
+        "syncH": null,
+        "syncV": null,
+        "intrusion": "down",
+        "intrusionAmp": "大",
+        "intrusionType": null,
+        "pldRight": null,
+        "pldLeft": null,
+        "orthRight": null,
+        "orthLeft": null,
+        "svRight": null,
+        "svLeft": null,
+        "svUp": null,
+        "svDown": null,
+        "spHRight": null,
+        "spHLeft": null,
+        "hTotal": 0,
+        "hOverR": 0,
+        "hUnderR": 0,
+        "hMissedR": 0,
+        "hOverL": 0,
+        "hUnderL": 0,
+        "hMissedL": 0,
+        "vTotal": 0,
+        "vOverR": 0,
+        "vUnderR": 0,
+        "vMissedR": 0,
+        "vOverL": 0,
+        "vUnderL": 0,
+        "vMissedL": 0,
+        "hOverRGrade": null,
+        "hUnderRGrade": null,
+        "hOverLGrade": null,
+        "hUnderLGrade": null,
+        "vpLateralDrift": null,
+        "vsLateralDrift": null,
+        "latOD": null,
+        "latOS": null,
+        "saccDirResults": [],
+        "saccDirConfidence": null
+      },
+      "intrusion_indicator": {
+        "label": "Intrusion",
+        "status": "severe",
+        "value": "Down（向下）｜大振幅",
+        "brain": [
+          "Midbrain",
+          "CB Flocculus",
+          "Bilateral Fastigial Nucleus",
+          "BG"
+        ],
+        "note": "INC/中腦垂直整合中樞失能 — 建議 Vertical Anti-Saccade + Gaze Holding；Bilateral Fastigial Nucleus/BG抑制喪失 ⚠️"
+      },
+      "rx": [
+        {
+          "mode": "M4",
+          "name": "Saccade↑+Pursuit↓",
+          "angle": "R0/L0（垂直Intrusion-Midbrain/INC）",
+          "speed": "S3",
+          "dist": "D3",
+          "reps": "15",
+          "target": "有",
+          "bg": "空白背板",
+          "notes": [
+            "RightEye: Down Intrusion → Midbrain INC/CB Flocculus失能",
+            "建議加入 Vertical Anti-Saccade 訓練，提升中腦對垂直眼球移動的煞車力"
+          ],
+          "priority": 2
+        },
+        {
+          "mode": "M1",
+          "name": "Gaze Holding固視保持",
+          "angle": "0°（Flocculus抑制重建）",
+          "speed": "S1",
+          "dist": "D2",
+          "reps": "20",
+          "target": "有（點狀小目標）",
+          "bg": "空白背板",
+          "notes": [
+            "建議優先 Gaze Holding 凝視保持訓練，重新建立 Flocculus 對掃視發射器的抑制；可加入 Stare OPK 減少中腦過度徵召"
+          ],
+          "priority": 2
+        },
+        {
+          "mode": "M7",
+          "name": "複合Saccade交叉整合",
+          "angle": "R45/L45（Bilateral Fastigial Nucleus/BG）",
+          "speed": "S4",
+          "dist": "D4",
+          "reps": "10",
+          "target": "有",
+          "bg": "空白背板",
+          "notes": [
+            "Intrusion振幅大 → Bilateral Fastigial Nucleus + BG 注視抑制嚴重喪失 — 交叉整合訓練（M7）"
+          ],
+          "priority": 2
+        },
+        {
+          "mode": "M1",
+          "name": "Pursuit均速",
+          "angle": "0°（固視穩定訓練）",
+          "speed": "S1",
+          "dist": "D3",
+          "reps": "15",
+          "target": "有（小目標）",
+          "bg": "空白背板",
+          "notes": [
+            "RightEye: Intrusion/Sync低 → 固視穩定訓練"
+          ],
+          "priority": 3
+        }
+      ]
+    },
+    "S4a_intrusion_horizontal_small": {
+      "input": {
+        "spH": null,
+        "spV": null,
+        "spC": null,
+        "eso": null,
+        "svH": null,
+        "svV": null,
+        "syncH": null,
+        "syncV": null,
+        "intrusion": "horizontal",
+        "intrusionAmp": "小",
+        "intrusionType": null,
+        "pldRight": null,
+        "pldLeft": null,
+        "orthRight": null,
+        "orthLeft": null,
+        "svRight": null,
+        "svLeft": null,
+        "svUp": null,
+        "svDown": null,
+        "spHRight": null,
+        "spHLeft": null,
+        "hTotal": 0,
+        "hOverR": 0,
+        "hUnderR": 0,
+        "hMissedR": 0,
+        "hOverL": 0,
+        "hUnderL": 0,
+        "hMissedL": 0,
+        "vTotal": 0,
+        "vOverR": 0,
+        "vUnderR": 0,
+        "vMissedR": 0,
+        "vOverL": 0,
+        "vUnderL": 0,
+        "vMissedL": 0,
+        "hOverRGrade": null,
+        "hUnderRGrade": null,
+        "hOverLGrade": null,
+        "hUnderLGrade": null,
+        "vpLateralDrift": null,
+        "vsLateralDrift": null,
+        "latOD": null,
+        "latOS": null,
+        "saccDirResults": [],
+        "saccDirConfidence": null
+      },
+      "intrusion_indicator": {
+        "label": "Intrusion",
+        "status": "mild",
+        "value": "Horizontal（水平）｜小振幅",
+        "brain": [
+          "CB Flocculus",
+          "Superior Colliculus"
+        ],
+        "note": "CB Flocculus掃視抑制弱化 + SC過度放電 — 建議 Gaze Holding + Stare OPK"
+      },
+      "rx": [
+        {
+          "mode": "M2",
+          "name": "Saccade左右（SC/Flocculus抑制）",
+          "angle": "R90/L90（Horizontal Intrusion）",
+          "speed": "S3",
+          "dist": "D3",
+          "reps": "15",
+          "target": "有",
+          "bg": "空白背板",
+          "notes": [
+            "RightEye: Horizontal Intrusion → CB Flocculus掃視抑制弱化 + SC過度放電"
+          ],
+          "priority": 2
+        },
+        {
+          "mode": "M1",
+          "name": "Gaze Holding固視保持",
+          "angle": "0°（Flocculus抑制重建）",
+          "speed": "S1",
+          "dist": "D2",
+          "reps": "20",
+          "target": "有（點狀小目標）",
+          "bg": "空白背板",
+          "notes": [
+            "建議優先 Gaze Holding 凝視保持訓練，重新建立 Flocculus 對掃視發射器的抑制；可加入 Stare OPK 減少中腦過度徵召"
+          ],
+          "priority": 2
+        },
+        {
+          "mode": "M1",
+          "name": "Pursuit均速",
+          "angle": "0°（固視穩定訓練）",
+          "speed": "S1",
+          "dist": "D3",
+          "reps": "15",
+          "target": "有（小目標）",
+          "bg": "空白背板",
+          "notes": [
+            "RightEye: Intrusion/Sync低 → 固視穩定訓練"
+          ],
+          "priority": 3
+        }
+      ]
+    },
+    "S4b_intrusion_horizontal_medium": {
+      "input": {
+        "spH": null,
+        "spV": null,
+        "spC": null,
+        "eso": null,
+        "svH": null,
+        "svV": null,
+        "syncH": null,
+        "syncV": null,
+        "intrusion": "horizontal",
+        "intrusionAmp": "中",
+        "intrusionType": null,
+        "pldRight": null,
+        "pldLeft": null,
+        "orthRight": null,
+        "orthLeft": null,
+        "svRight": null,
+        "svLeft": null,
+        "svUp": null,
+        "svDown": null,
+        "spHRight": null,
+        "spHLeft": null,
+        "hTotal": 0,
+        "hOverR": 0,
+        "hUnderR": 0,
+        "hMissedR": 0,
+        "hOverL": 0,
+        "hUnderL": 0,
+        "hMissedL": 0,
+        "vTotal": 0,
+        "vOverR": 0,
+        "vUnderR": 0,
+        "vMissedR": 0,
+        "vOverL": 0,
+        "vUnderL": 0,
+        "vMissedL": 0,
+        "hOverRGrade": null,
+        "hUnderRGrade": null,
+        "hOverLGrade": null,
+        "hUnderLGrade": null,
+        "vpLateralDrift": null,
+        "vsLateralDrift": null,
+        "latOD": null,
+        "latOS": null,
+        "saccDirResults": [],
+        "saccDirConfidence": null
+      },
+      "intrusion_indicator": {
+        "label": "Intrusion",
+        "status": "moderate",
+        "value": "Horizontal（水平）｜中振幅",
+        "brain": [
+          "CB Flocculus",
+          "Superior Colliculus"
+        ],
+        "note": "CB Flocculus掃視抑制弱化 + SC過度放電 — 建議 Gaze Holding + Stare OPK"
+      },
+      "rx": [
+        {
+          "mode": "M2",
+          "name": "Saccade左右（SC/Flocculus抑制）",
+          "angle": "R90/L90（Horizontal Intrusion）",
+          "speed": "S3",
+          "dist": "D3",
+          "reps": "15",
+          "target": "有",
+          "bg": "空白背板",
+          "notes": [
+            "RightEye: Horizontal Intrusion → CB Flocculus掃視抑制弱化 + SC過度放電"
+          ],
+          "priority": 2
+        },
+        {
+          "mode": "M1",
+          "name": "Gaze Holding固視保持",
+          "angle": "0°（Flocculus抑制重建）",
+          "speed": "S1",
+          "dist": "D2",
+          "reps": "20",
+          "target": "有（點狀小目標）",
+          "bg": "空白背板",
+          "notes": [
+            "建議優先 Gaze Holding 凝視保持訓練，重新建立 Flocculus 對掃視發射器的抑制；可加入 Stare OPK 減少中腦過度徵召"
+          ],
+          "priority": 2
+        },
+        {
+          "mode": "M1",
+          "name": "Pursuit均速",
+          "angle": "0°（固視穩定訓練）",
+          "speed": "S1",
+          "dist": "D3",
+          "reps": "15",
+          "target": "有（小目標）",
+          "bg": "空白背板",
+          "notes": [
+            "RightEye: Intrusion/Sync低 → 固視穩定訓練"
+          ],
+          "priority": 3
+        }
+      ]
+    }
+  },
+  "integration_scenarios": {
+    "S5_fastigial_non_intrusion": {
+      "input": {
+        "balance": null,
+        "muscle": {
+          "abnormalCount": 1,
+          "weakRegions": [
+            {
+              "name": "Fastigial",
+              "evidence": "muscle-test derived, non-intrusion source"
+            }
+          ]
+        },
+        "rightEye": null
+      },
+      "brainRegionMap": {
+        "Bilateral Fastigial Nucleus": {
+          "sources": [
+            "muscle"
+          ],
+          "confidence": 1,
+          "evidence": [
+            "muscle-test derived, non-intrusion source"
+          ]
+        }
+      },
+      "consistency": {
+        "pct": 0,
+        "laterality": {
+          "pct": 0,
+          "status": "insufficient",
+          "detail": "有效模組不足",
+          "perModule": {
+            "muscle": {
+              "dominantSide": "bilateral",
+              "leftPct": 0,
+              "rightPct": 0,
+              "leftPctAll": 0,
+              "rightPctAll": 0,
+              "leftCount": 0,
+              "rightCount": 0,
+              "bilateralCount": 1
+            }
+          }
+        },
+        "neuralGroup": {
+          "pct": 0,
+          "sharedGroups": [],
+          "totalGroups": [
+            "其他"
+          ]
+        },
+        "jaccard": {
+          "pct": 0,
+          "pairs": []
+        },
+        "validMods": [
+          "muscle"
+        ]
+      },
+      "domain_vertical_from_muscle": [
+        "Bilateral Fastigial Nucleus"
+      ],
+      "domain_vertical_from_rightEye": [],
+      "eyerx_layer": {
+        "seed_regions_from_brainRegionMap": [
+          "Bilateral Fastigial Nucleus"
+        ],
+        "affectedBrainRegions_after_EYERX_expansion": [
+          "Bilateral Fastigial Nucleus",
+          "Right CB",
+          "Left CB"
+        ],
+        "affectedItems_used": [
+          {
+            "code": "E7",
+            "type": "眼動機"
+          },
+          {
+            "code": "E8",
+            "type": "眼動機"
+          }
+        ],
+        "computeEyeMachineRx_rec": [
+          {
+            "mode": "M1",
+            "name": "Pursuit均速",
+            "angle": "90°（垂直）",
+            "speed": "S3",
+            "dist": "D1–6（可調）",
+            "reps": "15",
+            "target": "有",
+            "bg": "空白背板",
+            "notes": []
+          },
+          {
+            "mode": "M3",
+            "name": "Saccade↓+Pursuit↑",
+            "angle": "R0/L0（上下，雙側）",
+            "speed": "S3",
+            "dist": "D3",
+            "reps": "15",
+            "target": "有",
+            "bg": "空白背板",
+            "notes": []
+          },
+          {
+            "mode": "M4",
+            "name": "Saccade↑+Pursuit↓",
+            "angle": "R45/L45（雙側 CB）",
+            "speed": "S3",
+            "dist": "D3",
+            "reps": "15",
+            "target": "有",
+            "bg": "空白背板",
+            "notes": []
+          }
+        ]
+      }
+    },
+    "S6_dentate_alone": {
+      "input": {
+        "balance": null,
+        "muscle": {
+          "abnormalCount": 1,
+          "weakRegions": [
+            {
+              "name": "雙側齒狀核",
+              "evidence": "muscle-test derived"
+            }
+          ]
+        },
+        "rightEye": null
+      },
+      "brainRegionMap": {
+        "Bilateral Dentate Nucleus": {
+          "sources": [
+            "muscle"
+          ],
+          "confidence": 1,
+          "evidence": [
+            "muscle-test derived"
+          ]
+        }
+      },
+      "consistency": {
+        "pct": 0,
+        "laterality": {
+          "pct": 0,
+          "status": "insufficient",
+          "detail": "有效模組不足",
+          "perModule": {
+            "muscle": {
+              "dominantSide": "bilateral",
+              "leftPct": 0,
+              "rightPct": 0,
+              "leftPctAll": 0,
+              "rightPctAll": 0,
+              "leftCount": 0,
+              "rightCount": 0,
+              "bilateralCount": 1
+            }
+          }
+        },
+        "neuralGroup": {
+          "pct": 0,
+          "sharedGroups": [],
+          "totalGroups": [
+            "其他"
+          ]
+        },
+        "jaccard": {
+          "pct": 0,
+          "pairs": []
+        },
+        "validMods": [
+          "muscle"
+        ]
+      },
+      "domain_vertical_from_muscle": [],
+      "domain_vertical_from_rightEye": [],
+      "eyerx_layer": {
+        "seed_regions_from_brainRegionMap": [
+          "Bilateral Dentate Nucleus"
+        ],
+        "affectedBrainRegions_after_EYERX_expansion": [
+          "Bilateral Dentate Nucleus"
+        ],
+        "affectedItems_used": [
+          {
+            "code": "E7",
+            "type": "眼動機"
+          },
+          {
+            "code": "E8",
+            "type": "眼動機"
+          }
+        ],
+        "computeEyeMachineRx_rec": [
+          {
+            "mode": "M1",
+            "name": "Pursuit均速",
+            "angle": "90°（垂直）",
+            "speed": "S3",
+            "dist": "D1–6（可調）",
+            "reps": "15",
+            "target": "有",
+            "bg": "空白背板",
+            "notes": []
+          }
+        ]
+      }
+    },
+    "S7_mixed_cross_module": {
+      "input": {
+        "balance": null,
+        "muscle": {
+          "abnormalCount": 1,
+          "weakRegions": [
+            {
+              "name": "Bilateral Fastigial Nucleus",
+              "evidence": "m"
+            }
+          ]
+        },
+        "rightEye": {
+          "abnormalCount": 1,
+          "weakRegions": [
+            {
+              "name": "FOR",
+              "evidence": "re"
+            }
+          ]
+        }
+      },
+      "brainRegionMap": {
+        "Bilateral Fastigial Nucleus": {
+          "sources": [
+            "muscle",
+            "rightEye"
+          ],
+          "confidence": 1,
+          "evidence": [
+            "m",
+            "re"
+          ]
+        }
+      },
+      "consistency": {
+        "pct": 75,
+        "laterality": {
+          "pct": 50,
+          "status": "partial",
+          "detail": "⚠️ 部分一致：含雙側模組",
+          "perModule": {
+            "muscle": {
+              "dominantSide": "bilateral",
+              "leftPct": 0,
+              "rightPct": 0,
+              "leftPctAll": 0,
+              "rightPctAll": 0,
+              "leftCount": 0,
+              "rightCount": 0,
+              "bilateralCount": 1
+            },
+            "rightEye": {
+              "dominantSide": "bilateral",
+              "leftPct": 0,
+              "rightPct": 0,
+              "leftPctAll": 0,
+              "rightPctAll": 0,
+              "leftCount": 0,
+              "rightCount": 0,
+              "bilateralCount": 1
+            }
+          }
+        },
+        "neuralGroup": {
+          "pct": 100,
+          "sharedGroups": [
+            "其他"
+          ],
+          "totalGroups": [
+            "其他"
+          ]
+        },
+        "jaccard": {
+          "pct": 100,
+          "pairs": [
+            {
+              "modA": "muscle",
+              "modB": "rightEye",
+              "intersection": [
+                "Bilateral Fastigial Nucleus"
+              ],
+              "intersectionCount": 1,
+              "unionCount": 1,
+              "jaccard": 100
+            }
+          ]
+        },
+        "validMods": [
+          "muscle",
+          "rightEye"
+        ]
+      },
+      "domain_vertical_from_muscle": [
+        "Bilateral Fastigial Nucleus"
+      ],
+      "domain_vertical_from_rightEye": [
+        "Bilateral Fastigial Nucleus"
+      ],
+      "eyerx_layer": {
+        "seed_regions_from_brainRegionMap": [
+          "Bilateral Fastigial Nucleus"
+        ],
+        "affectedBrainRegions_after_EYERX_expansion": [
+          "Bilateral Fastigial Nucleus",
+          "Right CB",
+          "Left CB"
+        ],
+        "affectedItems_used": [
+          {
+            "code": "E7",
+            "type": "眼動機"
+          },
+          {
+            "code": "E8",
+            "type": "眼動機"
+          }
+        ],
+        "computeEyeMachineRx_rec": [
+          {
+            "mode": "M1",
+            "name": "Pursuit均速",
+            "angle": "90°（垂直）",
+            "speed": "S3",
+            "dist": "D1–6（可調）",
+            "reps": "15",
+            "target": "有",
+            "bg": "空白背板",
+            "notes": []
+          },
+          {
+            "mode": "M3",
+            "name": "Saccade↓+Pursuit↑",
+            "angle": "R0/L0（上下，雙側）",
+            "speed": "S3",
+            "dist": "D3",
+            "reps": "15",
+            "target": "有",
+            "bg": "空白背板",
+            "notes": []
+          },
+          {
+            "mode": "M4",
+            "name": "Saccade↑+Pursuit↓",
+            "angle": "R45/L45（雙側 CB）",
+            "speed": "S3",
+            "dist": "D3",
+            "reps": "15",
+            "target": "有",
+            "bg": "空白背板",
+            "notes": []
+          }
+        ]
+      }
+    }
+  }
+}
