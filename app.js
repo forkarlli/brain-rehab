@@ -4631,47 +4631,14 @@ function computeCrossValidation(reData, affectedItems, activeMCodes) {
 }
 
 function renderCrossValidationSection({ checks, consistent, total, pct, supplements }) {
-  const scoreColor = pct >= 80 ? '#16a34a' : pct >= 60 ? '#d97706' : '#dc2626';
-  const scoreBg    = pct >= 80 ? '#f0fdf4'  : pct >= 60 ? '#fffbeb'  : '#fef2f2';
-  const scoreLabel = pct >= 80 ? '高度一致'  : pct >= 60 ? '部分一致'  : '需進一步評估';
-
-  const checkRows = checks.map(c => `
-    <tr style="background:${c.consistent ? 'transparent' : '#fff7ed'}">
-      <td><strong style="font-size:12px">${c.label}</strong></td>
-      <td style="font-size:12px;color:var(--gray-700)">${c.re}</td>
-      <td style="font-size:12px;color:var(--gray-700)">${c.bcf}</td>
-      <td style="white-space:nowrap;font-size:13px;font-weight:700;color:${c.consistent ? '#16a34a' : '#d97706'}">${c.message}</td>
-      <td style="font-size:11px;color:${c.consistent ? 'var(--gray-500)' : '#ea580c'};line-height:1.5">${c.detail}</td>
-    </tr>`).join('');
-
-  const supplementHTML = supplements.length > 0 ? `
-    <div style="margin-top:12px;padding:12px 14px;background:#fff7ed;border-left:4px solid #f97316;border-radius:6px">
-      <div style="font-size:12px;font-weight:700;color:#c2410c;margin-bottom:8px">🔍 RightEye 補充發現（BCF 未偵測到）</div>
-      ${supplements.map(s => `
-        <div style="margin-bottom:6px;font-size:12px;line-height:1.6">
-          <span style="color:#ea580c;font-weight:600">▸ ${s.label}</span><br>
-          <span style="color:#9a3412;padding-left:14px;display:inline-block">${s.desc}</span>
-        </div>`).join('')}
-    </div>` : '';
-
   return `
     <div class="bcf-result-section" style="border-left:4px solid #8b5cf6">
-      <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;flex-wrap:wrap">
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:4px;flex-wrap:wrap">
         <h4 style="margin:0">🔗 跨系統一致性驗證</h4>
-        <div style="padding:5px 14px;background:${scoreBg};border-radius:20px;border:1px solid ${scoreColor}60">
-          <span style="font-size:13px;font-weight:700;color:${scoreColor}">${consistent} / ${total} 項一致</span>
-          <span style="font-size:12px;color:${scoreColor};margin-left:6px">（${pct}%・${scoreLabel}）</span>
-        </div>
       </div>
-      <div style="overflow-x:auto">
-        <table class="data-table" style="margin:0;font-size:12px">
-          <thead>
-            <tr><th>驗證項目</th><th>RightEye 數值</th><th>BCF 結果</th><th>一致性</th><th>臨床提示</th></tr>
-          </thead>
-          <tbody>${checkRows}</tbody>
-        </table>
+      <div style="padding:10px 14px;background:#f9fafb;border-left:4px solid #9ca3af;border-radius:6px;font-size:12px;color:var(--gray-600)">
+        跨系統一致性指標校準中——原計算在資料不完整時可能高估，已暫停顯示，俟修正後重新啟用。
       </div>
-      ${supplementHTML}
     </div>`;
 }
 
