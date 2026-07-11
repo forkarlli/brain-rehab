@@ -1,5 +1,5 @@
 # BCF White Paper
-Version: 1.2
+Version: 1.3
 Date: 2026-07-10
 Status: SSOT 首次落地版
 Governance: ChatGPT架構審 ✔ / Gemini獨立審 ✔ / PM(Karl)核准 ✔
@@ -120,6 +120,19 @@ mechanismModel 列舉：
   [FIX-DOC] P0-C recon 更正：saveBCFAssessment 為獨立
     top-level async 函式（非早前描述的 nested closure）；
     substantive finding（fastigial 到不了）不變
+- v1.3 (2026-07-10) P0-D/E 收尾 + open items
+  [CLOSED] P0-D1 bilateral fastigial EyeRx 既有行為
+    （Bilateral Fastigial Nucleus → ['Right CB','Left CB']）
+    baseline v2 S5/S7 覆蓋、--compare 8/8 驗證
+  [CLOSED] P0-E Rx literal 相容：已被 P0-A baseline 吸收，
+    5 個 fastigial 字面值（intrusion 指標 brain/note、
+    M7 addRx、vertical domain bucket）全在 S1/S2/S3/S5/S6/S7
+    覆蓋內、無 gap、無死碼污染。不需寫 code。
+  [DEFER] P0-D2 unilateral → open item（見下）
+  [SAFETY] 單側 fastigial 維持 RX_MAPPING_PENDING_LATERAL_
+    VALIDATION，禁自動生單側 Rx（顯示層有候選≠處方層授權）
+  [FIX-DOC] P0-C site 2（BILATERAL_REGIONS.has() @舊5128）
+    位於 5021 死碼內、runtime 不可達；P0-C no-op 結論更強化
 
 ## Open Items（未解，實作前處理）
 - [PARTIAL] Fastigial alias 已補齊(v1.1)；CAUDAL/單側
@@ -137,8 +150,31 @@ mechanismModel 列舉：
   舊 assessment 可讀 / bilateral 行為 / side filtering /
   Rx 字面值 / save-load round-trip / 臨床輸出 parity。
   需 Gemini 獨立審。P0 後處理。
+- [OPEN] SACCADE_UNILATERAL_FASTIGIAL_DECISION_INTEGRATION
+  = MAJOR CLINICAL PIPELINE CHANGE。單側 fastigial 有資料
+  （saccade_diagnosis.json → /api/analyze-saccade-direction
+   → 顯示層），但決策層 resolveHorizontalOvershootDirection
+   只讀 d.type/d.direction、丟棄 d.region，改查硬編碼
+   HORIZONTAL_OVERSHOOT_MATRIX。接回=改患者處方輸出。
+   實作前 5 必答：region authority / layer coexistence
+   （Initiation FEF-BG-SC-PPRF vs Calibration OMV-Purkinje-
+   Fastigial 並存）/ side semantics（movementDirection vs
+   lesionSide vs eyeSide，eyeSide 禁參與）/ confidence gate
+   / unilateral Rx mapping。需 Gemini 審。與 P1 mechanismModel
+   + 單側 canonical 同審查包。
+- [BUG] INTEGRATED_PRESCRIPTION_DUPLICATE_DECLARATION_AND_
+  BUTTON_FIX（HIGH，另開獨立修復）。
+  generateIntegratedPrescription 兩份 top-level 同名宣告
+  （5021 零參 / 9535 三參），JS 後覆前，5021 不可達死碼；
+  按鈕 5008 呼零參版→實際命中 9535→analysisResult undefined
+  →TypeError。F1 先 recon 權威版（不直接刪死碼）→ F2 最小修復。
+  不得混 fastigial commit。
+- [NOTE] baseline v2 覆蓋界線：涵蓋 brainRegionMap→
+  EYERX_ALIASES→computeEyeMachineRx；不含壞按鈕 click flow /
+  5021 死碼 / unilateral decision integration。非完整 UI E2E。
 - [STATUS] P0 進度：P0-A ✔ / P0-B ✔ / P0-C CLOSED(no-op) /
-  P0-D NEXT(recon) / P0-E pending / P0-F conditional
+  P0-D1 CLOSED(bilateral) / P0-D2 DEFERRED(open item) /
+  P0-E CLOSED(already verified) / P0-F conditional recon
 
 ---
 
