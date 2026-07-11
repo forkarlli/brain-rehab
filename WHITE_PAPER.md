@@ -1,5 +1,5 @@
 # BCF White Paper
-Version: 1.3
+Version: 1.4
 Date: 2026-07-10
 Status: SSOT 首次落地版
 Governance: ChatGPT架構審 ✔ / Gemini獨立審 ✔ / PM(Karl)核准 ✔
@@ -133,6 +133,14 @@ mechanismModel 列舉：
     VALIDATION，禁自動生單側 Rx（顯示層有候選≠處方層授權）
   [FIX-DOC] P0-C site 2（BILATERAL_REGIONS.has() @舊5128）
     位於 5021 死碼內、runtime 不可達；P0-C no-op 結論更強化
+- v1.4 (2026-07-11) 壞按鈕 hotfix + F2 降級 open item
+  [HOTFIX] 壞按鈕「產生整合處方」已移除並部署
+    （commit 576c2ca，/api/version 確認、production app.js
+    實體驗證按鈕 0 命中）。該按鈕 100% 靜默失敗(TypeError，
+    重複宣告覆蓋)、底層功能(EEG/一致性%/side-aware 訓練過濾)
+    在 generateBCFResults 正常顯示，移除零臨床損失。
+  [DECISION] PM 選路 B：止血優先，F2 完整合併視圖復活降為
+    需求驅動 open item（死碼期間無臨床反映、急迫性低）。
 
 ## Open Items（未解，實作前處理）
 - [PARTIAL] Fastigial alias 已補齊(v1.1)；CAUDAL/單側
@@ -172,6 +180,24 @@ mechanismModel 列舉：
 - [NOTE] baseline v2 覆蓋界線：涵蓋 brainRegionMap→
   EYERX_ALIASES→computeEyeMachineRx；不含壞按鈕 click flow /
   5021 死碼 / unilateral decision integration。非完整 UI E2E。
+- [OPEN] FORM_INTEGRATED_PRESCRIPTION_MERGED_VIEW
+  = 合併去重表 + 彈窗列印匯出（5021 獨有、現失效）復活。
+  治理等級 MEDIUM-RISK CLINICAL INTEGRATION VIEW RESTORATION。
+  需求確認後才啟動：F2-E1(原封恢復死碼既有邏輯)→F2-C1(Gemini
+  審 mergedRx 合併/去重/優先權 + angleBilateral 警示，見 G1-G4)
+  →F2-E2(依審查調整)→PM 簽核→部署。
+  · 5021 死碼 + generateIntegratedPrescription 重複宣告
+    保留未清（無害：觸發按鈕已移除、9535 為唯一活版）。
+    徹底清理併入本項。
+  · F2-E1 草稿存 git stash@{0}（未核准，含未審 summary-render；
+    重用前須經 F2-C1 Gemini 審）。
+  · mergedRx 合併規則 / angleBilateral = NEEDS CLINICAL REVIEW
+    （死碼期間未驗證）。
+- [OPEN] ACTIVE_CLINICAL_RULESET_AUDIT
+  = EEG 矩陣(BRAIN_REGION_RX) / computeCrossValidation 本身
+  正確性審查。屬現行活碼品質審查、非復活項，不阻塞任何修復。
+  Gemini C2 提醒檢驗點：cross-validation 缺失模組處理須為
+  「分母動態減少」而非「假定滿分」（防虛高一致性分數）。
 - [STATUS] P0 進度：P0-A ✔ / P0-B ✔ / P0-C CLOSED(no-op) /
   P0-D1 CLOSED(bilateral) / P0-D2 DEFERRED(open item) /
   P0-E CLOSED(already verified) / P0-F conditional recon
