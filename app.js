@@ -5003,11 +5003,6 @@ function generateBCFResults() {
         ${flyingChairHTML}
         ${rightEyeHTML}
         ${stackingHTML}
-
-        <div style="padding:20px 0 8px;border-top:1px solid var(--gray-200);text-align:center;margin-top:4px">
-          <button class="btn btn-primary" onclick="generateIntegratedPrescription()" style="font-size:14px;padding:10px 28px;letter-spacing:.3px">🔀 產生整合處方</button>
-          <p style="font-size:11px;color:var(--gray-400);margin-top:6px">合併 BCF + RightEye 診斷 · 側性來源標註 · 嚴重程度標註 · 優先序整合治療處方</p>
-        </div>
       </div>`;
   }
 
