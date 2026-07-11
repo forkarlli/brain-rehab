@@ -1,5 +1,5 @@
 # BCF White Paper
-Version: 1.4
+Version: 1.5
 Date: 2026-07-10
 Status: SSOT 首次落地版
 Governance: ChatGPT架構審 ✔ / Gemini獨立審 ✔ / PM(Karl)核准 ✔
@@ -141,6 +141,22 @@ mechanismModel 列舉：
     在 generateBCFResults 正常顯示，移除零臨床損失。
   [DECISION] PM 選路 B：止血優先，F2 完整合併視圖復活降為
     需求驅動 open item（死碼期間無臨床反映、急迫性低）。
+- v1.5 (2026-07-11) CVAL 虛高% 止血 + 語義重定義
+  [HOTFIX] computeCrossValidation 虛高% 已止血並部署
+    （commit 9a17eea，/api/version 確認、production 舊
+    pill「N/M 項一致(XX%)」0 命中）。renderCrossValidation
+    Section 改中性文字「原計算在資料不完整時可能高估」，
+    computeCrossValidation 計算留背景不動（純顯示層）。
+  [SEMANTIC] Gemini 裁定：此指標本質為「邏輯矛盾檢查器」
+    （只在邏輯崩潰報錯、平時安靜的 QC），非統計交叉驗證。
+    · side 保留（同功能區左右矛盾=邏輯互斥）
+    · severity 移出跨區（跨區不同嚴重度是正常；僅同區
+      時序追蹤有意義）
+    · type 移除（生理結構屬性，非邏輯一致性）
+  [BUG] 原 bug：分母固定=3、缺維度當一致累加、資料不足
+    虛高%、缺值納入一致率。
+    · 甲（pairwise 跨系統驗證）裁定不存在此機制
+    · 丙（真跨系統驗證）= Phase 2 新功能
 
 ## Open Items（未解，實作前處理）
 - [PARTIAL] Fastigial alias 已補齊(v1.1)；CAUDAL/單側
@@ -198,6 +214,32 @@ mechanismModel 列舉：
   正確性審查。屬現行活碼品質審查、非復活項，不阻塞任何修復。
   Gemini C2 提醒檢驗點：cross-validation 缺失模組處理須為
   「分母動態減少」而非「假定滿分」（防虛高一致性分數）。
+- [OPEN] CLSCI_CALCULATION_FIX(計算修正，Commit 2)
+  side-exclusive 邏輯互斥 + 動態分母（邏輯互斥檢查對數）
+  + 缺維度 not_evaluable 不進分母 + 可評估對數<門檻顯示
+  N/A + truthy 陷阱處理（缺值混用 undefined/''/佔位）。
+  走完整治理：ChatGPT 模型→Gemini G1/G2→Claude Code
+  Truth Table→改計算→regression→重新啟用%。命名改
+  CLSCI（舊 key 留 deprecated alias、全面 rename 另案）。
+- [OPEN] CLSCI_NEW_CHECKS(新功能，非 bug fix)
+  區域完整性（如 FEF↔PPRF 對應）+ 時間自洽（同病灶跨測量
+  不合理跳變偵測）。需讀歷史測量。
+- [OPEN] COMPUTECONSISTENCY_SAME_CLASS_BUG_RECON(優先)
+  computeConsistency 的 consistencyPct 顯示於 Zone5 副標題
+  (9713)/歷史處方卡(8648,10221)/詳情彈窗(10134)/
+  模組不足警語(9254)，共 4-5 處 patient-facing。疑有與
+  CVAL 同類「缺維度/模組當一致→虛高%」bug，且顯示範圍
+  更廣。CVAL 止血只遮 computeCrossValidation 一處，此函式
+  未遮。需唯讀 recon 確認是否同類 bug、是否需第二次止血。
+  優先序：接近剛完成的 CVAL（可能是未止到的第二個
+  patient-facing 虛高%）。
+- [RESEARCH] NEURO_METABOLIC_CONCORDANCE_MODEL
+  神經代謝分層（ATP-CP vs 粒線體耐力）進 Research Layer/
+  Whitepaper Concept。不進 DTO/診斷/生產。科學仍假說
+  （RightEye 差≠粒線體失能，只證神經無法持續輸出），
+  待病例驗證再評估升級。ChatGPT C/D 段證據謹慎：用
+  Neural Endurance Deficit（可證明）非 Mitochondrial
+  Failure（推論）。
 - [STATUS] P0 進度：P0-A ✔ / P0-B ✔ / P0-C CLOSED(no-op) /
   P0-D1 CLOSED(bilateral) / P0-D2 DEFERRED(open item) /
   P0-E CLOSED(already verified) / P0-F conditional recon
