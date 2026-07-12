@@ -1,7 +1,7 @@
 # BCF White Paper
-Version: 1.5
-Date: 2026-07-10
-Status: SSOT 首次落地版
+Version: 1.6
+Date: 2026-07-12
+Status: SSOT
 Governance: ChatGPT架構審 ✔ / Gemini獨立審 ✔ / PM(Karl)核准 ✔
 Authoring: Claude(策略/文件)
 
@@ -74,6 +74,33 @@ mechanismModel 列舉：
 - OMV_PURKINJE_DYSFUNCTION
 - FASTIGIAL_OUTPUT_DYSFUNCTION
 - UNSPECIFIED_CEREBELLAR_DYSMETRIA
+
+---
+
+## §4 資料與呈現治理通則
+
+### §4.1 SEMANTIC GOVERNANCE：不可評估 ≠ 0% ≠ 100%
+任何一致性、交叉驗證或自我一致性指標，在可比較觀察數
+低於最低門檻（跨模組 ≥2）時，必須回傳 NOT_EVALUABLE／N/A，
+**不得以 0% 或 100% 代替。**
+適用：CVAL(虛高)、computeConsistency(虛低)、未來 CLSCI
+及所有跨模組指標。
+
+### §4.2 破壞性刪除禁令
+**任何未被明確點名的紀錄，不得因為缺席於一次同步請求而被刪除。**
+- 同步端點(POST)僅允許 upsert，不得以缺席推導刪除意圖
+- 刪除必須是明確命令(DELETE /:id)
+- Client snapshot 無「已完整載入伺服器權威資料」保證，
+  server 不得信任其完整性宣告
+- Server 修復必須能保護尚未更新快取的舊 client
+
+### §4.3 ID 為 opaque string
+不得以 ID 字串格式(長度／前綴／regex)推斷紀錄類型或新舊 provenance。
+判斷新舊須依顯式欄位(如 idVersion、consistencyStatus 是否存在)。
+
+### §4.4 快照凍結
+歷史紀錄為當時快照。不得以「現在重算」改寫歷史顯示值。
+（v1.6 據此駁回 computeConsistency 歷史重算方案 H4）
 
 ---
 
@@ -157,6 +184,64 @@ mechanismModel 列舉：
     虛高%、缺值納入一致率。
     · 甲（pairwise 跨系統驗證）裁定不存在此機制
     · 丙（真跨系統驗證）= Phase 2 新功能
+- v1.6 (2026-07-12) computeConsistency 虛低% 止血 + patients 刪除路徑止血
+
+  ### A1 — computeConsistency 不可評估虛低% (CLINICAL-SAFETY HOTFIX)
+  [BUG] computeConsistency(app.js:8687) 算出 latStatus='insufficient'
+    (sides.length<2) 後丟棄該狀態，只送 pct=0 → 「模組不足(不可評估)」
+    與「模組充足但真矛盾」畫面皆顯示紅色 0%，臨床端無法區分 → 假警報。
+  [CLARIFY] 與 CVAL 為「同一治理病灶的反向表現」，非同一計算實作 bug：
+    · CVAL        = 固定分母 → 虛高% → 假安心 (v1.5 已止血)
+    · Consistency = 無固定分母，但不可評估仍吐 0% → 虛低% → 假警報
+  [NOT-FOUND] 排除 CVAL 型 bug：三層分母皆動態、null 正確排除、
+    無 ||100 fallback、與 computeCrossValidation 不共用 helper。
+  [HOTFIX] 方案 H3（commits 20ba250 / bfb0e00 / b97f414）
+    · 存檔補 additive 欄位 consistencyStatus / consistencyModules
+    · 4 處 patient-facing 依 status 分流（renderZone5 / renderRxHistoryView
+      / showIntegratedPrescriptionDetail / renderPrescriptions）
+    · 舊記錄(無欄位) → 「無法回溯驗證」，不印%
+    · insufficient  → 「不可評估（僅 N 個可比較模組，至少需要 2 個）」
+    · 2 模組 → provisional：不套綠 + 強制揭露模組名（Gemini G4）
+    · 3 模組 → 原色階；真實 0% 維持紅色 —— 真警報保留
+  [GATE] H3_GATE_COUNT_SOURCE_VERIFIED → GATE_COUNT_MISMATCH
+    effectiveModuleCount(8858) = out && weakRegions.length>0（不檢查
+    abnormalCount）；computeConsistency L1 = out && abnormalCount>0
+    && weakRegions.length>0 → 母體不同。沿用前者當 gate 會在
+    「abnormalCount=0 但 weakRegions 非空」放行 insufficient 分數。
+    → gate 改用既有回傳鏈上的 consistencyLat.status，
+      不新增 evaluableModuleCount（答案本就在回傳鏈上，只是沒人讀）。
+  [REJECT] H4 歷史重算 —— 違反 §4.4 快照凍結
+  [VERIFIED] PM production 人工驗收：
+    · 1 模組(Li,Wen Chi) → 「不可評估（僅 1 個）」✔
+    · 2 模組(Li,Karl)    → 59%（肌肉張力 + RightEye）中性色 ✔
+    · 3 模組真矛盾(Dong) → 20%（3 模組）紅色 ✔ 真警報保留
+    · 舊記錄 → 待補確認（低風險，保守失敗方向）
+
+  ### X-ZERO-0A — patients 隱式差異刪除 (P0-EMERGENCY)
+  [CRITICAL] POST /api/patients(server.js:269) 曾以傳入清單為完整
+    權威集合，deleteMany 所有「未出現在清單中」的病人。
+    唯一檢查為 Array.isArray()，無數量／比例／確認 guard。
+    · 空陣列推演(確定性)：incomingIds=[] → toDelete=全部 → 刪光 collection
+    · 觸發鏈：loadPatientsFromServer 的 catch 靜默 fallback 到 6 筆內建
+      示範病人 → 使用者做一次正常寫入(新增／刪除／匯入) → 全量同步
+      → 其餘真實病人全刪
+    · 不需 ID 碰撞、不需惡意輸入。一次網路瞬斷 + 一次日常操作即可。
+  [HOTFIX] deleteMany 已移除（commit 5ec1db1，/api/version 確認）
+    · POST /api/patients 現為 UPSERT-ONLY，回傳帶 deletionDisabled: true
+    · server 端防線，保護尚未更新快取的舊 client
+  [REGRESSION-ACCEPTED] 「刪除病人」按鈕暫時靜默失效（本機刪除，
+    下次同步復現）。治理原則：Temporary loss of delete capability
+    is preferable to irreversible clinical data loss.
+  [AUDIT] X-ZERO-0D Atlas 唯讀稽查（PM 執行）：
+    · patients = 10 筆，全為真實病人，無 P001-P006 示範資料
+    · →「退回示範資料」的災難跡象未發生
+    · PATIENT_DATA_LOSS: NOT FOUND（無證據，但不等於確定未發生；
+      100% 確認需比對 Atlas backup 歷史 count）
+    · 副產物：assessments 內存有示範資料 A001-A006（繞過前端
+      SAMPLE_ASSESSMENT_IDS 排除）；home_training_sessions 的
+      patientId 為小寫 'p001' → 皆為 orphan，但屬示範/測試資料，
+      非真實病人遺失。
+  [CONCLUSION] 我們是在預防，不是善後。X-ZERO-0A 止血及時。
 
 ## Open Items（未解，實作前處理）
 - [PARTIAL] Fastigial alias 已補齊(v1.1)；CAUDAL/單側
@@ -221,18 +306,17 @@ mechanismModel 列舉：
   走完整治理：ChatGPT 模型→Gemini G1/G2→Claude Code
   Truth Table→改計算→regression→重新啟用%。命名改
   CLSCI（舊 key 留 deprecated alias、全面 rename 另案）。
+  [UPDATE] → 併入 computeConsistency 計算修正（回傳結構化
+    {pct, status}）及 EFFECTIVE_MODULE_COUNT_WRONG_POPULATION。
+    同一病灶不宜兩套修法。
 - [OPEN] CLSCI_NEW_CHECKS(新功能，非 bug fix)
   區域完整性（如 FEF↔PPRF 對應）+ 時間自洽（同病灶跨測量
   不合理跳變偵測）。需讀歷史測量。
-- [OPEN] COMPUTECONSISTENCY_SAME_CLASS_BUG_RECON(優先)
-  computeConsistency 的 consistencyPct 顯示於 Zone5 副標題
-  (9713)/歷史處方卡(8648,10221)/詳情彈窗(10134)/
-  模組不足警語(9254)，共 4-5 處 patient-facing。疑有與
-  CVAL 同類「缺維度/模組當一致→虛高%」bug，且顯示範圍
-  更廣。CVAL 止血只遮 computeCrossValidation 一處，此函式
-  未遮。需唯讀 recon 確認是否同類 bug、是否需第二次止血。
-  優先序：接近剛完成的 CVAL（可能是未止到的第二個
-  patient-facing 虛高%）。
+- [CLOSED] COMPUTECONSISTENCY_SAME_CLASS_BUG_RECON
+  → 非 CVAL 同類（無固定分母）；確認虛低% 缺陷。A1 止血(H3) 已部署
+    並驗收。計算修正併入 CLSCI_CALCULATION_FIX。
+- [CLOSED] MONGO_LOCALSTORAGE_DUAL_TRACK_VERIFY
+  → assessments 為「localStorage 快取 + Mongo 權威」正常架構，非雙軌。
 - [RESEARCH] NEURO_METABOLIC_CONCORDANCE_MODEL
   神經代謝分層（ATP-CP vs 粒線體耐力）進 Research Layer/
   Whitepaper Concept。不進 DTO/診斷/生產。科學仍假說
@@ -240,9 +324,89 @@ mechanismModel 列舉：
   待病例驗證再評估升級。ChatGPT C/D 段證據謹慎：用
   Neural Endurance Deficit（可證明）非 Mitochondrial
   Failure（推論）。
+- [P0] XZERO_0B_EXPLICIT_DELETE_ENDPOINT
+  新增 DELETE /api/patients/:id。最低防護：ID 存在／病人存在／
+  明確回傳狀態／audit log／禁一次刪多筆。
+  不得 cascade delete（病人主檔 soft delete，臨床資料保留）
+  —— 否則第二個資料災難來自 cascade。
+- [P0] XZERO_0C_FRONTEND_FAIL_LOUD
+  loadPatientsFromServer 的靜默 catch 須改 fail-loud。引入
+  patientSyncState (LOADING/READY/FAILED/STALE_LOCAL)，僅 READY
+  允許病人寫入。示範資料不得作 production 網路失敗 fallback。
+  同時停用「刪除病人」按鈕（app.js，另 commit）。
+- [P1] XZERO_A_GENID_UUID
+  genId(prefix)=prefix+Date.now().slice(-6)：ID 空間 10⁶，每 16.67
+  分鐘循環。同 prefix 跨病人/跨裝置碰撞 → server _id upsert →
+  靜默覆蓋。全站共用(A/MTT/RE/BCF/IP/RX)。
+  裁決：改用完整 crypto.randomUUID()（不截斷）；舊 ID 不重寫；
+  新增 idVersion: 2。
+  recon: BREAKING_CHANGE_RISK LOW（無 slice/regex/排序/DOM 依賴；
+  _id schema 為 String 無格式驗證）。
+  引用鏈（新舊必須共存，禁改寫）：
+  bcf_diagnoses.sourceAssessmentIds / therapy_sessions.linkedAssessmentId
+  / patient_reports.assessmentId / patient_reports.parentReportId
+- [P1] XZERO_B_SERVER_COLLISION_GUARD
+  server 須拒絕跨紀錄覆蓋：_id 已存在但 patientId/type 不同 → 409，
+  不 $set，寫 collision log。單筆與 bulk 皆須保護。
+  注意：type 不在 schema（strict:false passthrough，無 required）；
+  patientId 無 required → guard 只擋「明確衝突」，不擋「無法判斷」。
+- [CRITICAL] INTEGRATED_PRESCRIPTION_LOCALSTORAGE_ISLAND
+  DB.integratedPrescriptions 無 /api/ 呼叫、server.js 無 Mongoose model
+  → 純 localStorage、逐裝置、無備份、跨治療師不共享。
+  （assessments/patients/bcf_* 皆有 Mongo 後端且雙向同步）
+- [HIGH] CLINICAL_LOGIC_IN_APP_JS_AUDIT
+  computeConsistency / computeRombergRx / computeMuscleRx /
+  computeRightEyeRx 全在 app.js，server.js 零命中 → 違反鐵律。
+  前端算法可被 cache/瀏覽器版本影響，server 無法重建或驗證處方。
+  先 audit 分辨「臨床決策核心」vs「UI aggregation」，再分階段遷移。
+- [BUG] EFFECTIVE_MODULE_COUNT_WRONG_POPULATION
+  effectiveModuleCount 不檢查 abnormalCount，與 computeConsistency L1
+  母體不一致。9003 的「僅基於 N 個模組」警語 N 值可能錯誤。
+  A1 已繞開（改用 status），警語未修。併 A2/CLSCI。
+- [BUG] CROSS_MODULE_CONFIRMED_ON_SINGLE_MODULE
+  1 模組患者的處方卡仍標「跨模組確認 N」，與第三區「目前無跨模組
+  確認腦區」自相矛盾。疑同源病灶。
+- [OPEN] DEFENSE_IN_DEPTH_MISSING
+  SAMPLE_ASSESSMENT_IDS 僅前端把關；示範評估 A001-A006 已存在
+  production Mongo。server 應以顯式欄位(isDemo/isSystemRecord)識別，
+  不得依 ID 字串硬編碼推測。
+- [BUG] PATIENT_ID_CASE_INCONSISTENCY
+  home_training_sessions.patientId='p001'(小寫) vs assessments/patients
+  用大寫 → Mongo 字串比對 case-sensitive → 永久 orphan。
+  【需確認】是否有 code path 產生小寫 id。
+- [NOTE] fs.writeFileSync(PATIENTS_FILE) fallback 同款全量覆寫風險，
+  但 dbReady 一旦 true 不回退 → production 穩態不可達。
+- [NOTE] migrateFromFile() 開機自動 upsert patients.json → 內容過時
+  會覆蓋較新資料。不刪除，故非災難級。
+- [NOTE] computeConsistency Layer3(Jaccard) 計算但不進最終分數（死碼）
+- [NOTE] MOD_LABELS 現有三份（8688 / 8962 / 9562）待收斂
+- [NEEDS CLINICAL REVIEW] combinedPct = lat*0.5 + group*0.5，
+  0.5/0.5 權重臨床依據不明
+- [OPEN] FAKE_EDIT_INTEGRATED_PRESCRIPTION_BUTTON
+  app.js:10200「編輯處方」只彈 toast，無 update 邏輯 → false
+  affordance，應移除或 disabled。
 - [STATUS] P0 進度：P0-A ✔ / P0-B ✔ / P0-C CLOSED(no-op) /
   P0-D1 CLOSED(bilateral) / P0-D2 DEFERRED(open item) /
   P0-E CLOSED(already verified) / P0-F conditional recon
+
+---
+
+## 現行優先序（治理鏈裁決 2026-07-12）
+
+```
+✅ A1              已部署 + PM 驗收
+✅ X-ZERO-0A       已部署（deleteMany 止血）
+✅ X-ZERO-0D       已稽查（PATIENT_DATA_LOSS: NOT FOUND）
+──────────────────────────────
+▶  X-ZERO-0B       DELETE endpoint         (server.js)
+▶  X-ZERO-0C       前端 fail-loud + 停用刪除鈕 (app.js)
+   X-ZERO-A        genId UUID
+   X-ZERO-B        server collision guard
+   X1              整合處方後端持久化
+   B               MTT provenance audit
+   A2 / CLSCI      計算修正
+   C               Training Intensity Engine
+```
 
 ---
 
