@@ -72,15 +72,23 @@ function loadFromStorage() {
   }
 }
 
+// 回傳 true = 伺服器確認寫入；false = 失敗（呼叫端可據此 rollback）
+// 注意：fetch 對 4xx/5xx 不會 reject，必須顯式檢查 resp.ok
 async function savePatientsToServer() {
   try {
-    await fetch('/api/patients', {
+    const resp = await fetch('/api/patients', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ patients: DB.patients }),
     });
+    if (!resp.ok) {
+      showToast('⚠️ 病人資料同步失敗（伺服器拒絕寫入）', 'error');
+      return false;
+    }
+    return true;
   } catch(e) {
-    showToast('⚠️ 病人資料同步失敗', 'error');
+    showToast('⚠️ 病人資料同步失敗（無法連線）', 'error');
+    return false;
   }
 }
 
