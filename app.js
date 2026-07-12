@@ -8605,6 +8605,7 @@ function renderRxHistoryView(rx) {
     </div>`;
   }).join('');
 
+  const _consH = renderConsistencyLabel(rx.consistencyPct, rx.consistencyStatus, rx.consistencyModules);
   zone5.style.display = '';
   zone5.innerHTML = `
     <div class="rx-gen-section-title">第五區：今日訓練處方</div>
@@ -8612,7 +8613,7 @@ function renderRxHistoryView(rx) {
       <div class="rx5-header">
         <div style="flex:1;min-width:200px">
           <div class="rx5-title">${pt?.name || rx.patientId} 的訓練處方</div>
-          <div class="rx5-subtitle">${rx.date} ・ 策略：${rx.strategyName} ・ 跨模組一致性 ${rx.consistencyPct}%</div>
+          <div class="rx5-subtitle">${rx.date} ・ 策略：${rx.strategyName} ・ <span style="color:${_consH.color}">${_consH.text}</span></div>
         </div>
         <div class="rx5-meta-tags">
           <span class="rx5-tag" style="background:#fef3c7;color:#92400e;border:1px solid #f59e0b30">歷史記錄</span>
@@ -8682,6 +8683,33 @@ function renderModuleCards(patientId) {
   // Zone 3: run integrated analysis
   const result = runIntegratedAnalysis(patientId);
   renderZone3(result);
+}
+
+// ===== A1/H3: 一致性顯示治理（不可評估 ≠ 0%）=====
+const MOD_LABELS_SHARED = { balance: '平衡測試', muscle: '肌肉張力', rightEye: 'RightEye' };
+
+// 依 status + 模組清單，回傳一致性的顯示文字與顏色
+// status: 'insufficient' → 不可評估；undefined → 舊記錄無法回溯
+function renderConsistencyLabel(pct, status, modules) {
+  // 舊記錄：存檔時尚無 consistencyStatus 欄位
+  if (status === undefined || status === null) {
+    return { text: '跨模組一致性：無法回溯驗證（此紀錄建立於比較基數欄位加入之前）', color: 'var(--gray-400)', isPct: false };
+  }
+  const mods = Array.isArray(modules) ? modules : [];
+  const n = mods.length;
+  const names = mods.map(m => MOD_LABELS_SHARED[m] || m).join(' + ');
+
+  // 不可評估：可比較模組 < 2
+  if (status === 'insufficient') {
+    return { text: `跨模組一致性：不可評估（僅 ${n} 個可比較模組，至少需要 2 個）`, color: 'var(--gray-400)', isPct: false };
+  }
+  // 2 模組：可顯示 %，但不套綠（PROVISIONAL，須揭露模組）
+  if (n === 2) {
+    return { text: `現有模組結果一致性 ${pct}%（${names}）`, color: 'var(--gray-600)', isPct: true };
+  }
+  // 3 模組：原色階；真實 0% 維持紅色警報
+  const clr = pct >= 80 ? '#16a34a' : pct >= 50 ? '#d97706' : '#dc2626';
+  return { text: `跨模組一致性 ${pct}%（${n} 模組）`, color: clr, isPct: true };
 }
 
 function computeConsistency(moduleOutputs) {
@@ -9669,6 +9697,11 @@ function renderZone5(rxItems, patientId, strategy, analysisResult) {
       </div>`;
   }).join('');
 
+  const _cons5 = renderConsistencyLabel(
+    analysisResult.consistencyPct,
+    analysisResult.consistencyLat?.status,
+    Object.keys(analysisResult.consistencyLat?.perModule ?? {})
+  );
   zone5.style.display = '';
   zone5.innerHTML = `
     <div class="rx-gen-section-title">第五區：今日訓練處方</div>
@@ -9677,7 +9710,7 @@ function renderZone5(rxItems, patientId, strategy, analysisResult) {
       <div class="rx5-header">
         <div style="flex:1;min-width:200px">
           <div class="rx5-title">${pt?.name || patientId} 的訓練處方</div>
-          <div class="rx5-subtitle">${today} ・ 策略：${strategyName} ・ 跨模組一致性 ${analysisResult.consistencyPct}%</div>
+          <div class="rx5-subtitle">${today} ・ 策略：${strategyName} ・ <span style="color:${_cons5.color}">${_cons5.text}</span></div>
         </div>
         <div class="rx5-meta-tags">
           <span class="rx5-tag" style="background:${lvl.bg};color:${lvl.clr};border:1px solid ${lvl.clr}30">病等：${lvl.label}</span>
@@ -10060,7 +10093,7 @@ function showIntegratedPrescriptionDetail(rxId) {
   const pt = getPatient(rx.patientId);
   const STRAT_ICON = { '保守模式': '🛡️', '標準模式': '⚡', '核心迴路模式': '🔄' };
   const icon = STRAT_ICON[rx.strategyName] || '⚡';
-  const consClr = rx.consistencyPct >= 80 ? '#16a34a' : rx.consistencyPct >= 50 ? '#d97706' : '#dc2626';
+  const _consD = renderConsistencyLabel(rx.consistencyPct, rx.consistencyStatus, rx.consistencyModules);
 
   const cards = (rx.items || []).map((item, i) => {
     const isEye = item.tool === '眼動機';
@@ -10100,7 +10133,7 @@ function showIntegratedPrescriptionDetail(rxId) {
         <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:8px">
           <span style="font-size:20px;font-weight:700">${pt ? pt.name : rx.patientId}</span>
           <span style="background:var(--primary-light);color:var(--primary);padding:3px 10px;border-radius:4px;font-size:12px;font-weight:700">${icon} ${rx.strategyName}</span>
-          <span style="background:#f0fdf4;color:${consClr};border:1px solid ${consClr}30;padding:3px 10px;border-radius:4px;font-size:12px;font-weight:700">一致性 ${rx.consistencyPct}%</span>
+          <span style="background:#f8fafc;color:${_consD.color};border:1px solid ${_consD.color}30;padding:3px 10px;border-radius:4px;font-size:12px;font-weight:700">${_consD.text}</span>
         </div>
         <div style="font-size:12px;color:var(--gray-400)">
           處方日期：${rx.date} ・ 共 ${rx.itemCount} 項 ・ 儲存時間：${new Date(rx.savedAt).toLocaleString('zh-TW')}
@@ -10173,7 +10206,7 @@ function renderPrescriptions() {
     const pt = getPatient(rx.patientId);
     const STRAT_ICON = { '保守模式': '🛡️', '標準模式': '⚡', '核心迴路模式': '🔄' };
     const icon = STRAT_ICON[rx.strategyName] || '⚡';
-    const consClr = rx.consistencyPct >= 80 ? '#16a34a' : rx.consistencyPct >= 50 ? '#d97706' : '#dc2626';
+    const _consP = renderConsistencyLabel(rx.consistencyPct, rx.consistencyStatus, rx.consistencyModules);
     return `
       <div class="rx-card" style="border-top:3px solid var(--primary)">
         <div class="rx-card-header">
@@ -10187,7 +10220,7 @@ function renderPrescriptions() {
           <div class="rx-meta">
             <div class="rx-meta-item"><span class="rx-meta-label">處方日期</span><span class="rx-meta-value">${formatDate(rx.date)}</span></div>
             <div class="rx-meta-item"><span class="rx-meta-label">訓練項目</span><span class="rx-meta-value">${rx.itemCount} 項</span></div>
-            <div class="rx-meta-item"><span class="rx-meta-label">一致性</span><span class="rx-meta-value" style="color:${consClr};font-weight:700">${rx.consistencyPct}%</span></div>
+            <div class="rx-meta-item"><span class="rx-meta-label">一致性</span><span class="rx-meta-value" style="color:${_consP.color};font-weight:700">${_consP.isPct ? rx.consistencyPct + '%' : 'N/A'}</span></div>
           </div>
           <div style="font-size:11px;color:var(--gray-400);margin-top:8px">儲存時間：${new Date(rx.savedAt).toLocaleString('zh-TW')}</div>
         </div>
