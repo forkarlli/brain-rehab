@@ -258,16 +258,19 @@ app.post('/api/patients', async (req, res) => {
   if (!Array.isArray(patients)) return res.status(400).json({ error: '格式錯誤' });
   if (Patient && dbReady) {
     try {
-      const existingIds = (await Patient.find({}, '_id').lean()).map(d => d._id);
-      const incomingIds = patients.map(p => p.id || p._id).filter(Boolean);
-      const toDelete = existingIds.filter(id => !incomingIds.includes(id));
+      // ⚠️ X-ZERO-0A (P0-EMERGENCY): 隱式差異刪除已停用。
+      // 原邏輯把「未出現在本次請求中的病人」視為刪除意圖，
+      // 但前端 snapshot 無「已完整載入伺服器權威資料」保證
+      // (loadPatientsFromServer 的 catch 會靜默 fallback 到示範資料)，
+      // 一次網路瞬斷 + 一次正常寫入操作即可刪光整個 patients collection。
+      // 本 endpoint 現為 UPSERT-ONLY。刪除須走明確的 DELETE /api/patients/:id (X-ZERO-0B)。
+      // 治理：ChatGPT / Gemini / PM 核准。禁止在未經治理鏈審查下復原此段。
       const ops = patients.map(p => {
         const id = p.id || p._id;
         return { updateOne: { filter: { _id: id }, update: { $set: { ...p, _id: id } }, upsert: true } };
       });
       if (ops.length) await Patient.bulkWrite(ops);
-      if (toDelete.length) await Patient.deleteMany({ _id: { $in: toDelete } });
-      return res.json({ ok: true, count: patients.length });
+      return res.json({ ok: true, count: patients.length, deletionDisabled: true });
     } catch (e) {
       console.error('patients write 失敗:', e.message);
       return res.status(500).json({ error: e.message });
