@@ -9752,6 +9752,8 @@ function saveIntegratedPrescription(patientId, strategy) {
     strategy,
     strategyName:    STRATEGY_NAMES[strategy - 1] || '',
     consistencyPct:  _rxCurrentAnalysis.consistencyPct,
+    consistencyStatus:  _rxCurrentAnalysis.consistencyLat?.status ?? null,
+    consistencyModules: Object.keys(_rxCurrentAnalysis.consistencyLat?.perModule ?? {}),
     itemCount:       _rxCurrentItems.length,
     items:           _rxCurrentItems,
     savedAt:         new Date().toISOString(),
