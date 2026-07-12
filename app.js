@@ -603,6 +603,19 @@ function getAvatarColor(name) {
   return avatarColors[hash % avatarColors.length];
 }
 
+// X-ZERO-0B: 封存(soft delete)語意 —— status='deleted'
+// 「封存」= 停止產生新臨床資料，但歷史必須仍可查閱。
+// 白名單：僅這些 select 允許選到已封存病人（純查詢/切換上下文）。
+// ⚠️ assess-patient-select 刻意**不在**白名單內 —— 它是
+//    saveBCFAssessment/saveRightEyeAssessment/saveBTracksAssessment
+//    的 patientId 直接來源，放行會讓封存病人繼續被寫入新評估。
+const ALLOW_ARCHIVED_FOR_HISTORY = new Set([
+  'global-patient-select',
+  'rxPatientFilter',
+  'sessionPatientFilter',
+  'reportPatientFilter',
+]);
+
 // ===== POPULATE PATIENT SELECTS =====
 function populatePatientSelects() {
   const selects = ['global-patient-select', 'rxGen-patient', 'a-patient', 'rx-patient', 's-patient', 'rxPatientFilter', 'sessionPatientFilter', 'reportPatientFilter', 'assess-patient-select'];
@@ -611,11 +624,15 @@ function populatePatientSelects() {
     if (!el) return;
     const currentVal = el.value;
     const isFilter = id.includes('Filter');
+    const allowArchived = ALLOW_ARCHIVED_FOR_HISTORY.has(id);
     el.innerHTML = isFilter ? '<option value="">所有病人</option>' : '<option value="">請選擇病人</option>';
-    DB.patients.filter(p => p.status !== 'completed' || isFilter).forEach(p => {
+    DB.patients.filter(p => {
+      if (p.status === 'deleted') return allowArchived;
+      return p.status !== 'completed' || isFilter;
+    }).forEach(p => {
       const opt = document.createElement('option');
       opt.value = p.id;
-      opt.textContent = `${p.name} (${p.id})`;
+      opt.textContent = p.status === 'deleted' ? `${p.name} (${p.id})（已封存）` : `${p.name} (${p.id})`;
       el.appendChild(opt);
     });
     el.value = currentGlobalPatientId || currentVal || '';
@@ -781,7 +798,7 @@ function renderPatients(filter = '') {
   if (filter) data = data.filter(p => p.name.includes(filter) || p.id.includes(filter));
   if (statusFilter) data = data.filter(p => p.status === statusFilter);
 
-  const statusLabel = { active: '治療中', completed: '已完成', paused: '暫停' };
+  const statusLabel = { active: '治療中', completed: '已完成', paused: '暫停', deleted: '已封存' };
 
   tbody.innerHTML = data.map(p => `
     <tr>
@@ -801,7 +818,9 @@ function renderPatients(filter = '') {
         <div class="action-btns">
           <button class="btn-icon view" title="查看" onclick="viewPatient('${p.id}')">👁</button>
           <button class="btn-icon edit" title="編輯" onclick="editPatient('${p.id}')">✏️</button>
-          <button class="btn-icon delete" title="刪除" onclick="deletePatient('${p.id}')">🗑</button>
+          ${p.status === 'deleted'
+            ? `<button class="btn-icon view" title="恢復" onclick="restorePatient('${p.id}')">↩️</button>`
+            : `<button class="btn-icon delete" title="封存" onclick="archivePatient('${p.id}')">🗄️</button>`}
         </div>
       </td>
     </tr>`).join('');
@@ -838,7 +857,7 @@ function viewPatient(id) {
         <div style="font-size:18px;font-weight:700;color:var(--gray-900)">${p.name}</div>
         <div style="font-size:12px;color:var(--gray-500);margin-top:2px">${p.id} ｜ ${calcAge(p.dob)} 歲</div>
         <div style="margin-top:4px;display:flex;flex-wrap:wrap;gap:4px">${renderDiagnosisBadges(p.diagnosis)}</div>
-        <span class="status-badge status-${p.status}" style="margin-top:4px;display:inline-block">${{active:'治療中',completed:'已完成',paused:'暫停'}[p.status]}</span>
+        <span class="status-badge status-${p.status}" style="margin-top:4px;display:inline-block">${{active:'治療中',completed:'已完成',paused:'暫停',deleted:'已封存'}[p.status]}</span>
       </div>
     </div>`;
 
@@ -1448,17 +1467,46 @@ function showAssessmentDetail(aid) {
   overlay.style.display = 'flex';
 }
 
-function deletePatient(id) {
-  if (!confirm('確定要刪除此病人資料嗎？')) return;
-  const idx = DB.patients.findIndex(p => p.id === id);
-  if (idx !== -1) {
-    DB.patients.splice(idx, 1);
-    saveToStorage();
-    savePatientsToServer();
-    renderPatients();
-    populatePatientSelects();
-    showToast('病人資料已刪除', 'error');
+async function archivePatient(id) {
+  if (!confirm('確定要封存此病人嗎？\n\n封存後，病人將不再出現在新增評估、療程與處方的選單中。\n既有評估、療程與報告不會刪除，之後可從「已封存」名單恢復。')) return;
+  const p = DB.patients.find(x => x.id === id);
+  if (!p) return;
+
+  const oldStatus = p.status;
+  p.status = 'deleted';
+
+  const ok = await savePatientsToServer();
+  if (!ok) {
+    p.status = oldStatus;
+    showToast('封存失敗，病人狀態未變更', 'error');
+    return;
   }
+
+  saveToStorage();
+  renderPatients();
+  populatePatientSelects();
+  showToast('病人已封存', 'success');
+}
+
+async function restorePatient(id) {
+  if (!confirm('確定要恢復此病人嗎？\n\n恢復後，病人將重新出現在一般名單與新增評估選單中。')) return;
+  const p = DB.patients.find(x => x.id === id);
+  if (!p) return;
+
+  const oldStatus = p.status;
+  p.status = 'active';
+
+  const ok = await savePatientsToServer();
+  if (!ok) {
+    p.status = oldStatus;
+    showToast('恢復失敗，病人狀態未變更', 'error');
+    return;
+  }
+
+  saveToStorage();
+  renderPatients();
+  populatePatientSelects();
+  showToast('病人已恢復', 'success');
 }
 
 function savePatient(e) {
