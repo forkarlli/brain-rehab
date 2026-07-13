@@ -650,26 +650,47 @@ const ALLOW_ARCHIVED_FOR_HISTORY = new Set([
   'reportPatientFilter',
 ]);
 
-// X-ZERO-0B-fix: 存檔路徑的真正 guard。
-// UI 層隱藏選項 ≠ guard —— 選項消失只會讓 .value 變空，
-// 反而繞過檢查寫入空 patientId。守門必須在寫入路徑上。
-// 回傳 patientId（合法）或 null（已擋下並提示）。
-function guardAssessmentPatient() {
-  const patientId = document.getElementById('assess-patient-select')?.value || '';
+// ===== X-ZERO-0E: 病人寫入資格（單一權威 guard）=====
+// ⚠️ 概念邊界（§4.5 / v1.7 0B）：
+//    「可查歷史」與「可新增紀錄」是兩條不同的規則。
+//    封存病人 → 應能查歷史（ALLOW_ARCHIVED_FOR_HISTORY）
+//              → 不得新增紀錄（canCreateRecordsForPatient）
+//    predicate 命名刻意避免含糊的 isPatientVisible / isValidPatient。
+function isArchivedPatient(patient) {
+  return patient?.status === 'deleted';
+}
+
+function canCreateRecordsForPatient(patient) {
+  return Boolean(patient) && !isArchivedPatient(patient);
+}
+
+// 全站唯一的 patient-linked 寫入閘門。
+// 回傳 patient object（可繼續）或 null（必須 bail）。
+// ⚠️ 依 §4.5 這是 client guard，不是 server guard。
+//    server 端驗證見 Open Item: SERVER_SIDE_PATIENT_STATUS_GUARD。
+function guardPatientWritable(patientId, action = '新增記錄') {
   if (!patientId) {
     showToast('請先選擇病人', 'error');
     return null;
   }
-  const pt = DB.patients.find(p => p.id === patientId);
-  if (!pt) {
+  const patient = DB.patients.find(p => p.id === patientId);
+  if (!patient) {
     showToast('查無此病人，無法儲存', 'error');
     return null;
   }
-  if (pt.status === 'deleted') {
-    showToast('此病人已封存，請先恢復後才能新增評估', 'error');
+  if (!canCreateRecordsForPatient(patient)) {
+    showToast(`此病人已封存，請先恢復後才能${action}`, 'error');
     return null;
   }
-  return patientId;
+  return patient;
+}
+
+// 過渡 wrapper：三個評估存檔函式沿用既有呼叫方式，降低本輪改動面。
+// 未來應直接呼叫 guardPatientWritable，本 wrapper 移除。
+function guardAssessmentPatient() {
+  const patientId = document.getElementById('assess-patient-select')?.value;
+  const pt = guardPatientWritable(patientId, '新增評估');
+  return pt ? patientId : null;
 }
 
 // ===== POPULATE PATIENT SELECTS =====
@@ -10614,8 +10635,10 @@ function closeTherapistManager() {
 function populateSessionPatientSelect() {
   const sel = document.getElementById('sessionPatientId');
   if (!sel) return;
+  // X-ZERO-0E: 這是「新增資料」的 selector —— 封存病人不得出現。
+  // （歷史查詢的 selector 走 ALLOW_ARCHIVED_FOR_HISTORY，規則不同。）
   sel.innerHTML = '<option value="">— 請選擇病人 —</option>' +
-    DB.patients.map(p =>
+    DB.patients.filter(canCreateRecordsForPatient).map(p =>
       `<option value="${p.id}">${p.name} (${p.id})</option>`
     ).join('');
 }
