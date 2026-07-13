@@ -1049,6 +1049,7 @@ async function generateInitialReport() {
   const patientId = currentDetailPatient;
   const assessmentId = document.getElementById('pr-assessment-select')?.value;
   if (!patientId || !assessmentId) { showToast('請先選擇一筆評估記錄', 'error'); return; }
+  if (!guardPatientWritable(patientId, '產生報告')) return;
   try {
     const res = await fetch(`/api/patients/${patientId}/reports`, {
       method: 'POST',
@@ -8606,6 +8607,7 @@ async function saveAssessment() {
   const totalEl = document.getElementById('totalScore');
 
   if (!patientId || !type) { showToast('請填寫必填欄位', 'error'); return; }
+  if (!guardPatientWritable(patientId, '新增評估')) return;
 
   const maxMap = { mmse: 30, moca: 30, berg: 56, romberg: 10 };
   const typeNames = { mmse: 'MMSE 簡易心智狀態測驗', moca: 'MoCA 蒙特利爾認知評估', berg: 'Berg 平衡量表', romberg: 'Romberg 測試（BTrackS）' };
@@ -9938,6 +9940,7 @@ function saveIntegratedPrescription(patientId, strategy) {
   if (!_rxCurrentItems || !_rxCurrentAnalysis) {
     showToast('無處方數據可儲存', 'error'); return;
   }
+  if (!guardPatientWritable(patientId, '儲存處方')) return;
   const today = new Date().toISOString().slice(0, 10);
   const STRATEGY_NAMES = ['保守模式', '標準模式', '核心迴路模式'];
   if (!DB.integratedPrescriptions) DB.integratedPrescriptions = [];
@@ -10427,6 +10430,7 @@ function addExerciseItem() {
 function savePrescription() {
   const patientId = document.getElementById('rx-patient').value;
   if (!patientId) { showToast('請選擇病人', 'error'); return; }
+  if (!guardPatientWritable(patientId, '新增處方')) return;
 
   const exercises = [];
   document.querySelectorAll('.exercise-item').forEach(item => {
@@ -10540,6 +10544,7 @@ function saveSession() {
   const patientId = document.getElementById('s-patient').value;
   const date = document.getElementById('s-date').value;
   if (!patientId || !date) { showToast('請填寫必填欄位', 'error'); return; }
+  if (!guardPatientWritable(patientId, '新增訓練記錄')) return;
 
   const cooperation = parseInt(document.querySelector('input[name="cooperation"]:checked')?.value || 3);
   const bcfMode = document.getElementById('s-bcf-mode').value;
@@ -10684,6 +10689,7 @@ async function openAddTherapySessionModal() {
 
 async function submitAddSessionModal() {
   const patientId = document.getElementById('sessionPatientId')?.value;
+  if (!guardPatientWritable(patientId, '新增療程')) return;
   const date = document.getElementById('sessionDate')?.value;
   const time = document.getElementById('sessionTime')?.value || '';
   const therapist = document.getElementById('sessionTherapist')?.value;
