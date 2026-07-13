@@ -1,5 +1,5 @@
 # BCF White Paper
-Version: 1.7
+Version: 1.8
 Date: 2026-07-13
 Status: SSOT
 Governance: ChatGPT架構審 ✔ / Gemini獨立審 ✔ / PM(Karl)核准 ✔
@@ -146,6 +146,18 @@ patient-status 驗證列為後續 defense-in-depth（見 Open Items）。
 
 🚫 **禁止**任何 background job、migration 或 cleanup process
 將 `status='deleted'` 自動轉為實體刪除，除非另經資料保留治理核准。
+
+### §4.8 失敗必須可見；沉默的空白也是說謊
+「不更新」≠「不顯示」。清空一個不可信的資料來源，跟不去更新它，
+是兩件事 —— 後者會讓陳舊或偽造的資料繼續留在畫面上。
+
+（v1.8 實例：0C 初版設計只是「fetch 失敗時不更新 DB.patients」，
+但它的初始值就是硬編碼的示範病人 → 畫面照樣顯示假病人。
+必須主動 `DB.patients = []`。）
+
+同時，空狀態必須說明「為什麼是空的」：
+「載入中」／「載入失敗」／「真的沒有資料」在畫面上必須可區分。
+一片沉默的空白，是另一種形式的說謊。
 
 ---
 
@@ -297,6 +309,8 @@ patient-status 驗證列為後續 defense-in-depth（見 Open Items）。
   d9ab6e5 — index.html：已封存篩選選項 + cache bust
   502962f — app.js：guardAssessmentPatient 寫入守門
   903c8f7 — index.html：cache bust（non-functional）
+  9b27867 — WHITE_PAPER.md：v1.7 文件落地（本節內容）
+  51d4271 — WHITE_PAPER.md：v1.7 補 Atlas roundtrip DB 驗證記錄
 
   ### 0B-pre — savePatientsToServer 錯誤契約 (18a74c9)
   [BUG] fetch() 對 4xx/5xx **不會 reject**。savePatientsToServer 只
@@ -352,6 +366,48 @@ patient-status 驗證列為後續 defense-in-depth（見 Open Items）。
     · 【DB VERIFIED】Atlas 直查確認雙向持久化：
       封存後 { status: "deleted" } → 命中；恢復後 → No results。
       patients 文件數始終為 10 —— 無任何實體刪除，§4.7 成立。
+
+- v1.8 (2026-07-13) X-ZERO-0C：病人資料載入 fail-loud
+
+  [COMMIT MAP]
+  5b4e868 — index.html：patientSyncBanner 容器
+  b626f2f — app.js：patientSyncState 狀態機 + 移除示範資料 fallback
+  af42330 — index.html：cache bust（non-functional）
+
+  ### X-ZERO-0C — 病人資料載入 fail-loud (5b4e868 / b626f2f / af42330)
+  [BUG] loadPatientsFromServer() 原本用一個空 catch 吞掉錯誤，
+    fetch 失敗時 DB.patients 維持它的硬編碼初始值——六筆內建示範
+    病人（P001-P006）。一次網路瞬斷就讓治療師在毫無警示的情況下
+    看著假病人，還能對假病人建立評估、同步進真實 Mongo。
+    X-ZERO-0A 擋住了 deleteMany，沒擋住這個謊。
+  [DECISION] patientSyncState：LOADING / READY / FAILED
+    （不採用 STALE_LOCAL —— recon 確認 patients 從未寫入
+    localStorage，不存在「陳舊但真實」的快取，原本的 fallback
+    永遠是示範資料）。
+    · READY = 已取得「合法的伺服器權威快照」，可以合法為空，
+      但絕不能是硬編碼示範資料。
+    · FAILED 時主動清空 DB.patients——不更新 ≠ 不顯示（§4.8）。
+  [IMPL]
+    · DB.patients 初始值改為 []，六筆示範病人自 production code 移除
+    · 常駐 banner（LOADING 黃／FAILED 紅），不用 toast
+      （toast 3 秒自動消失，不適合持續性同步狀態警示）
+    · guardPatientSyncReady() 掛在四個病人清單寫入入口：
+      匯入備份／archivePatient／restorePatient／savePatient
+    · savePatient 改 async，await savePatientsToServer() 並在失敗時
+      rollback；成功 toast 移到 server 確認**之後**（原本在送出
+      請求前就先顯示成功）
+    · patientsTable / dashboard 最近病人新增 empty state，
+      依 patientSyncState 顯示「載入中／載入失敗／尚無資料」
+  [SCOPE] 匯入備份（handleImportFile）僅加 guard，未加 rollback：
+    該函式一次覆蓋 patients/assessments/prescriptions/sessions
+    四個集合，但只 POST patients 一個，真正的 rollback 是重寫、
+    不是 patch，列入 Open Items 另案處理。
+  [PRINCIPLE] → §4.8 失敗必須可見；沉默的空白也是說謊
+  [VERIFIED] PM production 驗收：
+    · patientSyncState → 'READY' ✔
+    · 病人管理頁 → 10 位全為真實病人，無 P001-P006 ✔
+    · banner 未顯示（READY 時隱藏）✔
+    · /api/version = af42330 ✔
 
 ## Open Items（未解，實作前處理）
 - [PARTIAL] Fastigial alias 已補齊(v1.1)；CAUDAL/單側
@@ -463,11 +519,17 @@ patient-status 驗證列為後續 defense-in-depth（見 Open Items）。
 - [NOTE] styles.css 缺 .status-deleted 樣式 → 封存徽章無底色。
   功能不受影響。（styles.css 為 server.js / app.js / index.html
   之外的第四個檔案）
-- [P0] XZERO_0C_FRONTEND_FAIL_LOUD
-  loadPatientsFromServer 的靜默 catch 須改 fail-loud。引入
-  patientSyncState (LOADING/READY/FAILED/STALE_LOCAL)，僅 READY
-  允許病人寫入。示範資料不得作 production 網路失敗 fallback。
-  同時停用「刪除病人」按鈕（app.js，另 commit）。
+- [CLOSED] XZERO_0C_FRONTEND_FAIL_LOUD
+  → patientSyncState (LOADING/READY/FAILED) 已實作並部署，僅 READY
+  允許病人清單寫入；示範資料自 production code 移除，FAILED 時
+  主動清空 DB.patients。已部署並通過 PM production 驗收（v1.8）。
+- [HIGH] IMPORT_BACKUP_MULTI_COLLECTION_OVERWRITE
+  handleImportFile 覆蓋 patients/assessments/prescriptions/sessions
+  四個集合，但只 POST patients → 匯入的 assessments 只進 localStorage，
+  下次開機被 loadAssessmentsFromServer 覆蓋 → 靜默消失。
+  且四集合同步賦值後無 rollback 可能。0C 僅掛 guard。
+- [NOTE] migrateLocalStoragePatients() 現為完全死碼（0C 移除唯一呼叫端）。
+  併入 LEGACY_PATIENT_LOCALSTORAGE_MIGRATION_RECON。
 - [P1] XZERO_A_GENID_UUID
   genId(prefix)=prefix+Date.now().slice(-6)：ID 空間 10⁶，每 16.67
   分鐘循環。同 prefix 跨病人/跨裝置碰撞 → server _id upsert →
@@ -565,3 +627,28 @@ patient-status 驗證列為後續 defense-in-depth（見 Open Items）。
   BG/PPRF（非小腦），§3.2 對側 CB 規則查無實作路徑。
 - 結論：§3.1.3/§3.2 的雙候選模型與 `mechanismModel` enum尚未落地，
   為實作前待辦，非現行 bug（功能本就 "Not wired into any route"）。
+
+### 2026-07-12 — X-ZERO-0D：patients collection Atlas 唯讀稽查（PM 執行）
+- 稽查目的：驗證 X-ZERO-0A（deleteMany 止血）部署後，真實病人資料
+  是否曾在事故窗口內遺失、被示範資料（P001-P006）取代。
+- 結果：`patients` collection = 10 筆，全為真實病人，無 P001-P006
+  示範資料混入。
+- 結論：`PATIENT_DATA_LOSS: NOT FOUND`（無證據顯示曾發生遺失，但
+  不等於 100% 確定未發生——完全確認需比對 Atlas backup 歷史 count，
+  本次稽查未做此項）。
+- 副產物：`assessments` collection 內仍存有示範資料 A001-A006（繞過
+  前端 SAMPLE_ASSESSMENT_IDS 排除機制）；`home_training_sessions`
+  的 `patientId` 為小寫 `p001`，皆為 orphan，但屬示範/測試資料，
+  非真實病人遺失（詳見 Changelog v1.6 X-ZERO-0A 段）。
+
+### 2026-07-13 — X-ZERO-0B-fix：Atlas 直查驗證封存/恢復 roundtrip（PM 執行）
+- 稽查目的：驗證 archivePatient()/restorePatient() 的 status 欄位
+  異動是否真的持久化到 Mongo，而非只停留在前端/localStorage。
+- 方法：封存一筆測試病人後，直接以 Atlas 查詢
+  `{ status: "deleted" }` 是否命中該筆；恢復後再次查詢是否轉為
+  no results。
+- 結果：封存後查詢命中；恢復後查詢 no results；全程 `patients`
+  collection 文件數維持 10（未增未減）。
+- 結論：雙向持久化成立，無任何實體刪除發生，§4.7（status='deleted'
+  的語意為 archived，非實體刪除）在此案例下獲得資料庫層面的實測
+  佐證，非僅程式碼層面的邏輯推論。
