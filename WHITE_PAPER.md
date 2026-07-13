@@ -1,6 +1,6 @@
 # BCF White Paper
-Version: 1.6
-Date: 2026-07-12
+Version: 1.7
+Date: 2026-07-13
 Status: SSOT
 Governance: ChatGPT架構審 ✔ / Gemini獨立審 ✔ / PM(Karl)核准 ✔
 Authoring: Claude(策略/文件)
@@ -101,6 +101,51 @@ mechanismModel 列舉：
 ### §4.4 快照凍結
 歷史紀錄為當時快照。不得以「現在重算」改寫歷史顯示值。
 （v1.6 據此駁回 computeConsistency 歷史重算方案 H4）
+
+### §4.5 UI 層隱藏 ≠ Guard
+移除／隱藏 UI 選項**不是**存取控制。它只會改變錯誤訊息的內容，
+甚至讓被同步餵值的欄位靜默變空，反而繞過原本的檢查。
+
+**三層責任模型：**
+- **UI 隱藏**：呈現控制。**不是 guard。**
+- **Client guard**：操作流程與即時錯誤回饋。**不得作為唯一防線。**
+- **Server guard**：資料完整性的最終防線。
+
+涉及資料完整性或權限的規則，必要時 server 必須再次驗證 ——
+endpoint 可能被舊 cache、其他 client 或直接 request 呼叫。
+
+（v1.7 實例：X-ZERO-0B 初版把 assess-patient-select 排除在封存
+白名單外，以為能擋住「對封存病人新增評估」。實際上它由
+global-patient-select 同步餵值，移除 option 只讓 .value 靜默變 ''，
+存檔被既有的 !patientId 檢查擋下 —— 安全，但錯誤訊息變成
+「請選擇病人」，明明使用者已經選了。**UI 在說謊。**）
+
+⚠️ guardAssessmentPatient() **仍是前端 guard**。server 端的
+patient-status 驗證列為後續 defense-in-depth（見 Open Items）。
+
+與 §4.2 同源：**不要把「看起來做不到」當成「做不到」。**
+
+### §4.6 Recon-First 為必要條件，非形式
+2026-07-12 一日內兩次「假設災難 → 實碼推翻」：
+1. 假設 effectiveModuleCount 可當 gate → recon 證實其母體與
+   computeConsistency L1 不同（GATE_COUNT_MISMATCH），沿用會把
+   正確原則套在錯誤基數上。
+2. 假設「封存選項消失後產生的空 patientId」會寫進 Mongo → recon
+   證實三個存檔函式本就有 !patientId 檢查，孤兒不可能產生。
+
+**兩次都是動手前的唯讀 recon 攔下的。**
+任何「這個一定壞了」的判斷，在實碼驗證前都只是假設。
+
+**可執行條款**：涉及資料刪除、分母母體、身份關聯、同步契約或
+臨床判定的修改，**必須先完成唯讀 recon**，列出實際讀寫路徑與
+既有 guard，再進入設計。
+
+### §4.7 status='deleted' 的語意
+`deleted` 為既有技術值，其**業務與臨床語意為 archived**，
+**不代表實體資料刪除**。文件、快照與關聯紀錄全部保留。
+
+🚫 **禁止**任何 background job、migration 或 cleanup process
+將 `status='deleted'` 自動轉為實體刪除，除非另經資料保留治理核准。
 
 ---
 
@@ -243,6 +288,69 @@ mechanismModel 列舉：
       非真實病人遺失。
   [CONCLUSION] 我們是在預防，不是善後。X-ZERO-0A 止血及時。
 
+- v1.7 (2026-07-13) 病人封存流程（soft delete）+ 寫入路徑守門
+
+  [COMMIT MAP]
+  18a74c9 — app.js：savePatientsToServer 錯誤契約
+  612b68d — index.html：cache bust（non-functional）
+  6039879 — app.js：封存流程五項
+  d9ab6e5 — index.html：已封存篩選選項 + cache bust
+  502962f — app.js：guardAssessmentPatient 寫入守門
+  903c8f7 — index.html：cache bust（non-functional）
+
+  ### 0B-pre — savePatientsToServer 錯誤契約 (18a74c9)
+  [BUG] fetch() 對 4xx/5xx **不會 reject**。savePatientsToServer 只
+    catch 網路層錯誤、未檢查 resp.ok → server 拒絕寫入時**靜默假成功**，
+    UI 顯示已存、Mongo 沒東西、重整就消失。
+    （同檔案的 migrateLocalStoragePatients 早有 !resp.ok 檢查 →
+      同檔兩種慣例。）
+  [FIX] 加 resp.ok 檢查；回傳 true/false；區分「伺服器拒絕寫入」
+    與「無法連線」。
+  [COMPAT] 既有匯入／新增等**未消費回傳值**的呼叫端維持原行為；
+    **新的封存／恢復流程正式 await 並消費 true/false 以執行 rollback。**
+  [NOTE] 此為既有缺陷，被 soft delete 的 rollback 需求逼出水面。
+
+  ### X-ZERO-0B — 病人封存流程 (6039879 / d9ab6e5)
+  [DECISION] 放棄「新增 DELETE endpoint」，改用既有 status 欄位做
+    soft delete。STATUS_ROUNDTRIP_VERIFIED：
+    · Patient schema strict:false、無 enum → 'deleted' 存得進去
+    · POST $set 為 {...p} 全量、非白名單 → 前端欄位都會進 Mongo
+    · GET 無 projection → status 原樣回傳
+    → **完全不需改 server.js。**
+  [IMPL] 五項（純 app.js）：
+    · deletePatient() → archivePatient()：server-first + rollback
+      （失敗時 status 還原，**不寫 localStorage**）
+    · 新增 restorePatient()：deleted → active，同 rollback 契約
+    · ALLOW_ARCHIVED_FOR_HISTORY 白名單取代 isFilter 二分法
+    · renderPatients 條件渲染：封存列顯示恢復鈕
+    · statusLabel 補 deleted → 已封存（renderPatients + viewPatient）
+  [UI] 按鈕文案「刪除」→「封存」。PM 裁決：**臨床真實性 > 操作直覺**。
+    資料沒被刪，UI 不該說刪。
+  [NO-CASCADE] 病人主檔封存，assessments/sessions/reports **全部保留**，
+    patientId 連結不斷（Gemini 鐵律：cascade delete 是第二個資料災難）。
+
+  ### X-ZERO-0B-fix — 守門在寫入路徑 (502962f)
+  [BUG] 初版把 assess-patient-select 排除在白名單外。但它由
+    global-patient-select **同步餵值** → option 消失 → .value 靜默
+    變 ''（production console 實測確認）。
+  [FINDING] **孤兒風險不存在** —— recon 證實 saveBCFAssessment /
+    saveRightEyeAssessment / saveBTracksAssessment **本就有**
+    `if (!patientId || !date)` 檢查，空值寫不進去。
+    真正的缺陷只是：使用者選了病人，系統卻說「請選擇病人」。**UI 在說謊。**
+  [FIX] 雙層：
+    · assess-patient-select **加回**白名單（.value 不再靜默變空）
+    · 新增 guardAssessmentPatient()：空值／查無病人／已封存 →
+      各自明確 toast，回傳 null 讓呼叫端 bail
+    · 三個存檔函式改用 guard；date 檢查拆出保留
+  [PRINCIPLE] → §4.5 UI 層隱藏 ≠ Guard（三層責任模型）
+  [VERIFIED] PM production 驗收：
+    · 封存病人 → 一般名單／新增評估選單消失 ✔
+    · global-patient-select 仍可選（後綴「（已封存）」）→ 歷史可查 ✔
+    · 存檔 → 「此病人已封存，請先恢復後才能新增評估」✔
+    · 恢復 → 狀態回 active、重新出現 ✔
+    · 篩選器「已封存」選項 ✔
+    · 【待補】封存後 F5 重新整理 → 仍為已封存（完整 roundtrip 使用者驗證）
+
 ## Open Items（未解，實作前處理）
 - [PARTIAL] Fastigial alias 已補齊(v1.1)；CAUDAL/單側
   fastigial canonical 命名 scheme 退 P1（bilateral≠caudal、
@@ -324,11 +432,35 @@ mechanismModel 列舉：
   待病例驗證再評估升級。ChatGPT C/D 段證據謹慎：用
   Neural Endurance Deficit（可證明）非 Mitochondrial
   Failure（推論）。
-- [P0] XZERO_0B_EXPLICIT_DELETE_ENDPOINT
-  新增 DELETE /api/patients/:id。最低防護：ID 存在／病人存在／
-  明確回傳狀態／audit log／禁一次刪多筆。
-  不得 cascade delete（病人主檔 soft delete，臨床資料保留）
-  —— 否則第二個資料災難來自 cascade。
+- [CLOSED] XZERO_0B_EXPLICIT_DELETE_ENDPOINT
+  → 改採 soft delete via existing status（PATIENT_ARCHIVE_WORKFLOW）。
+    roundtrip 驗證後確認**不需要** DELETE endpoint、不需改 server.js、
+    不需 cascade。已部署並通過 PM production 驗收。
+- [HIGH] ARCHIVED_PATIENT_WRITE_GUARD_COVERAGE_AUDIT
+  guardAssessmentPatient 只保護三個評估存檔入口
+  （saveBCFAssessment / saveRightEyeAssessment / saveBTracksAssessment）。
+  需盤查所有會建立 patient-linked record 的寫入路徑：療程／處方／
+  報告／home training／BCF session，確認各自於提交前驗證 patient
+  存在且 status !== 'deleted'。
+  ⚠️ 依 §4.5，**UI 選項排除不得作為完成證據。**
+- [OPEN] SERVER_SIDE_PATIENT_STATUS_GUARD
+  guardAssessmentPatient 為前端 guard。server endpoint 可被舊 cache、
+  其他 client 或直接 request 呼叫繞過。依 §4.5 三層模型，server 應
+  有基本 patient 存在性與 status 驗證。defense-in-depth，不阻塞 0C。
+- [BUG/MEDIUM] PATIENT_STATUS_DEFAULT_SEMANTICS_INCONSISTENT
+  populatePatientSelects 用排除法（undefined 視為可選）；dashboard 用
+  === 'active'（undefined 被排除）→ 同一位舊病人可被選取，卻不算 active。
+  已是功能語意不一致，非文件備註。建議 `patient.status || 'active'`，
+  但須 recon 後**集中處理**，不得每處自行 fallback。
+- [HIGH] THERAPY_SESSION_HARD_DELETE_GOVERNANCE_AUDIT
+  DELETE /api/therapy-sessions/:id 為硬刪除、無存在性檢查、無 audit log。
+  刪的是臨床紀錄。建議排在 genId 後、X1 前或與 X1 同期治理評估。
+- [MEDIUM｜需 recon 定級] THERAPIST_HARD_DELETE_GOVERNANCE_AUDIT
+  DELETE /api/therapists/:id 同款。若 therapist ID 已被歷史紀錄引用，
+  硬刪除破壞 attribution → 實際嚴重度可能升至 HIGH。先 recon 再定級。
+- [NOTE] styles.css 缺 .status-deleted 樣式 → 封存徽章無底色。
+  功能不受影響。（styles.css 為 server.js / app.js / index.html
+  之外的第四個檔案）
 - [P0] XZERO_0C_FRONTEND_FAIL_LOUD
   loadPatientsFromServer 的靜默 catch 須改 fail-loud。引入
   patientSyncState (LOADING/READY/FAILED/STALE_LOCAL)，僅 READY
@@ -391,15 +523,16 @@ mechanismModel 列舉：
 
 ---
 
-## 現行優先序（治理鏈裁決 2026-07-12）
+## 現行優先序（治理鏈裁決 2026-07-13）
 
 ```
 ✅ A1              已部署 + PM 驗收
 ✅ X-ZERO-0A       已部署（deleteMany 止血）
 ✅ X-ZERO-0D       已稽查（PATIENT_DATA_LOSS: NOT FOUND）
+✅ X-ZERO-0B       已部署 + PM 驗收（封存流程 + 寫入守門）
 ──────────────────────────────
-▶  X-ZERO-0B       DELETE endpoint         (server.js)
-▶  X-ZERO-0C       前端 fail-loud + 停用刪除鈕 (app.js)
+▶  X-ZERO-0C       前端 fail-loud + patientSyncState   (app.js)
+▶  X-ZERO-0E       archived-patient 寫入路徑覆蓋率稽查
    X-ZERO-A        genId UUID
    X-ZERO-B        server collision guard
    X1              整合處方後端持久化
