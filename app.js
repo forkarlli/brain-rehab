@@ -3,14 +3,9 @@ console.log('[BCF] app.js v20260517d loaded');
 
 // ===== DATA STORE =====
 const DB = {
-  patients: [
-    { id: 'P001', name: '陳大明', dob: '1958-03-15', gender: 'M', phone: '0912-345-678', emergency: '陳小花', diagnosis: '腦中風（缺血性）', onset: '2024-11-10', type: 'inpatient', history: '右側偏癱，語言功能受損', contraindications: '血壓控制中，避免高強度運動', status: 'active', therapist: '王小明', lastSession: '2026-04-18', progress: 72 },
-    { id: 'P002', name: '林淑芬', dob: '1962-07-22', gender: 'F', phone: '0923-456-789', emergency: '林大全', diagnosis: '帕金森氏症', onset: '2023-05-15', type: 'outpatient', history: '步態不穩，手部顫抖', contraindications: '無特殊禁忌', status: 'active', therapist: '王小明', lastSession: '2026-04-19', progress: 58 },
-    { id: 'P003', name: '黃志強', dob: '1970-12-01', gender: 'M', phone: '0934-567-890', emergency: '黃美麗', diagnosis: '腦外傷', onset: '2025-08-20', type: 'inpatient', history: '交通事故，認知功能下降', contraindications: '避免頭部碰撞動作', status: 'active', therapist: '李芳如', lastSession: '2026-04-17', progress: 45 },
-    { id: 'P004', name: '張美玲', dob: '1955-09-30', gender: 'F', phone: '0945-678-901', emergency: '張先生', diagnosis: '阿茲海默症', onset: '2024-02-01', type: 'outpatient', history: '記憶力衰退，定向感障礙', contraindications: '需陪伴人員全程陪同', status: 'active', therapist: '王小明', lastSession: '2026-04-15', progress: 33 },
-    { id: 'P005', name: '吳建國', dob: '1948-04-11', gender: 'M', phone: '0956-789-012', emergency: '吳夫人', diagnosis: '腦中風（出血性）', onset: '2025-12-05', type: 'inpatient', history: '左側肢體無力，吞嚥困難', contraindications: '吞嚥評估中，暫禁固體食物', status: 'active', therapist: '李芳如', lastSession: '2026-04-18', progress: 61 },
-    { id: 'P006', name: '王秀英', dob: '1965-11-25', gender: 'F', phone: '0967-890-123', emergency: '王先生', diagnosis: '多發性硬化症', onset: '2022-03-10', type: 'outpatient', history: '肢體疲勞，視力間歇性模糊', contraindications: '避免過熱環境', status: 'completed', therapist: '王小明', lastSession: '2026-03-20', progress: 88 },
-  ],
+  // X-ZERO-0C: production 不得以硬編碼示範病人作為載入失敗 fallback。
+  // 真實資料一律由 loadPatientsFromServer() 從 Mongo 取得。
+  patients: [],
 
   assessments: [
     { id: 'A001', patientId: 'P001', date: '2026-04-15', type: 'MMSE 簡易心智狀態測驗', score: 22, maxScore: 30, prev: 18, therapist: '王小明', notes: '語言理解有所改善' },
@@ -72,6 +67,40 @@ function loadFromStorage() {
   }
 }
 
+// ===== X-ZERO-0C: 病人資料同步狀態機 =====
+// LOADING | READY | FAILED
+// READY = 已取得「合法的伺服器權威快照」——該快照可以是空的，
+//         但絕不能是硬編碼示範資料。
+// LOADING / FAILED 一律禁止病人清單寫入。
+let patientSyncState = 'LOADING';
+
+function setPatientSyncState(next) {
+  patientSyncState = next;
+  renderPatientSyncBanner();
+}
+
+function renderPatientSyncBanner() {
+  const el = document.getElementById('patientSyncBanner');
+  if (!el) return;
+  if (patientSyncState === 'READY') { el.style.display = 'none'; return; }
+  const cfg = patientSyncState === 'LOADING'
+    ? { bg: '#fef3c7', clr: '#92400e',
+        txt: '🟡 正在取得伺服器病人資料。載入完成前，病人清單暫時不可修改。' }
+    : { bg: '#fee2e2', clr: '#991b1b',
+        txt: '🔴 無法取得伺服器病人資料。目前未載入任何真實病人。禁止新增、修改、封存、恢復或匯入病人。請確認連線後重新整理。' };
+  el.style.cssText = `display:block;padding:12px 16px;margin:12px 24px 0;border-radius:8px;font-weight:700;line-height:1.5;background:${cfg.bg};color:${cfg.clr}`;
+  el.textContent = cfg.txt;
+}
+
+// 病人清單寫入閘門。⚠️ 依 §4.5 這是 client guard，不是 server guard。
+function guardPatientSyncReady() {
+  if (patientSyncState !== 'READY') {
+    showToast('⚠️ 尚未取得伺服器病人資料，禁止修改病人清單', 'error');
+    return false;
+  }
+  return true;
+}
+
 // 回傳 true = 伺服器確認寫入；false = 失敗（呼叫端可據此 rollback）
 // 注意：fetch 對 4xx/5xx 不會 reject，必須顯式檢查 resp.ok
 async function savePatientsToServer() {
@@ -118,20 +147,18 @@ async function migrateLocalStoragePatients() {
 }
 
 async function loadPatientsFromServer() {
+  setPatientSyncState('LOADING');
   try {
     const resp = await fetch('/api/patients');
-    if (!resp.ok) return;
+    if (!resp.ok) throw new Error(`PATIENT_LOAD_HTTP_${resp.status}`);
     const data = await resp.json();
-    if (Array.isArray(data.patients) && data.patients.length > 0) {
-      DB.patients = data.patients;
-      if (document.getElementById('page-patients')?.classList.contains('active')) {
-        renderPatients();
-      }
-    } else {
-      await migrateLocalStoragePatients();
-    }
-  } catch(e) {
-    console.warn('伺服器病人資料讀取失敗，使用本機預設資料', e);
+    if (!data || !Array.isArray(data.patients)) throw new Error('PATIENT_LOAD_INVALID_PAYLOAD');
+    DB.patients = data.patients;      // [] 為合法的權威空集合
+    setPatientSyncState('READY');
+  } catch (error) {
+    DB.patients = [];                 // FAILED 時主動清空 —— 不顯示不可信資料
+    setPatientSyncState('FAILED');
+    console.error('[PATIENT_SYNC_LOAD_FAILED]', error);
   }
   populatePatientSelects();
   renderDashboard();
@@ -405,6 +432,7 @@ function importBackup() {
 }
 
 function handleImportFile(e) {
+  if (!guardPatientSyncReady()) { e.target.value = ''; return; }
   const file = e.target.files[0];
   if (!file) return;
   const reader = new FileReader();
@@ -706,7 +734,11 @@ function renderDashboard() {
   const recent = [...DB.patients].filter(p => p.status === 'active')
     .sort((a, b) => new Date(b.lastSession) - new Date(a.lastSession)).slice(0, 5);
 
-  recentEl.innerHTML = recent.map(p => `
+  recentEl.innerHTML = recent.length === 0
+    ? `<div style="text-align:center;padding:24px;color:var(--gray-400);font-size:13px">${
+        patientSyncState === 'READY' ? '尚無病人' : '病人資料載入中或載入失敗'
+      }</div>`
+    : recent.map(p => `
     <div class="patient-mini-item" onclick="navigateTo('patients')">
       <div class="patient-avatar" style="background:${getAvatarColor(p.name)}">${p.name[0]}</div>
       <div class="patient-mini-info">
@@ -827,6 +859,16 @@ function renderPatients(filter = '') {
   if (statusFilter) data = data.filter(p => p.status === statusFilter);
 
   const statusLabel = { active: '治療中', completed: '已完成', paused: '暫停', deleted: '已封存' };
+
+  if (data.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="8" style="text-align:center;padding:40px;color:var(--gray-400)">${
+      patientSyncState === 'LOADING' ? '正在載入病人資料…'
+      : patientSyncState === 'FAILED' ? '無法取得伺服器病人資料'
+      : (filter || statusFilter) ? '無符合條件的病人'
+      : '尚無病人資料'
+    }</td></tr>`;
+    return;
+  }
 
   tbody.innerHTML = data.map(p => `
     <tr>
@@ -1496,6 +1538,7 @@ function showAssessmentDetail(aid) {
 }
 
 async function archivePatient(id) {
+  if (!guardPatientSyncReady()) return;
   if (!confirm('確定要封存此病人嗎？\n\n封存後，病人將不再出現在新增評估、療程與處方的選單中。\n既有評估、療程與報告不會刪除，之後可從「已封存」名單恢復。')) return;
   const p = DB.patients.find(x => x.id === id);
   if (!p) return;
@@ -1517,6 +1560,7 @@ async function archivePatient(id) {
 }
 
 async function restorePatient(id) {
+  if (!guardPatientSyncReady()) return;
   if (!confirm('確定要恢復此病人嗎？\n\n恢復後，病人將重新出現在一般名單與新增評估選單中。')) return;
   const p = DB.patients.find(x => x.id === id);
   if (!p) return;
@@ -1537,11 +1581,16 @@ async function restorePatient(id) {
   showToast('病人已恢復', 'success');
 }
 
-function savePatient(e) {
+async function savePatient(e) {
   e.preventDefault();
+  if (!guardPatientSyncReady()) return;
+
   const name = document.getElementById('p-name').value.trim();
   const pid = document.getElementById('p-id').value.trim();
   if (!name || !pid) { showToast('請填寫必填欄位', 'error'); return; }
+
+  const _prevPatients = DB.patients.map(p => ({ ...p }));   // 淺拷貝（扁平物件）
+  let _successMsg = '';
 
   if (editingId) {
     const p = getPatient(editingId);
@@ -1557,7 +1606,7 @@ function savePatient(e) {
         history: document.getElementById('p-history').value,
         contraindications: document.getElementById('p-contraindications').value,
       });
-      showToast('病人資料已更新', 'success');
+      _successMsg = '病人資料已更新';
     }
   } else {
     // Check duplicate ID
@@ -1578,11 +1627,18 @@ function savePatient(e) {
       status: 'active', therapist: '王小明',
       lastSession: '', progress: 0,
     });
-    showToast('病人資料已新增', 'success');
+    _successMsg = '病人資料已新增';
+  }
+
+  const ok = await savePatientsToServer();
+  if (!ok) {
+    DB.patients = _prevPatients;
+    showToast('儲存失敗，變更已還原', 'error');
+    return;
   }
 
   saveToStorage();
-  savePatientsToServer();
+  showToast(_successMsg, 'success');
   closeModal('addPatientModal');
   renderPatients();
   populatePatientSelects();
