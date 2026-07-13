@@ -605,16 +605,44 @@ function getAvatarColor(name) {
 
 // X-ZERO-0B: 封存(soft delete)語意 —— status='deleted'
 // 「封存」= 停止產生新臨床資料，但歷史必須仍可查閱。
-// 白名單：僅這些 select 允許選到已封存病人（純查詢/切換上下文）。
-// ⚠️ assess-patient-select 刻意**不在**白名單內 —— 它是
-//    saveBCFAssessment/saveRightEyeAssessment/saveBTracksAssessment
-//    的 patientId 直接來源，放行會讓封存病人繼續被寫入新評估。
+//
+// ⚠️ 修正記錄：初版把 assess-patient-select 排除在白名單外，
+//    以為這樣能擋住「對封存病人新增評估」。實際上它由
+//    global-patient-select 同步餵值，移除 option 只會讓 .value
+//    靜默變 ''，存檔被既有的 !patientId 檢查擋下 —— 安全，
+//    但錯誤訊息變成「請選擇病人」，明明使用者已經選了。
+//
+// 結論：UI 層隱藏選項不是 guard，只是讓錯誤訊息說謊。
+//       真正的 guard 在寫入路徑（guardAssessmentPatient）。
 const ALLOW_ARCHIVED_FOR_HISTORY = new Set([
   'global-patient-select',
+  'assess-patient-select',
   'rxPatientFilter',
   'sessionPatientFilter',
   'reportPatientFilter',
 ]);
+
+// X-ZERO-0B-fix: 存檔路徑的真正 guard。
+// UI 層隱藏選項 ≠ guard —— 選項消失只會讓 .value 變空，
+// 反而繞過檢查寫入空 patientId。守門必須在寫入路徑上。
+// 回傳 patientId（合法）或 null（已擋下並提示）。
+function guardAssessmentPatient() {
+  const patientId = document.getElementById('assess-patient-select')?.value || '';
+  if (!patientId) {
+    showToast('請先選擇病人', 'error');
+    return null;
+  }
+  const pt = DB.patients.find(p => p.id === patientId);
+  if (!pt) {
+    showToast('查無此病人，無法儲存', 'error');
+    return null;
+  }
+  if (pt.status === 'deleted') {
+    showToast('此病人已封存，請先恢復後才能新增評估', 'error');
+    return null;
+  }
+  return patientId;
+}
 
 // ===== POPULATE PATIENT SELECTS =====
 function populatePatientSelects() {
@@ -5346,11 +5374,12 @@ function generateIntegratedPrescription() {
 }
 
 async function saveBCFAssessment() {
-  const patientId = document.getElementById('assess-patient-select').value;
+  const patientId = guardAssessmentPatient();
+  if (!patientId) return;
   const date = document.getElementById('assess-date-input')?.value
             || document.getElementById('assess-date-custom')?.value
             || document.getElementById('assess-date').value;
-  if (!patientId || !date) { showToast('請選擇病人和日期', 'error'); return; }
+  if (!date) { showToast('請選擇評估日期', 'error'); return; }
 
   // Collect all item results
   const eyeItems = {};
@@ -6911,11 +6940,12 @@ function getRECircuit(reResult) {
 }
 
 async function saveRightEyeAssessment() {
-  const patientId = document.getElementById('assess-patient-select')?.value;
+  const patientId = guardAssessmentPatient();
+  if (!patientId) return;
   const date = document.getElementById('assess-date-input')?.value
             || document.getElementById('assess-date-custom')?.value
             || document.getElementById('assess-date')?.value;
-  if (!patientId || !date) { showToast('請選擇病人和日期', 'error'); return; }
+  if (!date) { showToast('請選擇評估日期', 'error'); return; }
 
   const parseNum = v => { const n = parseFloat(v); return isNaN(n) ? null : n; };
   const abnCount = [
@@ -7345,11 +7375,11 @@ function renderRombergInterface() {
 }
 
 async function saveBTracksAssessment() {
-  const patientId = document.getElementById('assess-patient-select')?.value;
+  const patientId = guardAssessmentPatient();
+  if (!patientId) return;
   const date = document.getElementById('assess-date-input')?.value
             || document.getElementById('assess-date-custom')?.value
             || document.getElementById('assess-date')?.value;
-  if (!patientId) { showToast('請先選擇病人', 'error'); return; }
   if (!date) { showToast('請選擇評估日期', 'error'); return; }
   const direction = document.getElementById('romberg-direction')?.value;
   if (!direction) { showToast('請選擇偏移方向後再儲存', 'error'); return; }
