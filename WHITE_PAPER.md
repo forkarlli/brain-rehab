@@ -349,7 +349,9 @@ patient-status 驗證列為後續 defense-in-depth（見 Open Items）。
     · 存檔 → 「此病人已封存，請先恢復後才能新增評估」✔
     · 恢復 → 狀態回 active、重新出現 ✔
     · 篩選器「已封存」選項 ✔
-    · 【待補】封存後 F5 重新整理 → 仍為已封存（完整 roundtrip 使用者驗證）
+    · 【DB VERIFIED】Atlas 直查確認雙向持久化：
+      封存後 { status: "deleted" } → 命中；恢復後 → No results。
+      patients 文件數始終為 10 —— 無任何實體刪除，§4.7 成立。
 
 ## Open Items（未解，實作前處理）
 - [PARTIAL] Fastigial alias 已補齊(v1.1)；CAUDAL/單側
