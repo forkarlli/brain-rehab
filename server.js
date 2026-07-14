@@ -215,6 +215,11 @@ if (process.env.MONGODB_URI) {
 }
 
 // Auto-migrate patients.json → MongoDB on first run
+// X-ZERO-C0: 開機 migration 的原則是「填補缺失」，不是「恢復舊快照」。
+// $setOnInsert：_id 不存在 → insert；_id 已存在 → 什麼都不做（保留 Mongo 現有資料）。
+// 現況：patients.json 不在 repo（.gitignore）、production 取不到，且 count>0 守衛已擋。
+//       本改動為防禦性收斂 —— 把「目前恰好安全」升級為「未來也保證安全」。
+// ⚠️ 禁止改回 $set：每次重啟把過時檔案蓋回資料庫，是不可逆的資料覆寫。
 const PATIENTS_FILE = path.join(__dirname, 'patients.json');
 async function migrateFromFile() {
   if (!Patient) return;
@@ -225,7 +230,7 @@ async function migrateFromFile() {
     const list = JSON.parse(fs.readFileSync(PATIENTS_FILE, 'utf8'));
     if (!Array.isArray(list) || list.length === 0) return;
     const ops = list.map(p => ({
-      updateOne: { filter: { _id: p.id || p._id }, update: { $set: { ...p, _id: p.id || p._id } }, upsert: true },
+      updateOne: { filter: { _id: p.id || p._id }, update: { $setOnInsert: { ...p, _id: p.id || p._id } }, upsert: true },
     }));
     await Patient.bulkWrite(ops);
     console.log(`✅ 已從 patients.json 遷移 ${list.length} 位病人`);
