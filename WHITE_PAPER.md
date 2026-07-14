@@ -1,6 +1,6 @@
 # BCF White Paper
-Version: 1.8
-Date: 2026-07-13
+Version: 1.9
+Date: 2026-07-14
 Status: SSOT
 Governance: ChatGPT架構審 ✔ / Gemini獨立審 ✔ / PM(Karl)核准 ✔
 Authoring: Claude(策略/文件)
@@ -158,6 +158,22 @@ patient-status 驗證列為後續 defense-in-depth（見 Open Items）。
 同時，空狀態必須說明「為什麼是空的」：
 「載入中」／「載入失敗」／「真的沒有資料」在畫面上必須可區分。
 一片沉默的空白，是另一種形式的說謊。
+
+### §4.9 Guard 的證明是 direct-call，不是 UI
+一個 guard 只有在「**繞過 UI 直接呼叫**」時仍能拒絕，才算存在。
+
+「選單裡看不到」證明的是 **selector 過濾**，不是 guard。
+兩者可以同時為真，也可以只有前者為真 —— **而後者才是防線**。
+
+**驗收條件**：對每一條 patient-linked 寫入函式，在 console 直接
+傳入 archived patientId，必須拒絕建立紀錄。
+（v1.9 實例：0E 六個寫入路徑均通過 direct-call 驗證。）
+
+⚠️ 這仍只是 **client-side coverage**。server endpoint 可被舊 client、
+其他 client 或直接 request 繞過 —— 見 SERVER_SIDE_PATIENT_STATUS_GUARD。
+
+狀態只能宣稱：`CLIENT_WRITE_GUARD_COVERAGE_COMPLETE`
+**不得**宣稱：`ARCHIVED_PATIENT_WRITE_PROTECTION_COMPLETE`
 
 ---
 
@@ -409,6 +425,54 @@ patient-status 驗證列為後續 defense-in-depth（見 Open Items）。
     · banner 未顯示（READY 時隱藏）✔
     · /api/version = af42330 ✔
 
+- v1.9 (2026-07-14) 封存病人寫入路徑全覆蓋（X-ZERO-0E）
+
+  [COMMIT MAP]
+  41ee356 — app.js：guardPatientWritable 泛化 + session selector 過濾
+  b2877a3 — app.js：六個 patient-linked 寫入路徑掛 guard
+  dfd16d9 — index.html：cache bust（non-functional）
+
+  ### X-ZERO-0E — client write guard coverage
+  [AUDIT] 0B-fix 的 guardAssessmentPatient() 只保護三個評估存檔入口。
+    唯讀稽查（COVERAGE_GAP）找出另外六條 patient-linked 寫入路徑：
+    · 🔴 submitAddSessionModal → saveTherapySession：
+      **連 selector 都沒過濾** —— populateSessionPatientSelect() 自建
+      select，完全繞過 ALLOW_ARCHIVED_FOR_HISTORY 白名單機制。
+      封存病人明白列在選單裡，選了就 POST 進 Mongo therapy_sessions。
+    · 🔴 generateInitialReport：0B 刻意讓封存病人「可查看」（歷史必須
+      可查），但詳情頁的「產生 Initial Report」按鈕不看 status →
+      對封存病人 POST 全新 PatientReport。「可查看」被延伸成「可產生」。
+    · 🟡 saveAssessment / saveIntegratedPrescription / saveSession /
+      savePrescription：僅靠 DOM option 排除，寫入路徑零檢查。
+      功能上目前安全，但依 §4.5 這不是 guard —— 任何人日後把這些
+      select 加進白名單，bug 立刻重演。
+  [FIX] 泛化為單一權威 guard（41ee356）：
+    · guardPatientWritable(patientId, action) → 回傳 patient object
+      或 null。回傳 object 而非 boolean，使 guard 成為唯一的 patient
+      existence lookup，呼叫端不需再 find() 一次。
+    · 共用 predicate：isArchivedPatient / canCreateRecordsForPatient
+      ⚠️ 命名刻意明確 —— **禁用** isPatientVisible / isValidPatient。
+      「可查歷史」與「可新增紀錄」對封存病人是**兩條不同的規則**，
+      命名含糊正是這類 bug 反覆發生的原因。
+    · guardAssessmentPatient 暫留為 wrapper（三個評估呼叫端不變）
+    · populateSessionPatientSelect 補上 canCreateRecordsForPatient 過濾
+  [FIX] 六個寫入路徑掛 guard（b2877a3），各在既有驗證之後、
+    **第一個副作用之前**（genId / array push / localStorage / fetch）：
+    submitAddSessionModal「新增療程」／generateInitialReport「產生報告」／
+    saveAssessment「新增評估」／saveIntegratedPrescription「儲存處方」／
+    saveSession「新增訓練記錄」／savePrescription「新增處方」
+  [PRINCIPLE] → §4.9 Guard 的證明是 direct-call，不是 UI
+  [VERIFIED] PM production direct-call 驗收（§4.9 驗收條件）：
+    · guardPatientWritable('<archived>', ...) → **null** ✔
+    · guardPatientWritable('<不存在>', ...)  → **null** ✔
+    · guardPatientWritable('', ...)          → **null** ✔
+    · guardPatientWritable('<active>', ...)  → **patient object** ✔
+    · 封存後 dashboard「在治病人數」10 → 9、最近活躍病人列表移除 ✔
+    · 訓練記錄新增選單：封存病人不再出現 ✔
+  [STATUS] **CLIENT_WRITE_GUARD_COVERAGE_COMPLETE**
+    ⚠️ **不得**宣稱 ARCHIVED_PATIENT_WRITE_PROTECTION_COMPLETE ——
+    server endpoint 仍接受任意 patientId，不檢查病人存在或未封存。
+
 ## Open Items（未解，實作前處理）
 - [PARTIAL] Fastigial alias 已補齊(v1.1)；CAUDAL/單側
   fastigial canonical 命名 scheme 退 P1（bilateral≠caudal、
@@ -494,13 +558,18 @@ patient-status 驗證列為後續 defense-in-depth（見 Open Items）。
   → 改採 soft delete via existing status（PATIENT_ARCHIVE_WORKFLOW）。
     roundtrip 驗證後確認**不需要** DELETE endpoint、不需改 server.js、
     不需 cascade。已部署並通過 PM production 驗收。
-- [HIGH] ARCHIVED_PATIENT_WRITE_GUARD_COVERAGE_AUDIT
-  guardAssessmentPatient 只保護三個評估存檔入口
-  （saveBCFAssessment / saveRightEyeAssessment / saveBTracksAssessment）。
-  需盤查所有會建立 patient-linked record 的寫入路徑：療程／處方／
-  報告／home training／BCF session，確認各自於提交前驗證 patient
-  存在且 status !== 'deleted'。
-  ⚠️ 依 §4.5，**UI 選項排除不得作為完成證據。**
+- [CLOSED] ARCHIVED_PATIENT_WRITE_GUARD_COVERAGE_AUDIT
+  → X-ZERO-0E：六條 patient-linked 寫入路徑全數掛 guardPatientWritable，
+    populateSessionPatientSelect 補過濾。通過 PM direct-call 驗收（§4.9）。
+    ⚠️ **僅 client-side coverage**。server 端見 SERVER_SIDE_PATIENT_STATUS_GUARD。
+- [OPEN] HOME_TRAINING_STANDALONE_FRONTEND_GUARD
+  home-training.html 為**獨立前端**，patient-id-input 為**手動輸入**
+  （非 select），不經 app.js 的 guard 體系。POST /api/home-training
+  無任何 patient 存在性或 status 驗證。0E 未涵蓋。
+  【需確認】此前端的使用情境與部署方式。
+- [NOTE] guardAssessmentPatient() 現為 guardPatientWritable 的過渡 wrapper。
+  三個評估呼叫端應直接改用 guardPatientWritable，wrapper 隨後移除，
+  避免兩套相近邏輯出現文案或規則漂移。
 - [OPEN] SERVER_SIDE_PATIENT_STATUS_GUARD
   guardAssessmentPatient 為前端 guard。server endpoint 可被舊 cache、
   其他 client 或直接 request 呼叫繞過。依 §4.5 三層模型，server 應
@@ -587,17 +656,17 @@ patient-status 驗證列為後續 defense-in-depth（見 Open Items）。
 
 ---
 
-## 現行優先序（治理鏈裁決 2026-07-13）
+## 現行優先序（治理鏈裁決 2026-07-14）
 
 ```
-✅ A1              已部署 + PM 驗收
-✅ X-ZERO-0A       已部署（deleteMany 止血）
-✅ X-ZERO-0D       已稽查（PATIENT_DATA_LOSS: NOT FOUND）
-✅ X-ZERO-0B       已部署 + PM 驗收（封存流程 + 寫入守門）
+✅ A1              一致性虛低% 止血（假警報）
+✅ X-ZERO-0A       deleteMany 止血（全庫刪除路徑）
+✅ X-ZERO-0D       Atlas 稽查（PATIENT_DATA_LOSS: NOT FOUND）
+✅ X-ZERO-0B       封存流程 + 寫入守門 + DB roundtrip
+✅ X-ZERO-0C       fail-loud + 同步狀態機（示範資料清除）
+✅ X-ZERO-0E       六路寫入 guard + direct-call 驗收
 ──────────────────────────────
-▶  X-ZERO-0C       前端 fail-loud + patientSyncState   (app.js)
-▶  X-ZERO-0E       archived-patient 寫入路徑覆蓋率稽查
-   X-ZERO-A        genId UUID
+▶  X-ZERO-A        genId UUID（碰撞 → 靜默覆蓋）
    X-ZERO-B        server collision guard
    X1              整合處方後端持久化
    B               MTT provenance audit
@@ -652,3 +721,17 @@ patient-status 驗證列為後續 defense-in-depth（見 Open Items）。
 - 結論：雙向持久化成立，無任何實體刪除發生，§4.7（status='deleted'
   的語意為 archived，非實體刪除）在此案例下獲得資料庫層面的實測
   佐證，非僅程式碼層面的邏輯推論。
+
+### 2026-07-14 — X-ZERO-0E direct-call guard 驗收（PM，production console）
+- 驗收目的：依 §4.9，證明 guard 存在於**寫入路徑**上，而非僅靠
+  selector 過濾。測試完全繞過 UI，直接呼叫函式。
+- `typeof guardPatientWritable` → `'function'`（新版已載入，
+  app.js?v=b2877a3）
+- `guardPatientWritable('<archived>', '測試')` → **null**
+- `guardPatientWritable('<不存在的 id>', '測試')` → **null**
+- `guardPatientWritable('', '測試')` → **null**
+- `guardPatientWritable('<active>', '測試')` → **patient object**（對照組）
+- 附帶：封存後 dashboard「在治病人數」10 → 9；最近活躍病人列表移除
+  該病人（0C 的 `=== 'active'` 過濾正確運作）
+- 結論：**CLIENT_WRITE_GUARD_COVERAGE_COMPLETE**。
+  server 端仍為 open（SERVER_SIDE_PATIENT_STATUS_GUARD）。
