@@ -1,5 +1,5 @@
 # BCF White Paper
-Version: 1.9
+Version: 2.0
 Date: 2026-07-14
 Status: SSOT
 Governance: ChatGPT架構審 ✔ / Gemini獨立審 ✔ / PM(Karl)核准 ✔
@@ -174,6 +174,29 @@ patient-status 驗證列為後續 defense-in-depth（見 Open Items）。
 
 狀態只能宣稱：`CLIENT_WRITE_GUARD_COVERAGE_COMPLETE`
 **不得**宣稱：`ARCHIVED_PATIENT_WRITE_PROTECTION_COMPLETE`
+
+### §4.10 部署順序：Consumer before Producer
+**「server first」不是教條。**
+
+真正的原則是：**先部署能立即降低危害、且不會讓既有 consumer 誤解的那一側。**
+
+| 情境 | 先部署哪一側 | 實例 |
+|---|---|---|
+| **server 正在做壞事** | **server** | X-ZERO-0A：`deleteMany` 必須立刻停 |
+| **server 要開始說「不」** | **client** | X-ZERO-B1A：新的 409 是 client 必須先聽得懂的訊號 |
+
+**若先上 server 的新拒絕語意，而 client 還不會處理：**
+> server 回 409 → 舊 client 忽略回傳值 → UI 仍顯示「已儲存」
+> → **資料未保存，但治療師被告知已保存**
+
+**這會製造一個比原問題更糟的新謊言。**
+
+**規則**：當 server patch 將新增 client 尚不能理解的拒絕語意時，
+**必須先部署 consumer capability，再啟用 producer enforcement**。
+且 producer 上線前須完成 cache bust + 診間裝置重整。
+
+⚠️ **誠實記錄**：client-first 降低 rollout 誤報風險，但**舊開啟的分頁
+在重新載入前仍可能忽略 409**。這不是取消 server guard 的理由。
 
 ---
 
@@ -473,6 +496,94 @@ patient-status 驗證列為後續 defense-in-depth（見 Open Items）。
     ⚠️ **不得**宣稱 ARCHIVED_PATIENT_WRITE_PROTECTION_COMPLETE ——
     server endpoint 仍接受任意 patientId，不檢查病人存在或未封存。
 
+- v2.0 (2026-07-14) Assessment collision guard + 部署順序原則（X-ZERO-C0 / B1A）
+
+  [COMMIT MAP]
+  438c9aa — server.js：migrateFromFile $set → $setOnInsert（X-ZERO-C0）
+  55b05a2 — app.js：client 結構化結果 + 四路 fail-loud（B1A-2）
+  00011fb — index.html：cache bust（non-functional）
+  616fd73 — server.js：assessment collision guard（B1A-1）
+
+  ### X-ZERO-C0 — migrateFromFile insert-only (438c9aa)
+  [RECON] `migrateFromFile()` 在 production 是**結構性 no-op**，不是碰巧沒觸發：
+    · `patients.json` 在 `.gitignore`、**從未 track** → git 部署帶不進容器
+    · `count > 0` 守衛：collection 非空即 return
+    · 兩道原因獨立成立
+  [FIX] `$set` → `$setOnInsert`：`_id` 不存在 → insert；已存在 → **不動 Mongo**。
+    **開機 migration 應該「填補缺失」，不是「恢復舊快照」。**
+    否則每次重啟都可能把過時檔案蓋回資料庫。
+  [SEVERITY] LOW — 防禦性收斂，把「目前恰好安全」升級為「未來也保證安全」。
+
+  ### X-ZERO-B1A — Assessment ID collision guard
+  [BUG] `POST /api/assessments` 與 `/bulk` 皆為 upsert。`genId()` =
+    `prefix + Date.now().slice(-6)` → **ID 空間 10⁶，每 16.67 分鐘循環**。
+    兩個不同病人的評估可能撞到同一 `_id` → 第二次 `$set` **靜默覆蓋**第一筆。
+    無錯誤、無 log、**無從得知曾經發生**。
+  [RECON] `ASSESSMENT_WRITE_CONTRACT = CREATE_ONLY`
+    · UI **零編輯路徑**（`DB.assessments` 只有 `unshift`，無 `findIndex` 覆寫）
+    · 兩個 bulk 呼叫點**都排除 `serverIds`** → 不會重送 server 已有的 id
+    · 手動再按存檔 → **重跑 `genId()` → 新 id** → 那是新的 CREATE，不是 replay
+    · **唯一的「同 id 重送」是傳輸層重傳同一個已序列化的 request**
+      → payload 必然相同 → `PAYLOAD_SNAPSHOT = NOT_REQUIRED`
+  [RULE] **既有 `_id` 不得被「不同內容」覆寫。**
+    此規則**不依賴** `patientId` / `type` 完整性 ——
+    **無法證明安全 ≠ 可以覆寫。**
+    （`type` 根本不在 schema，靠 `strict:false` passthrough，不可信。）
+
+  #### B1A-2 — client 先聽得懂（55b05a2 / 00011fb）
+  [BUG] 四條存檔路徑呼叫 `saveAssessmentToServer()` 後**全部丟棄回傳值**，
+    然後**無條件顯示「已儲存」**。若先上 server 的 409，每次 collision 都會
+    變成「靜默未保存」而 UI 報成功 —— **比它取代的覆寫更糟**。
+  [FIX] `saveAssessmentToServer` 回傳結構化結果：
+    `CREATED` / `IDEMPOTENT_REPLAY` / `COLLISION` /
+    `DB_NOT_READY` / `SERVER_ERROR` / `NETWORK_ERROR`
+  [RULE] **helper 只回報結果；成功訊息由呼叫端決定。**
+    helper 內不得顯示 success —— 否則會出現「先失敗、再成功」的說謊 UI。
+  [FIX] 四個呼叫端消費結果：失敗 → 不顯示成功、不關 modal、不隱藏存檔鈕。
+    · **MTT 例外**：其 BCF 記錄走**不同 collection、不同 endpoint**，
+      MTT 的 collision **不得**連坐跳過該寫入。若 MTT 失敗而 BCF 存了，
+      **必須明說** —— 臨床端需要知道實際存了什麼。
+    · **COLLISION 不建議「重按儲存」** —— 重按會 `genId()` 出新 id（新紀錄），
+      那不是重試，只會掩蓋碰撞。**應通報，不是重試。**
+    · 失敗時記錄**保留在 `DB.assessments`** —— 那可能是唯一副本。
+
+  #### B1A-1 — server 開始說「不」(616fd73)
+  [FIX] 單筆：`Assessment.create()`，讓 **duplicate key error** 決定
+    （非 `findById` 先查 —— **避免 TOCTOU race**）：
+    · 內容相同 → `200 { replay: true }`，**不寫入**（合法的傳輸層重送）
+    · 內容不同 → **409**，**不寫入**，記錄 collision
+  [FIX] Bulk：**two-phase preflight**。**任一 collision → 整批不寫。**
+    **不得 partial success** —— client 會無從得知哪些成功、哪些沒有。
+  [FIX] `canonicalize()` **深層遞迴排序**：
+    淺層 key 排序不夠 —— `eyeItems` / `brainRegions` / `decision` 等巢狀
+    物件的 key 順序不同，會把**合法 replay 誤判為 collision**。
+    array **保序**（順序本身是資料）；排除 `_id` / `id` / `__v`
+    （spread 寫法會讓文件同時帶 `id` 與 `_id`）。
+  [PRIVACY] collision log **只印 identity metadata**（`patientId` / `type` /
+    `date`），**不印臨床內容**。
+  [VERIFIED] **`e.code === 11000` 從假設升級為實測**：
+    production log 確認 `{ name: 'MongoServerError', code: 11000, isDup: true }`
+    → `isDuplicateKeyError()` 第一個條件命中，非 fallback 接住。
+    （11001 與 `message.includes('E11000')` 的 fallback 保留，
+      對未來 driver 升級仍有保護。）
+
+  [PRINCIPLE] → §4.10 Consumer before Producer
+
+  [VERIFIED] PM production 驗收：
+    · **正常存檔 → 綠色「已儲存」** ✔ **（guard 未誤傷）**
+    · 手動觸發 → `409 { error: 'ASSESSMENT_ID_COLLISION', id: 'A001' }` ✔
+    · Railway log：正常存檔無 `[ASSESSMENT_WRITE_ERROR]` ✔
+    · `/api/version` = 616fd73 ✔
+
+  ### 附帶：PHI console log 清理（55b05a2 內）
+  [PRIVACY] 移除 4 個把**完整臨床記錄**印進瀏覽器 console 的 `console.log`：
+    · `saveMTT` / `saveBCF` / `saveRightEyeAssessment`（存檔時觸發）
+    · **`assessmentDetail`（每次「查看」評估記錄都觸發，頻率最高）**
+    印出內容含 `eyeItems` / `cervicalItems` / `stanceItems` / `gazeItems` /
+    RightEye 全部量測值 / 腦區判斷。
+  ⚠️ **這是機會性清理，不是系統性稽查** —— 它們剛好躺在被修改的那幾行旁邊。
+    完整的 PHI-in-logs 稽查另立 Open Item。
+
 ## Open Items（未解，實作前處理）
 - [PARTIAL] Fastigial alias 已補齊(v1.1)；CAUDAL/單側
   fastigial canonical 命名 scheme 退 P1（bilateral≠caudal、
@@ -610,11 +721,11 @@ patient-status 驗證列為後續 defense-in-depth（見 Open Items）。
   引用鏈（新舊必須共存，禁改寫）：
   bcf_diagnoses.sourceAssessmentIds / therapy_sessions.linkedAssessmentId
   / patient_reports.assessmentId / patient_reports.parentReportId
-- [P1] XZERO_B_SERVER_COLLISION_GUARD
-  server 須拒絕跨紀錄覆蓋：_id 已存在但 patientId/type 不同 → 409，
-  不 $set，寫 collision log。單筆與 bulk 皆須保護。
-  注意：type 不在 schema（strict:false passthrough，無 required）；
-  patientId 無 required → guard 只擋「明確衝突」，不擋「無法判斷」。
+- [CLOSED] XZERO_B_SERVER_COLLISION_GUARD
+  → 拆為 B1A（assessments，已完成）與 X-ZERO-C（patients，另案）。
+    assessments 的 CREATE_ONLY + 409 guard 已部署並通過 production 驗收。
+    ⚠️ patients 的併發覆蓋**未解** —— 見 XZERO_C_PATIENT_COMMAND_AND_
+    CONCURRENCY_CONTRACT。
 - [CRITICAL] INTEGRATED_PRESCRIPTION_LOCALSTORAGE_ISLAND
   DB.integratedPrescriptions 無 /api/ 呼叫、server.js 無 Mongoose model
   → 純 localStorage、逐裝置、無備份、跨治療師不共享。
@@ -653,6 +764,34 @@ patient-status 驗證列為後續 defense-in-depth（見 Open Items）。
 - [STATUS] P0 進度：P0-A ✔ / P0-B ✔ / P0-C CLOSED(no-op) /
   P0-D1 CLOSED(bilateral) / P0-D2 DEFERRED(open item) /
   P0-E CLOSED(already verified) / P0-F conditional recon
+- [HIGH] CLIENT_CONSOLE_PHI_LEAK_AUDIT
+  v2.0 順手清掉 4 個印出完整臨床記錄的 console.log，但**這是機會性清理，
+  非系統性稽查**。需完整盤查 app.js / server.js 所有 `console.*` 是否洩漏
+  PHI（病人姓名／病歷號／臨床量測值／腦區判斷）。
+  ⚠️ server.js 的 `console.error` 可能印出完整 request body。
+- [BUG/MEDIUM] ASSESSMENT_LOCAL_PERSISTENCE_PATH_INCONSISTENCY
+  MTT / RightEye：`unshift` → POST，**無 `saveToStorage()`**
+  Romberg / 通用：`unshift` → `saveToStorage()` → POST
+  POST 失敗時前兩者本機也沒存 → **資料直接消失**。
+  且重整後不同 assessment 類型的本機存續行為不一致。
+  ⚠️ 不得順手統一 —— 需先裁決：server 失敗時本機是否保留？如何標示
+  pending/unsynced？何時重新同步？超出 B1A 範圍。
+- [HIGH] XZERO_C_PATIENT_COMMAND_AND_CONCURRENCY_CONTRACT
+  `POST /api/patients` 送整包 `DB.patients`，**不帶操作意圖** →
+  server **結構上無法**區分「合法編輯」與「病歷號碰撞覆蓋」。
+  「新增時 `_id` 已存在 → 409」**技術上寫不出來**（編輯時 `_id` 本來就存在）。
+  ⚠️ 這不是 collision-guard 問題，是 **API command contract** 問題。
+  需要：create/update 意圖分離（`POST` / `PATCH /:id`）、
+  stale-write detection（revision / ETag）、legacy bulk endpoint 退役、
+  `migrateFromFile` 納入同一治理。
+  ⚠️ Mongo unique index **解決不了** —— `_id` 本來就 unique，
+  碰撞產生的是 `$set` 覆蓋，不是重複文件。
+- [OPEN] ASSESSMENT_IDENTITY_METADATA_AUDIT
+  【需 PM 查 Atlas】`assessments` 缺 `patientId` / `type` 的筆數：
+  `{ patientId: { $exists: false } }` / `{ patientId: null }` /
+  `{ patientId: "" }` / `{ type: { $exists: false } }`
+  ⚠️ 不阻塞 B1A（新規則不依賴這兩個欄位），但影響 collision log 能否
+  講清楚「跨病人／跨類型」。
 
 ---
 
@@ -665,14 +804,19 @@ patient-status 驗證列為後續 defense-in-depth（見 Open Items）。
 ✅ X-ZERO-0B       封存流程 + 寫入守門 + DB roundtrip
 ✅ X-ZERO-0C       fail-loud + 同步狀態機（示範資料清除）
 ✅ X-ZERO-0E       六路寫入 guard + direct-call 驗收
+✅ X-ZERO-C0       migrateFromFile insert-only
+✅ X-ZERO-B1A      Assessment collision guard（client-first 部署）
 ──────────────────────────────
-▶  X-ZERO-A        genId UUID（碰撞 → 靜默覆蓋）
-   X-ZERO-B        server collision guard
-   X1              整合處方後端持久化
+▶  X-ZERO-A        genId UUID（碰撞率 → 近乎零）
+   X-ZERO-C1/C2/C3 Patient command contract（create/update 意圖分離）
+   X1              整合處方 localStorage 孤島
    B               MTT provenance audit
    A2 / CLSCI      計算修正
    C               Training Intensity Engine
 ```
+
+⚠️ **B1A 之後，碰撞會被擋下（不再靜默覆蓋），但使用者會看到 409、資料存不進去。**
+**X-ZERO-A 把碰撞率降到近乎零，才是根治。**
 
 ---
 
@@ -735,3 +879,16 @@ patient-status 驗證列為後續 defense-in-depth（見 Open Items）。
   該病人（0C 的 `=== 'active'` 過濾正確運作）
 - 結論：**CLIENT_WRITE_GUARD_COVERAGE_COMPLETE**。
   server 端仍為 open（SERVER_SIDE_PATIENT_STATUS_GUARD）。
+
+### 2026-07-14 — X-ZERO-B1A collision guard 驗收（PM production）
+- **正常存檔**（認知功能 MoCA）→ 綠色 toast「評估記錄已儲存」
+  → **guard 未誤傷正常流程**（本項為回滾決策的關鍵條件）
+- **手動觸發 collision**（Console 直送 `{ id: 'A001', patientId: 'FAKE' }`）：
+  → `409 { error: 'ASSESSMENT_ID_COLLISION', id: 'A001',
+        message: '此評估 ID 已存在且內容不同，拒絕覆寫。' }`
+  → 既有資料**未被覆寫**
+- **Railway deploy log**：
+  `[ASSESSMENT_WRITE_ERROR] { name: 'MongoServerError', code: 11000, isDup: true }`
+  → **R2 假設驗證完成**：`e.code === 11000` 成立，非 fallback 接住
+- `/api/version` = 616fd73
+- 結論：**guard 會擋，但不誤傷。** X-ZERO-B1A CLOSED。
