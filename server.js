@@ -318,44 +318,126 @@ app.get('/api/assessments', async (req, res) => {
   res.json({ assessments: [] });
 });
 
+// ===== X-ZERO-B1A: assessment collision guard =====
+// assessment 為 CREATE-ONLY（recon 確認 UI 無任何編輯路徑，見 WHITE_PAPER）。
+// 規則：既有 _id 不得被「不同內容」覆寫 —— 無法證明安全 ≠ 可以覆寫。
+// 例外：合法的傳輸層重送（同步 XHR 逾時後重傳同一 request）必須放行。
+//
+// ⚠️ 深層遞迴排序：淺層 key 排序不夠 —— eyeItems / brainRegions / decision
+//    等巢狀物件的 key 順序若不同，會把合法 replay 誤判為 collision。
+// ⚠️ array 保序（順序本身是資料）。
+// ⚠️ 排除 _id / id / __v：識別碼不是內容；spread 寫法會讓文件同時帶 id 與 _id。
+function canonicalize(value) {
+  if (value === null || typeof value !== 'object') return value;
+  if (Array.isArray(value)) return value.map(canonicalize);
+  const out = {};
+  for (const key of Object.keys(value).sort()) {
+    if (key === '_id' || key === 'id' || key === '__v') continue;
+    out[key] = canonicalize(value[key]);
+  }
+  return out;
+}
+function canonicalJSON(doc) { return JSON.stringify(canonicalize(doc)); }
+
+// ⚠️ 未經本 repo 實測：e.code === 11000 是 Mongoose 8.x 的既知行為，但此 repo
+//    從無 duplicate-key 處理先例。採雙重判斷，避免整個 guard 押在單一未驗屬性。
+function isDuplicateKeyError(e) {
+  return !!e && (
+    e.code === 11000 ||
+    e.code === 11001 ||
+    (typeof e.message === 'string' && e.message.includes('E11000'))
+  );
+}
+
 app.post('/api/assessments', async (req, res) => {
   const assessment = req.body;
   if (!assessment || !assessment.id) return res.status(400).json({ error: '缺少 id' });
-  if (Assessment && dbReady) {
-    try {
-      await Assessment.updateOne(
-        { _id: assessment.id },
-        { $set: { ...assessment, _id: assessment.id } },
-        { upsert: true }
-      );
-      return res.json({ ok: true });
-    } catch (e) {
-      console.error('assessment upsert 失敗:', e.message);
-      return res.status(500).json({ error: e.message });
-    }
+  if (!Assessment || !dbReady) {
+    console.warn('assessment POST: MongoDB 未就緒，記錄未儲存', assessment.id);
+    return res.json({ ok: true, stored: false });
   }
-  console.warn('assessment POST: MongoDB 未就緒，記錄未儲存', assessment.id);
-  res.json({ ok: true, stored: false });
+  try {
+    await Assessment.create({ ...assessment, _id: assessment.id });
+    return res.json({ ok: true, outcome: 'CREATED' });
+  } catch (e) {
+    console.error('[ASSESSMENT_WRITE_ERROR]', { name: e?.name, code: e?.code, isDup: isDuplicateKeyError(e) });
+    if (isDuplicateKeyError(e)) {
+      const existing = await Assessment.findById(assessment.id).lean();
+      if (existing && canonicalJSON(existing) === canonicalJSON(assessment)) {
+        return res.json({ ok: true, replay: true });   // 冪等重送，資料未變
+      }
+      // ⚠️ 只印 identity metadata，不印臨床內容（PHI）
+      console.error('[ASSESSMENT_ID_COLLISION]', {
+        _id: assessment.id,
+        existingPatientId: existing?.patientId ?? null,
+        incomingPatientId: assessment.patientId ?? null,
+        existingType: existing?.type ?? null,
+        incomingType: assessment.type ?? null,
+        existingDate: existing?.date ?? null,
+        incomingDate: assessment.date ?? null,
+      });
+      return res.status(409).json({
+        error: 'ASSESSMENT_ID_COLLISION',
+        id: assessment.id,
+        message: '此評估 ID 已存在且內容不同，拒絕覆寫。'
+      });
+    }
+    console.error('assessment create 失敗:', e.message);
+    return res.status(500).json({ error: e.message });
+  }
 });
 
 app.post('/api/assessments/bulk', async (req, res) => {
   const { assessments } = req.body;
   if (!Array.isArray(assessments)) return res.status(400).json({ error: '格式錯誤' });
-  if (Assessment && dbReady) {
-    try {
-      if (assessments.length === 0) return res.json({ ok: true, migrated: false, count: 0 });
-      const ops = assessments.map(a => {
-        const id = a.id || a._id;
-        return { updateOne: { filter: { _id: id }, update: { $set: { ...a, _id: id } }, upsert: true } };
+  if (!Assessment || !dbReady) return res.json({ ok: true, stored: false });
+  if (assessments.length === 0) return res.json({ ok: true, migrated: false, count: 0 });
+
+  try {
+    // Phase 1: preflight
+    const ids = assessments.map(a => a.id || a._id).filter(Boolean);
+    const existingDocs = await Assessment.find({ _id: { $in: ids } }).lean();
+    const existingMap = new Map(existingDocs.map(d => [String(d._id), d]));
+
+    const collisions = [];
+    const toInsert = [];
+    for (const a of assessments) {
+      const id = a.id || a._id;
+      if (!id) continue;
+      const existing = existingMap.get(String(id));
+      if (!existing) { toInsert.push(a); continue; }
+      if (canonicalJSON(existing) === canonicalJSON(a)) continue;   // replay，跳過
+      collisions.push({
+        _id: id,
+        existingPatientId: existing.patientId ?? null,
+        incomingPatientId: a.patientId ?? null,
+        existingType: existing.type ?? null,
+        incomingType: a.type ?? null,
       });
-      await Assessment.bulkWrite(ops);
-      return res.json({ ok: true, migrated: true, count: assessments.length });
-    } catch (e) {
-      console.error('assessments bulk 失敗:', e.message);
-      return res.status(500).json({ error: e.message });
     }
+
+    // ⚠️ 任一 collision → 整批不寫。不得 partial success ——
+    //    partial 會讓 client 無從得知哪些成功、哪些沒有。
+    if (collisions.length > 0) {
+      console.error('[ASSESSMENT_BULK_COLLISION]', collisions);
+      return res.status(409).json({
+        error: 'ASSESSMENT_ID_COLLISION',
+        collisions: collisions.map(c => c._id),
+        message: `批次中有 ${collisions.length} 筆評估 ID 衝突，整批未寫入。`
+      });
+    }
+
+    if (toInsert.length > 0) {
+      await Assessment.insertMany(
+        toInsert.map(a => ({ ...a, _id: a.id || a._id })),
+        { ordered: true }
+      );
+    }
+    return res.json({ ok: true, migrated: toInsert.length > 0, count: toInsert.length });
+  } catch (e) {
+    console.error('assessments bulk 失敗:', e.message);
+    return res.status(500).json({ error: e.message });
   }
-  res.json({ ok: true, stored: false });
 });
 
 // ===== HOME TRAINING ENDPOINT =====
