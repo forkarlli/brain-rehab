@@ -211,38 +211,82 @@ async function loadTherapySessionsFromServer(patientId) {
 
 let pendingSaves = 0;
 
+// X-ZERO-B1A: 回傳結構化結果，讓呼叫端能區分 collision 與一般失敗。
+// ⚠️ 治理鐵則（ChatGPT ⑦）：helper 只回報結果，**成功訊息由呼叫端決定**。
+//    helper 內不得顯示 success —— 否則會出現「先失敗、再成功」的說謊 UI。
+// outcome:
+//   CREATED           — 新建成功
+//   IDEMPOTENT_REPLAY — 同 id、內容相同（傳輸層重送），server 未改資料
+//   COLLISION         — 409，同 id 但內容不同 → **資料未儲存至伺服器**
+//   DB_NOT_READY      — server 收到但 Mongo 未就緒（stored:false）
+//   SERVER_ERROR      — 其他 4xx/5xx
+//   NETWORK_ERROR     — XHR 層級例外（連不上）
 function saveAssessmentToServer(assessment) {
-  console.log('saveAssessmentToServer called, id:', assessment?.id);
   pendingSaves++;
   try {
     const xhr = new XMLHttpRequest();
     xhr.open('POST', '/api/assessments', false); // synchronous
     xhr.setRequestHeader('Content-Type', 'application/json');
     xhr.send(JSON.stringify(assessment));
-    console.log('response status:', xhr.status, 'ok:', xhr.status >= 200 && xhr.status < 300);
+
+    // 409：ID 碰撞 —— server 拒絕覆寫既有紀錄。資料**未**儲存。
+    if (xhr.status === 409) {
+      console.error('[ASSESSMENT_ID_COLLISION]', assessment?.id, xhr.responseText);
+      return { ok: false, outcome: 'COLLISION', httpStatus: 409, id: assessment?.id };
+    }
+
     if (xhr.status < 200 || xhr.status >= 300) {
       console.warn('評估記錄同步失敗 HTTP', xhr.status);
-      showToast('評估已儲存本機，雲端同步失敗（HTTP ' + xhr.status + '）', 'error');
-      return false;
+      return { ok: false, outcome: 'SERVER_ERROR', httpStatus: xhr.status };
     }
+
     const result = JSON.parse(xhr.responseText);
-    console.log('result:', JSON.stringify(result));
+
     if (result.stored === false) {
       console.warn('評估記錄未寫入 MongoDB（DB 未就緒）');
-      showToast('評估已儲存本機，資料庫未就緒，將於下次連線時補傳', 'error');
-      return false;
+      return { ok: false, outcome: 'DB_NOT_READY' };
     }
-    alert('已儲存到雲端: ' + assessment.id);
+
+    // 成功：清空日期輸入欄（原有行為，保留）
     const c = document.getElementById('assess-date-custom'); if (c) c.value = '';
     const inp = document.getElementById('assess-date-input'); if (inp) inp.value = '';
-    return true;
-  } catch(e) {
+
+    return result.replay === true
+      ? { ok: true, outcome: 'IDEMPOTENT_REPLAY' }
+      : { ok: true, outcome: 'CREATED' };
+  } catch (e) {
     console.warn('saveAssessmentToServer error:', e);
-    showToast('評估已儲存本機，無法連線雲端', 'error');
-    return false;
+    return { ok: false, outcome: 'NETWORK_ERROR' };
   } finally {
     pendingSaves--;
   }
+}
+
+// X-ZERO-B1A: 四個 assessment 存檔路徑共用的結果處理。
+// 回傳 true = 可以顯示成功；false = 呼叫端必須 bail，**不得顯示成功**。
+// ⚠️ COLLISION 時不要建議「重按儲存」—— 重按會產生新 id（新紀錄），
+//    那不是重試，會掩蓋碰撞本身。應通報，不是重試。
+function handleAssessmentSaveResult(result, label) {
+  if (result?.ok) return true;
+
+  switch (result?.outcome) {
+    case 'COLLISION':
+      showToast(
+        `⚠️ ${label}未儲存至伺服器：偵測到評估 ID 衝突。\n` +
+        `伺服器既有資料未被覆寫。請停止重複操作並通知系統管理者。`,
+        'error'
+      );
+      break;
+    case 'DB_NOT_READY':
+      showToast(`⚠️ ${label}未儲存至伺服器：資料庫未就緒。將於下次連線時補傳。`, 'error');
+      break;
+    case 'NETWORK_ERROR':
+      showToast(`⚠️ ${label}未儲存至伺服器：無法連線。`, 'error');
+      break;
+    default:
+      showToast(`⚠️ ${label}未儲存至伺服器（HTTP ${result?.httpStatus ?? '未知'}）。`, 'error');
+  }
+  return false;
 }
 
 const SAMPLE_ASSESSMENT_IDS = new Set(['A001','A002','A003','A004','A005','A006']);
@@ -1168,7 +1212,6 @@ function renderPatientReportPreview(vm) {
 function showAssessmentDetail(aid) {
   const a = DB.assessments.find(x => (x.id || x._id) === aid);
   if (!a) return;
-  console.log('assessmentDetail:', JSON.stringify(a));
 
   const isRE  = a.type?.includes('RightEye');
   const isMTT = a.type === '肌肉張力測試';
@@ -5601,9 +5644,9 @@ async function saveBCFAssessment() {
     brainRegions,
     decision: decObj,
   };
-  console.log('saveMTT:', JSON.stringify(mttRec));
   DB.assessments.unshift(mttRec);
-  await saveAssessmentToServer(mttRec);
+  const _mttSave = await saveAssessmentToServer(mttRec);
+  const _mttOk = handleAssessmentSaveResult(_mttSave, '肌肉張力測試');
 
   // ── Record 2: BCF眼動機評估（處方數據），只在有處方時儲存 ──
   const hasPrescriptions = eyeMachineRx.length > 0 || !!flyingChairData || eegPrescriptions.length > 0;
@@ -5621,7 +5664,6 @@ async function saveBCFAssessment() {
       decision: decObj,
       eyeMachineRx, eegPrescriptions, functionalTrainings, flyingChairData,
     };
-    console.log('saveBCF:', JSON.stringify(bcfRec));
     DB.bcfDiagnoses.unshift(bcfRec);
     await fetch('/api/bcf-diagnoses', {
       method: 'POST',
@@ -5630,10 +5672,15 @@ async function saveBCFAssessment() {
     });
   }
 
-  showToast(`評估已儲存：肌肉張力測試${hasPrescriptions ? ' + BCF腦區判斷' : ''}`, 'success');
-  const saveBtn = document.getElementById('bcf-save-btn');
-  if (saveBtn) saveBtn.style.display = 'none';
-  populateAssessDateDropdown(patientId);
+  if (_mttOk) {
+    showToast(`評估已儲存：肌肉張力測試${hasPrescriptions ? ' + BCF腦區判斷' : ''}`, 'success');
+    const saveBtn = document.getElementById('bcf-save-btn');
+    if (saveBtn) saveBtn.style.display = 'none';   // 只有成功才隱藏存檔鈕
+  } else if (hasPrescriptions) {
+    // MTT 失敗但 BCF 腦區判斷已獨立寫入 —— 必須明說，否則使用者不知道存了什麼
+    showToast('BCF腦區判斷已儲存（肌肉張力測試未儲存，見上方錯誤）', 'error');
+  }
+  populateAssessDateDropdown(patientId);   // 畫面刷新不論成敗都跑
   renderAssessments();
 }
 
@@ -7119,9 +7166,9 @@ async function saveRightEyeAssessment() {
     reRec.cerebellarLat = rxResult.cerebellarLat || null;
   } catch(e) { console.warn('RightEye analysis storage failed', e); }
 
-  console.log('saveRightEyeAssessment:', JSON.stringify(reRec));
   DB.assessments.unshift(reRec);
-  await saveAssessmentToServer(reRec);
+  const _reSave = await saveAssessmentToServer(reRec);
+  if (!handleAssessmentSaveResult(_reSave, 'RightEye評估')) return;
 
   showToast('RightEye評估已儲存', 'success');
   document.getElementById('re-save-btn').style.display = 'none';
@@ -7499,7 +7546,8 @@ async function saveBTracksAssessment() {
   };
   DB.assessments.unshift(rec);
   saveToStorage();
-  await saveAssessmentToServer(rec);
+  const _btSave = await saveAssessmentToServer(rec);
+  if (!handleAssessmentSaveResult(_btSave, '平衡測試結果')) return;
   populateAssessDateDropdown(patientId);
   showToast('平衡測試結果已儲存', 'success');
 }
@@ -8646,7 +8694,8 @@ async function saveAssessment() {
   };
   DB.assessments.unshift(rec);
   saveToStorage();
-  await saveAssessmentToServer(rec);
+  const _aSave = await saveAssessmentToServer(rec);
+  if (!handleAssessmentSaveResult(_aSave, '評估記錄')) return;
   closeModal('addAssessModal');
   renderAssessments();
   showToast('評估記錄已儲存', 'success');
