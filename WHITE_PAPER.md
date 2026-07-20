@@ -1,5 +1,5 @@
 # BCF White Paper
-Version: 2.0
+Version: 2.1
 Date: 2026-07-14
 Status: SSOT
 Governance: ChatGPT架構審 ✔ / Gemini獨立審 ✔ / PM(Karl)核准 ✔
@@ -711,14 +711,43 @@ patient-status 驗證列為後續 defense-in-depth（見 Open Items）。
 - [NOTE] migrateLocalStoragePatients() 現為完全死碼（0C 移除唯一呼叫端）。
   併入 LEGACY_PATIENT_LOCALSTORAGE_MIGRATION_RECON。
 - [P1] XZERO_A_GENID_UUID
-  genId(prefix)=prefix+Date.now().slice(-6)：ID 空間 10⁶，每 16.67
-  分鐘循環。同 prefix 跨病人/跨裝置碰撞 → server _id upsert →
-  靜默覆蓋。全站共用(A/MTT/RE/BCF/IP/RX)。
-  裁決：改用完整 crypto.randomUUID()（不截斷）；舊 ID 不重寫；
-  新增 idVersion: 2。
-  recon: BREAKING_CHANGE_RISK LOW（無 slice/regex/排序/DOM 依賴；
-  _id schema 為 String 無格式驗證）。
-  引用鏈（新舊必須共存，禁改寫）：
+  genId(prefix) = prefix + Date.now().slice(-6)：ID 空間 10⁶，
+  每 16.67 分鐘循環。同 prefix 跨病人／跨裝置碰撞 → server _id
+  upsert → 靜默覆蓋。
+  （B1A 之後改為 409 擋下，不再靜默覆蓋，但使用者會看到錯誤、
+   資料存不進去 → **本項才是根治**。）
+
+  **呼叫點：8 處，7 個 prefix — A / MTT / RE / BCF / IP / RX / S**
+  ⚠️ 舊版本條目漏列 S（sessions），已更正。
+
+  **裁決（ChatGPT + Gemini + PM 已核准）— 三層降級，永不 throw：**
+  · Tier 1：crypto.randomUUID()（Chrome 92+ / Safari 15.4+ / FF 95+）
+  · Tier 2：crypto.getRandomValues() → RFC 4122 v4
+  · Tier 3：高熵 fallback（完整 Date.now + performance.now +
+            頁內 counter + 兩段 Math.random）+ console 留痕
+  🚫 **Tier 3 禁止回退到六位時間戳。**
+     「舊裝置不能存檔」不是「所以就用已知有缺陷的演算法」的理由 ——
+     中間還有第三條路（非密碼學但高熵）。
+     **不得以相容性為由恢復已知 bug。**
+  ⚠️ **永不 throw**：診間裝置版本未知。若 crypto 不可用而直接爆掉，
+     會讓整條存檔路徑失效 —— 那比偶爾碰撞更嚴重。
+
+  **不加 idVersion（本輪）** —— scope 控制；idVersion 為 additive，
+  隨時可補。若日後要加，名稱應為 `idGeneratorVersion`
+  （變的是**產生演算法**，不是 schema 版本）。
+  ⚠️ 依 §4.3，判斷新舊 ID 必須靠**顯式欄位**，
+     **不得**以長度／前綴／格式差異做隱式版本識別。
+
+  **病人 ID 不受影響**：patient.id 為使用者手動輸入的病歷號
+  （index.html #p-id；Li19700101 = 姓名拼音+生日，診所自訂慣例），
+  **從不經過 genId()**。genId 只產生衍生記錄 ID。
+
+  recon（2026-07-14 重驗）：BREAKING_CHANGE_RISK **LOW**
+  · 無 slice / regex / 排序 / DOM selector 依賴 ID 格式
+  · server _id schema 為 String，無格式驗證 → UUID 可直接存
+  · 全站 crypto API 使用先例：**零命中** → Tier 2/3 為必要，非過度設計
+
+  引用鏈（新舊 ID 必須共存，**禁止改寫既有 ID**）：
   bcf_diagnoses.sourceAssessmentIds / therapy_sessions.linkedAssessmentId
   / patient_reports.assessmentId / patient_reports.parentReportId
 - [CLOSED] XZERO_B_SERVER_COLLISION_GUARD
@@ -752,8 +781,10 @@ patient-status 驗證列為後續 defense-in-depth（見 Open Items）。
   【需確認】是否有 code path 產生小寫 id。
 - [NOTE] fs.writeFileSync(PATIENTS_FILE) fallback 同款全量覆寫風險，
   但 dbReady 一旦 true 不回退 → production 穩態不可達。
-- [NOTE] migrateFromFile() 開機自動 upsert patients.json → 內容過時
-  會覆蓋較新資料。不刪除，故非災難級。
+- [CLOSED] MIGRATE_FROM_FILE_STALE_OVERWRITE
+  → X-ZERO-C0（438c9aa）：$set → $setOnInsert。既有 _id 不再被
+    開機 migration 覆寫。另 recon 確認 patients.json 在 .gitignore、
+    從未 track，production 結構上取不到 → 雙重保障。
 - [NOTE] computeConsistency Layer3(Jaccard) 計算但不進最終分數（死碼）
 - [NOTE] MOD_LABELS 現有三份（8688 / 8962 / 9562）待收斂
 - [NEEDS CLINICAL REVIEW] combinedPct = lat*0.5 + group*0.5，
