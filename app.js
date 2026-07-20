@@ -664,8 +664,106 @@ function formatDate(str) {
   return str.replace(/-/g, '/');
 }
 
+// module-scope state：page load 期間初始化一次，Tier2/Tier3 warning 各自
+// 獨立 flag（不得共用，否則 Tier3 的更嚴重降級會被 Tier2 warning 吃掉）。
+// 置於 genId 宣告之前：genId 是 function declaration 會被提升，但 let
+// 有 TDZ —— 若初始化完成前有任何路徑呼叫 genId 會 ReferenceError，牴觸
+// NEVER THROW 硬規則，故將 let 移到最前面，消除這個載入期空窗。
+let _genIdTier2WarnEmitted = false;
+let _genIdTier3WarnEmitted = false;
+let _genIdTier3Counter = 0;
+
+// ===== X-ZERO-A: genId 三層 UUID 產生器 =====
+// 裸接鐵律：genId 永遠回傳 prefix + payload，兩者之間不得插入任何字元。
+// legacy 形狀是 A123456（prefix 直接接 6 位數字，無連字號）。任何分隔符
+// 都會讓 8 個 call site 的 prefix 段與 legacy/seed 資料不再 byte-identical
+// （見 tests/contracts/genid_tier_fallback.test.js 的 byte-identity 斷言）。
 function genId(prefix) {
-  return prefix + String(Date.now()).slice(-6);
+  if (!prefix) {
+    console.error('[genId] falsy prefix — 使用 UNK fallback。呼叫端必須永遠傳入有效 prefix。', prefix);
+    prefix = 'UNK';
+  }
+  return prefix + _genIdPayload();
+}
+
+// 三層降級，永不 throw：診間裝置版本未知，crypto 不可用時直接爆掉會讓
+// 整條存檔路徑失效，那比偶爾碰撞更嚴重。禁止退回六位時間戳（已知有缺陷）。
+function _genIdPayload() {
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+  } catch (e) { /* 降級至 Tier 2 */ }
+
+  try {
+    if (typeof crypto !== 'undefined' && typeof crypto.getRandomValues === 'function') {
+      const uuid = _genIdUuidV4FromGetRandomValues();
+      // warn 移到成功組出 UUID 之後、return 之前 —— 若上一行拋錯，會被
+      // 本層 catch 接住降級至 Tier 3，不會誤報 Tier 2 已生效。
+      if (!_genIdTier2WarnEmitted) {
+        _genIdTier2WarnEmitted = true;
+        console.warn('[genId] Tier 2：crypto.randomUUID 不可用，改用 crypto.getRandomValues 手動組 UUID v4。');
+      }
+      return uuid;
+    }
+  } catch (e) { /* 降級至 Tier 3 */ }
+
+  if (!_genIdTier3WarnEmitted) {
+    _genIdTier3WarnEmitted = true;
+    console.warn('[genId] Tier 3：crypto API 完全不可用，改用高熵非密碼學 fallback（禁止退回六位時間戳）。');
+  }
+  return _genIdTier3Payload();
+}
+
+function _genIdUuidV4FromGetRandomValues() {
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  bytes[6] = (bytes[6] & 0x0f) | 0x40; // version 4
+  bytes[8] = (bytes[8] & 0x3f) | 0x80; // variant 10xx
+  let hex = '';
+  for (let i = 0; i < 16; i++) hex += bytes[i].toString(16).padStart(2, '0');
+  return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' + hex.slice(16, 20) + '-' + hex.slice(20, 32);
+}
+
+function _genIdTier3Hex(n, width) {
+  return Math.floor(n).toString(16).padStart(width, '0').slice(-width);
+}
+
+// Tier 3 shape：xxxxxxxx-xxxx-0xxx-0xxx-xxxxxxxxxxxx
+// version/variant 位置固定填 0 —— 明確不是 UUID v4，僅供 diagnostic，
+// 不得以此推導 generator version（判斷新舊須依顯式欄位，§4.3）。
+// counter 佔專屬、未與任何其他材料混合的 4 hex 區段（payload[8:12]，
+// 對應輸出第二組，不與 version/variant 固定位重疊），直接複製進最終
+// payload，不經過任何 hash/mixer —— 確保 counter 貢獻可稽核、可逆。
+function _genIdTier3Payload() {
+  // counter 佔 4 hex（65536 值域）。在單一 page session 內提供確定性差異化；
+  // 超過 65536 次 Tier 3 呼叫後會 wrap，屆時唯一性依賴 timestamp 與 random 段。
+  // 此界限為已知且可接受（單頁不會產生此量級的 Tier 3 ID）。
+  _genIdTier3Counter = (_genIdTier3Counter + 1) & 0xffff;
+
+  const dateHex = _genIdTier3Hex(Date.now(), 12); // Date.now() 完整值，不做 slice(-6) 式十進位截斷
+  const counterHex = _genIdTier3Hex(_genIdTier3Counter, 4);
+  const randAHex = _genIdTier3Hex(Math.random() * 0x1000, 3);
+  const randBHex = _genIdTier3Hex(Math.random() * 0x1000, 3);
+  const hasPerf = typeof performance !== 'undefined' && typeof performance.now === 'function';
+  const perfOrRandCHex = hasPerf
+    ? _genIdTier3Hex(performance.now() * 1000, 4)
+    : _genIdTier3Hex(Math.random() * 0x10000, 4); // performance 不可用時退回額外 random 段
+  const randDHex = _genIdTier3Hex(Math.random() * 0x10000, 4);
+
+  const payload =
+    dateHex.slice(0, 8) +   // date 高位 8 hex
+    counterHex +             // counter，dedicated 4 hex
+    randAHex +                // random 段 A，3 hex
+    randBHex +                // random 段 B，3 hex
+    dateHex.slice(8, 12) +  // date 低位 4 hex（與高位合計 12 hex = 48 bits 完整值）
+    perfOrRandCHex +          // performance.now() 或 random 段 C，4 hex
+    randDHex;                 // random 段 D，4 hex（合計 30 hex）
+
+  return payload.slice(0, 8) + '-' + payload.slice(8, 12) + '-' +
+    '0' + payload.slice(12, 15) + '-' +
+    '0' + payload.slice(15, 18) + '-' +
+    payload.slice(18, 30);
 }
 
 const avatarColors = ['#4f46e5','#0891b2','#059669','#d97706','#dc2626','#7c3aed','#db2777'];
