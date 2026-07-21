@@ -98,6 +98,16 @@ mechanismModel 列舉：
 不得以 ID 字串格式(長度／前綴／regex)推斷紀錄類型或新舊 provenance。
 判斷新舊須依顯式欄位(如 idVersion、consistencyStatus 是否存在)。
 
+System accepts heterogeneous opaque string IDs.
+Known observed forms include:
+  - seed serial IDs
+  - legacy six-digit genId IDs
+  - UUID-based genId IDs
+  - Mongo ObjectIds
+  - historical/ad-hoc prefixed IDs
+
+No business logic may infer schema/version/age from ID shape.
+
 ### §4.4 快照凍結
 歷史紀錄為當時快照。不得以「現在重算」改寫歷史顯示值。
 （v1.6 據此駁回 computeConsistency 歷史重算方案 H4）
@@ -710,7 +720,22 @@ patient-status 驗證列為後續 defense-in-depth（見 Open Items）。
   且四集合同步賦值後無 rollback 可能。0C 僅掛 guard。
 - [NOTE] migrateLocalStoragePatients() 現為完全死碼（0C 移除唯一呼叫端）。
   併入 LEGACY_PATIENT_LOCALSTORAGE_MIGRATION_RECON。
-- [P1] XZERO_A_GENID_UUID
+- [CLOSED] XZERO_A_GENID_UUID
+
+  X-ZERO-A CLOSED
+
+  Generator tests: PASS
+  Reachable runtime regression: 6/6 PASS
+  Failed regression: 0
+
+  Legacy UI-unreachable callsites: 2
+    - RX  savePrescription()   UNREACHABLE_LEGACY_PATH — NOT EXECUTED
+    - S   saveSession()        UNREACHABLE_LEGACY_PATH — NOT EXECUTED
+
+  These paths were not executed because no current UI creation
+  flow reaches them. Tracked under PARALLEL_LEGACY_WORKFLOW_CONSOLIDATION.
+
+  （原始問題記錄，保留供歷史脈絡）
   genId(prefix) = prefix + Date.now().slice(-6)：ID 空間 10⁶，
   每 16.67 分鐘循環。同 prefix 跨病人／跨裝置碰撞 → server _id
   upsert → 靜默覆蓋。
