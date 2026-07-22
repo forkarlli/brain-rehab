@@ -5592,6 +5592,59 @@ function generateIntegratedPrescription() {
   openModal('integratedRxModal');
 }
 
+// ===== P0-A1: BCF naked-fetch false-success hotfix =====
+// 純函式，窮舉六種 (mttOutcome, bcfOutcome) 組合，文字為 PM/ChatGPT/Gemini
+// 三方核可、不得自行更動。MTT 一定會 attempt（PASS/FAIL 二選一，不會是
+// NOT_ATTEMPTED），故只有 6 種合法組合；命中未列組合視為呼叫端違反不變量，
+// 直接拋錯而不是靜默回一個可能誤導的訊息。
+function resolveSaveOutcomeMessage(mttOutcome, bcfOutcome) {
+  if (mttOutcome === 'PASS' && bcfOutcome === 'PASS') {
+    return { text: '肌肉張力測試與 BCF 腦區判斷均已儲存。', severity: 'success' };
+  }
+  if (mttOutcome === 'PASS' && bcfOutcome === 'FAIL') {
+    return { text: '肌肉張力測試已儲存；BCF 腦區判斷儲存失敗，請重新嘗試。', severity: 'error' };
+  }
+  if (mttOutcome === 'FAIL' && bcfOutcome === 'PASS') {
+    return { text: 'BCF 腦區判斷已儲存；肌肉張力測試儲存失敗，請重新嘗試。', severity: 'error' };
+  }
+  if (mttOutcome === 'FAIL' && bcfOutcome === 'FAIL') {
+    return { text: '肌肉張力測試與 BCF 腦區判斷皆儲存失敗，請重新嘗試。', severity: 'error' };
+  }
+  if (mttOutcome === 'PASS' && bcfOutcome === 'NOT_ATTEMPTED') {
+    return { text: '肌肉張力測試已儲存。', severity: 'success' };
+  }
+  if (mttOutcome === 'FAIL' && bcfOutcome === 'NOT_ATTEMPTED') {
+    return { text: '肌肉張力測試儲存失敗，請重新嘗試。', severity: 'error' };
+  }
+  throw new Error(`resolveSaveOutcomeMessage: unhandled outcome combination (mtt=${mttOutcome}, bcf=${bcfOutcome})`);
+}
+
+// BCF 段的 fetch 判定與 DB.bcfDiagnoses mutation，抽成獨立、DOM 無關的函式：
+// 只依賴注入的 fetchImpl + 全域 DB，方便在 Node 對 fault injection 做單元測試
+// （saveBCFAssessment 本體因為大量 document.getElementById 無法這樣測）。
+// 永不 throw：fetch reject 或 response 解析失敗都會被吃下，回傳 'FAIL'，
+// 讓呼叫端（saveBCFAssessment）不會因為這裡而中斷，MTT 的結果回報仍會執行。
+async function _saveBcfDiagnosisRecord(bcfRec, fetchImpl = fetch) {
+  try {
+    const bcfResp = await fetchImpl('/api/bcf-diagnoses', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(bcfRec)
+    });
+    let bcfData = null;
+    try { bcfData = await bcfResp.json(); } catch (_) { bcfData = null; }
+    if (bcfResp.ok && bcfData && bcfData.diagnosis) {
+      DB.bcfDiagnoses.unshift(bcfRec);   // mutation 只在確認成功後才發生
+      return 'PASS';
+    }
+    console.warn('[BCF_DIAGNOSIS_SAVE_FAILED]', { status: bcfResp.status, body: bcfData });
+    return 'FAIL';
+  } catch (e) {
+    console.warn('[BCF_DIAGNOSIS_NETWORK_ERROR]', e);
+    return 'FAIL';
+  }
+}
+
 async function saveBCFAssessment() {
   const patientId = guardAssessmentPatient();
   if (!patientId) return;
@@ -5744,10 +5797,18 @@ async function saveBCFAssessment() {
   };
   DB.assessments.unshift(mttRec);
   const _mttSave = await saveAssessmentToServer(mttRec);
-  const _mttOk = handleAssessmentSaveResult(_mttSave, '肌肉張力測試');
+  // P0-A1: 不呼叫共用的 handleAssessmentSaveResult() —— 它失敗時會自己
+  // showToast，跟底下依六段訊息 contract 顯示的 toast 會疊成兩則。outcome
+  // 直接由 _mttSave.ok 推導，saveAssessmentToServer() 本身判定邏輯未變動。
+  const _mttOutcome = _mttSave?.ok ? 'PASS' : 'FAIL';
+  if (_mttOutcome === 'FAIL') {
+    console.warn('[MTT_ASSESSMENT_SAVE_FAILED]', _mttSave);
+  }
 
   // ── Record 2: BCF眼動機評估（處方數據），只在有處方時儲存 ──
+  // hasPrescriptions 只決定要不要 attempt BCF 存檔，不參與「已儲存」判斷。
   const hasPrescriptions = eyeMachineRx.length > 0 || !!flyingChairData || eegPrescriptions.length > 0;
+  let _bcfOutcome = 'NOT_ATTEMPTED';
   if (hasPrescriptions) {
     const rxCount = eyeMachineRx.length + eegPrescriptions.length + (flyingChairData ? 1 : 0);
     const prevBCF = DB.assessments
@@ -5762,21 +5823,14 @@ async function saveBCFAssessment() {
       decision: decObj,
       eyeMachineRx, eegPrescriptions, functionalTrainings, flyingChairData,
     };
-    DB.bcfDiagnoses.unshift(bcfRec);
-    await fetch('/api/bcf-diagnoses', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(bcfRec)
-    });
+    _bcfOutcome = await _saveBcfDiagnosisRecord(bcfRec);
   }
 
-  if (_mttOk) {
-    showToast(`評估已儲存：肌肉張力測試${hasPrescriptions ? ' + BCF腦區判斷' : ''}`, 'success');
+  const { text: _saveMsg, severity: _saveSeverity } = resolveSaveOutcomeMessage(_mttOutcome, _bcfOutcome);
+  showToast(_saveMsg, _saveSeverity);
+  if (_saveSeverity === 'success') {
     const saveBtn = document.getElementById('bcf-save-btn');
-    if (saveBtn) saveBtn.style.display = 'none';   // 只有成功才隱藏存檔鈕
-  } else if (hasPrescriptions) {
-    // MTT 失敗但 BCF 腦區判斷已獨立寫入 —— 必須明說，否則使用者不知道存了什麼
-    showToast('BCF腦區判斷已儲存（肌肉張力測試未儲存，見上方錯誤）', 'error');
+    if (saveBtn) saveBtn.style.display = 'none';   // 只有整體結果為 success 才隱藏存檔鈕
   }
   populateAssessDateDropdown(patientId);   // 畫面刷新不論成敗都跑
   renderAssessments();
