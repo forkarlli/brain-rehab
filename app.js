@@ -291,7 +291,41 @@ function handleAssessmentSaveResult(result, label) {
 
 const SAMPLE_ASSESSMENT_IDS = new Set(['A001','A002','A003','A004','A005','A006']);
 
-async function populateAssessDateDropdown(patientId) {
+// ===== ASSESS_DATE_STATE_INTEGRITY: assess-date-input lifecycle helper (Phase 1) =====
+// Single entry point for whether the dynamically-created #assess-date-input
+// should exist. mode is the only input — callers must not derive existence
+// from sessions.length (State A gets an Other flow too once Decision B
+// lands). Display (show/hide of the containing .form-group) stays the
+// caller's responsibility; this function only owns the input element's
+// existence and value sanity.
+function setAssessDateOtherInputMode(mode) {
+  const cg = document.getElementById('assess-date-custom')?.closest('.form-group');
+  const existingInput = document.getElementById('assess-date-input');
+  if (mode === 'OTHER') {
+    if (!existingInput) {
+      if (cg) {
+        const inp = document.createElement('input');
+        inp.type = 'date';
+        inp.id = 'assess-date-input';
+        inp.className = 'form-control';
+        inp.value = new Date().toISOString().slice(0, 10);
+        cg.appendChild(inp);
+      }
+      return;
+    }
+    // Element survived a prior NORMAL transition with an empty/invalid value
+    // (the ASSESS_DATE_SENTINEL bug) — repair in place, don't remove+recreate.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(existingInput.value)) {
+      existingInput.value = new Date().toISOString().slice(0, 10);
+    }
+    return;
+  }
+  if (!existingInput) return;
+  if (document.activeElement === existingInput) return;   // don't yank a field the user is typing in
+  existingInput.remove();
+}
+
+async function populateAssessDateDropdown(patientId, opts = {}) {
   const sel = document.getElementById('assess-date');
   if (!sel || sel.tagName !== 'SELECT') return;
   const custom = document.getElementById('assess-date-custom');
@@ -334,6 +368,12 @@ async function populateAssessDateDropdown(patientId) {
 
   if (selGroup) selGroup.style.display = '';
   if (customGroup) customGroup.style.display = 'none';
+  // Phase 1 lifecycle 守衛（Q2 裁定）：sel.innerHTML 重建（下方）會把 sel.value
+  // 隱含重置成 ''，必須在重建前先讀走，否則後面判斷不到使用者原本在 Other。
+  // opts.resetMode：換病人呼叫點（PATIENT CONTEXT CHANGE = HARD UI STATE
+  // BOUNDARY）強制視為離開 Other，即使舊病人的 sel.value 還留著 '__other__'，
+  // 否則 ③ 剛清掉的 assess-date-input 會被這個守衛在同一輪裡原地復活。
+  const wasOther = !opts.resetMode && sel.value === '__other__';
   const sessionDates = sessions.map(s => s.date).filter(Boolean);
   const assessDates = (DB.assessments || [])
     .filter(a => a.patientId === patientId)
@@ -351,12 +391,15 @@ async function populateAssessDateDropdown(patientId) {
   sel.style.backgroundPosition = 'right 10px center';
   sel.style.paddingRight = '30px';
   sel.style.cursor = 'pointer';
-  sel.value = sessions[0].date;
+  // Commit A 將修改 354 的取值，本 if 為 Phase 1 lifecycle 守衛
+  if (!wasOther) sel.value = sessions[0].date;
   if (custom) custom.value = sessions[0].date;
   const otherOpt = document.createElement('option');
   otherOpt.value = '__other__';
   otherOpt.textContent = '其他日期…';
   document.getElementById('assess-date').appendChild(otherOpt);
+  if (wasOther) sel.value = '__other__';
+  setAssessDateOtherInputMode(sel.value === '__other__' ? 'OTHER' : 'NORMAL');
 }
 
 async function loadAssessmentsFromServer() {
@@ -11222,7 +11265,8 @@ function initApp() {
   document.getElementById('assess-patient-select')?.addEventListener('change', () => {
     currentGlobalPatientId = document.getElementById('assess-patient-select').value;
     const pid = document.getElementById('assess-patient-select').value;
-    populateAssessDateDropdown(pid);
+    setAssessDateOtherInputMode('NORMAL');
+    populateAssessDateDropdown(pid, { resetMode: true });
     renderAssessments();
     clearBCFForm();
     clearRightEyeForm();
@@ -11239,21 +11283,12 @@ function initApp() {
     if (sel.value === '__other__') {
       const _cg = document.getElementById('assess-date-custom')?.closest('.form-group');
       if (_cg) _cg.style.display = '';
-      const existingInput = document.getElementById('assess-date-input');
-      if (!existingInput) {
-        if (_cg) {
-          const inp = document.createElement('input');
-          inp.type = 'date';
-          inp.id = 'assess-date-input';
-          inp.className = 'form-control';
-          inp.value = new Date().toISOString().slice(0, 10);
-          _cg.appendChild(inp);
-        }
-      }
+      setAssessDateOtherInputMode('OTHER');
     } else {
       const _cg2 = document.getElementById('assess-date-custom')?.closest('.form-group');
       if (_cg2) _cg2.style.display = 'none';
       if (custom) custom.value = sel.value;
+      setAssessDateOtherInputMode('NORMAL');
       renderAssessments();
     }
   });
@@ -11291,9 +11326,10 @@ function initApp() {
         const el = document.getElementById(id);
         if (el) el.value = currentGlobalPatientId;
       });
+      setAssessDateOtherInputMode('NORMAL');
       clearBCFAssessmentForm();
       if (typeof clearRightEyeForm === 'function') clearRightEyeForm();
-      populateAssessDateDropdown(currentGlobalPatientId);
+      populateAssessDateDropdown(currentGlobalPatientId, { resetMode: true });
       const activePage = document.querySelector('.page.active')?.id?.replace('page-','');
       if (activePage === 'assessments') renderAssessments();
       else if (activePage === 'sessions') renderSessions();
