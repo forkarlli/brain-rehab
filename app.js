@@ -7482,8 +7482,81 @@ function _renderBergContent() {
   `;
 }
 
+// B-1: true if a parse/upload operation that captured startOwner at its start
+// should be discarded because the patient context is no longer the same one
+// by the time it completes. Used by every acquisition callback
+// (_handleBTrackSHtmlFile, _handleBTrackSFiles, and their modal equivalents)
+// instead of each duplicating the comparison inline.
+function isBTracksAcquisitionStale(startOwner, currentOwner) {
+  return currentOwner !== startOwner;
+}
+
+// P0-0 (BTracks ownership): pure predicate, shared by the tab and modal
+// instances. Checks TWO independent ownership claims against the current
+// patient — they are deliberately separate, not merged into one "owner":
+//   dataOwnerMismatch: the parsed-report half of state (state.data /
+//                      state.dataOwner, only ever written atomically by an
+//                      acquisition — see _handleBTrackSHtmlFile et al.)
+//                      belongs to someone else.
+//   unownedData:       parsed report data exists with no recorded owner at
+//                      all (e.g. uploaded before any patient was selected).
+//   formOwnerMismatch: the plain manually-typed fields (stamped only by the
+//                      delegated 'input'/'change' listener) belong to
+//                      someone else. This is load-bearing for the modal
+//                      (#a-patient is not an orchestrator entry point — see
+//                      onAssessmentPatientContextChanged) and defense-in-depth
+//                      for the tab (#assess-patient-select is one).
+function isBTracksOwnershipBlocked(state, formOwner, currentPatientId) {
+  const dataOwnerMismatch = state.dataOwner !== null && state.dataOwner !== currentPatientId;
+  const unownedData = state.data !== null && state.dataOwner === null;
+  const formOwnerMismatch = formOwner !== null && formOwner !== currentPatientId;
+  return dataOwnerMismatch || unownedData || formOwnerMismatch;
+}
+
 // ===== ROMBERG TAB =====
-let _btracksData = null; // parsed BTrackS HTML report data
+// P0-0 (BTracks ownership): atomic { data, dataOwner } — the two halves are
+// never assigned separately, so they cannot desync. dataOwner is CAPTURED at
+// the start of a parse/upload operation (not read at completion time — an
+// async operation that started under patient A must not attribute its result
+// to whichever patient happens to be selected when it finishes, see
+// _handleBTrackSHtmlFile et al.) and is never touched by the delegated
+// listener (see _btracksFormOwner below). Compute/save may only VALIDATE via
+// isBTracksOwnershipBlocked(), never assign.
+let _btracksState = { data: null, dataOwner: null };
+// The ONLY thing the delegated 'input'/'change' listener may write. Tracks
+// who is currently typing into the plain manual fields — deliberately kept
+// separate from _btracksState so the listener can never touch the parsed
+// report's ownership.
+let _btracksFormOwner = null;
+
+// Unconditionally resets this tab's BTracks-domain state. Whether a reset
+// should happen at all is the orchestrator's decision (see
+// onAssessmentPatientContextChanged) — this function no longer makes that
+// call itself, so it no longer takes newPatientId.
+function _resetBTracksTabState() {
+  _btracksState = { data: null, dataOwner: null };
+  _btracksFormOwner = null;
+  ['romberg-path-eo', 'romberg-path-ec', 'romberg-path-pro', 'romberg-path-vis',
+   'romberg-pct-std', 'romberg-pct-pro', 'romberg-pct-vis', 'romberg-pct-ves',
+   'romberg-jerk'].forEach(id => {
+    const el = document.getElementById(id); if (el) el.value = '';
+  });
+  const dirEl = document.getElementById('romberg-direction');
+  if (dirEl) dirEl.value = '';
+  const reVertEl = document.getElementById('romberg-righteye-vertical');
+  if (reVertEl) reVertEl.value = '';
+  const srcEl = document.getElementById('romberg-source');
+  if (srcEl) srcEl.value = 'manual';
+  _onRombergSourceChange(); // keep the upload-zone display in sync with the value just set
+  const rqDisplay = document.getElementById('romberg-rq-display');
+  if (rqDisplay) rqDisplay.textContent = '—';
+  const modeBadge = document.getElementById('romberg-mode-badge');
+  if (modeBadge) { modeBadge.textContent = ''; modeBadge.style.background = ''; }
+  const resultEl = document.getElementById('romberg-result');
+  if (resultEl) { resultEl.style.display = 'none'; resultEl.innerHTML = ''; }
+  const saveBtn = document.getElementById('btracks-save-btn');
+  if (saveBtn) saveBtn.style.display = 'none';
+}
 
 function renderRombergInterface() {
   const container = document.getElementById('romberg-interface');
@@ -7697,6 +7770,11 @@ function renderRombergInterface() {
 async function saveBTracksAssessment() {
   const patientId = guardAssessmentPatient();
   if (!patientId) return;
+  // P0-0: validate ownership via the shared predicate, never create it here.
+  if (isBTracksOwnershipBlocked(_btracksState, _btracksFormOwner, patientId)) {
+    showToast('偵測到跨病人殘留資料，請重新輸入本頁欄位後再儲存', 'error');
+    return;
+  }
   const date = document.getElementById('assess-date-input')?.value
             || document.getElementById('assess-date-custom')?.value
             || document.getElementById('assess-date')?.value;
@@ -7728,15 +7806,15 @@ async function saveBTracksAssessment() {
     pct_pro: isNaN(pctPro) ? null : pctPro,
     pct_vis: isNaN(pctVis) ? null : pctVis,
     pct_ves: isNaN(pctVes) ? null : pctVes,
-    btracks_data: _btracksData ? {
-      path_std: _btracksData.path_std, path_pro: _btracksData.path_pro,
-      path_vis: _btracksData.path_vis, path_ves: _btracksData.path_ves,
-      pct_std: _btracksData.pct_std ?? (isNaN(pctStd) ? null : pctStd),
-      pct_pro: _btracksData.pct_pro ?? (isNaN(pctPro) ? null : pctPro),
-      pct_vis: _btracksData.pct_vis ?? (isNaN(pctVis) ? null : pctVis),
-      pct_ves: _btracksData.pct_ves ?? (isNaN(pctVes) ? null : pctVes),
-      cop_ml_ves: _btracksData.cop_ml_ves, cop_ap_ves: _btracksData.cop_ap_ves,
-      cop_ang_ves: _btracksData.cop_ang_ves,
+    btracks_data: _btracksState.data ? {
+      path_std: _btracksState.data.path_std, path_pro: _btracksState.data.path_pro,
+      path_vis: _btracksState.data.path_vis, path_ves: _btracksState.data.path_ves,
+      pct_std: _btracksState.data.pct_std ?? (isNaN(pctStd) ? null : pctStd),
+      pct_pro: _btracksState.data.pct_pro ?? (isNaN(pctPro) ? null : pctPro),
+      pct_vis: _btracksState.data.pct_vis ?? (isNaN(pctVis) ? null : pctVis),
+      pct_ves: _btracksState.data.pct_ves ?? (isNaN(pctVes) ? null : pctVes),
+      cop_ml_ves: _btracksState.data.cop_ml_ves, cop_ap_ves: _btracksState.data.cop_ap_ves,
+      cop_ang_ves: _btracksState.data.cop_ang_ves,
     } : null,
   };
   DB.assessments.unshift(rec);
@@ -7748,12 +7826,21 @@ async function saveBTracksAssessment() {
 }
 
 function _onRombergSourceChange() {
-  const src      = document.getElementById('romberg-source').value;
+  // D-1: #romberg-source only exists once the BTracks tab has been rendered
+  // at least once. This is now called unconditionally from
+  // _resetBTracksTabState() on every real patient switch — regardless of
+  // which tab the user is currently on — so it must not assume the element
+  // is there.
+  const srcEl = document.getElementById('romberg-source');
+  if (!srcEl) return;
+  const src      = srcEl.value;
   const imgZone  = document.getElementById('btracks-upload-zone');
   const htmlZone = document.getElementById('btracks-html-upload-zone');
   if (imgZone)  imgZone.style.display  = src === 'btracks_html'      ? 'block' : 'none';
   if (htmlZone) htmlZone.style.display = src === 'btracks_html_file' ? 'block' : 'none';
-  if (src === 'manual') _btracksData = null;
+  // Discards the parsed report, not the ownership claim — switching the data
+  // source back to manual doesn't mean a different patient owns this session.
+  if (src === 'manual') _btracksState = { ..._btracksState, data: null };
 }
 
 function _buildBTracksSummaryHTML(parsed, dir, dirSource, title) {
@@ -7793,12 +7880,27 @@ function _buildBTracksSummaryHTML(parsed, dir, dirSource, title) {
 }
 
 function _handleBTrackSHtmlFile(file) {
+  // B-1: capture the owner at operation START, not at completion. An async
+  // parse that began under patient A must not get attributed to whichever
+  // patient happens to be selected once the FileReader resolves.
+  const _startOwner = document.getElementById('assess-patient-select')?.value || null;
   const summary = document.getElementById('btracks-html-summary');
   if (summary) { summary.style.display = 'block'; summary.innerHTML = '<div style="color:#6b7280;">⏳ 正在解析 HTML 報告…</div>'; }
   const reader = new FileReader();
   reader.onload = e => {
     const parsed = parseBTrackSReport(e.target.result);
-    _btracksData = parsed;
+    const _currentOwner = document.getElementById('assess-patient-select')?.value || null;
+    if (isBTracksAcquisitionStale(_startOwner, _currentOwner)) {
+      // Patient context changed mid-flight — discard. Must not fall back to
+      // re-deciding ownership from the current selector, and must not write
+      // any DOM field (that's exactly how patient A's data would end up
+      // silently populating patient B's form).
+      if (summary) summary.innerHTML = '<div style="color:#d97706;">⚠ 病人已切換，解析結果已捨棄，請重新上傳</div>';
+      return;
+    }
+    // R-1/R-2: atomic — the highest-risk path (carries COP data) must never
+    // set data without ownership in the same statement.
+    _btracksState = { data: parsed, dataOwner: _startOwner };
     const eoEl  = document.getElementById('romberg-path-eo');
     const proEl = document.getElementById('romberg-path-pro');
     const visEl = document.getElementById('romberg-path-vis');
@@ -7834,6 +7936,9 @@ function _handleBTrackSHtmlFile(file) {
 }
 
 function _handleBTrackSFiles(files) {
+  // B-1: capture the owner at operation START, not at completion — see
+  // _handleBTrackSHtmlFile.
+  const _startOwner = document.getElementById('assess-patient-select')?.value || null;
   const summary = document.getElementById('btracks-parsed-summary');
   if (summary) { summary.style.display = 'block'; summary.innerHTML = '<div style="color:#6b7280;">⏳ AI 正在辨識圖片數值…</div>'; }
 
@@ -7854,7 +7959,15 @@ function _handleBTrackSFiles(files) {
     if (!resp.ok) return resp.json().then(e => Promise.reject(new Error(e.error || resp.statusText)));
     return resp.json();
   }).then(parsed => {
-    _btracksData = parsed;
+    const _currentOwner = document.getElementById('assess-patient-select')?.value || null;
+    if (isBTracksAcquisitionStale(_startOwner, _currentOwner)) {
+      // Patient context changed mid-flight — discard, same reasoning as
+      // _handleBTrackSHtmlFile. Do not write any DOM field.
+      if (summary) summary.innerHTML = '<div style="color:#d97706;">⚠ 病人已切換，解析結果已捨棄，請重新上傳</div>';
+      return;
+    }
+    // R-1/R-2: atomic — same reasoning as _handleBTrackSHtmlFile above.
+    _btracksState = { data: parsed, dataOwner: _startOwner };
 
     const eoEl  = document.getElementById('romberg-path-eo');
     const proEl = document.getElementById('romberg-path-pro');
@@ -8325,6 +8438,15 @@ function _rombergCompute() {
   if (!direction) { showToast('請選擇偏移方向', 'error'); return; }
   if (!(eo > 0) || !(ec > 0)) { showToast('請輸入有效的張眼與閉眼路徑長度', 'error'); return; }
 
+  // P0-0: validate ownership via the shared predicate, never create it here —
+  // Compute must not be the moment stale cross-patient data gets blessed as
+  // the current patient's.
+  const _currentPid = document.getElementById('assess-patient-select')?.value || '';
+  if (isBTracksOwnershipBlocked(_btracksState, _btracksFormOwner, _currentPid)) {
+    showToast('偵測到跨病人殘留資料，請重新輸入本頁欄位後再計算', 'error');
+    return;
+  }
+
   const result = computeRombergRx({
     source_type: source,
     sway_direction: direction,
@@ -8333,8 +8455,8 @@ function _rombergCompute() {
     rq_override: null,
     jerk_index: jerk !== '' ? parseFloat(jerk) : null,
     righteye_pursuit_vertical: reVertical || null,
-    btracks_cop_x: _btracksData?.cop_ml_ves ?? null,
-    btracks_cop_y: _btracksData?.cop_ap_ves ?? null,
+    btracks_cop_x: _btracksState.data?.cop_ml_ves ?? null,
+    btracks_cop_y: _btracksState.data?.cop_ap_ves ?? null,
     btracks_sway_velocity: null,
   });
 
@@ -8356,15 +8478,80 @@ function _rombergCompute() {
 }
 
 // ===== MODAL ROMBERG HELPERS =====
-let _mBtracksData = null;
+// P0-0 (BTracks ownership): modal-instance equivalent of _btracksState/
+// _btracksFormOwner, same split and same atomicity rule. The modal's own
+// patient source is #a-patient (not #assess-patient-select) — see
+// saveAssessment(). #a-patient is NOT one of the four orchestrator entry
+// points (only global-patient-select's handler syncs it), so
+// _mBtracksFormOwner is load-bearing here, not just defense-in-depth.
+let _mBtracksState = { data: null, dataOwner: null };
+let _mBtracksFormOwner = null;
+
+// Unconditionally resets the modal's BTracks-domain state — see
+// _resetBTracksTabState for why this no longer takes newPatientId.
+function _resetBTracksModalState() {
+  _mBtracksState = { data: null, dataOwner: null };
+  _mBtracksFormOwner = null;
+  ['modal-romberg-path-eo', 'modal-romberg-path-ec', 'modal-romberg-path-pro', 'modal-romberg-path-vis']
+    .forEach(id => {
+      const el = document.getElementById(id); if (el) el.value = '';
+    });
+  const dirEl = document.getElementById('modal-romberg-direction');
+  if (dirEl) dirEl.value = '';
+  const srcEl = document.getElementById('modal-romberg-source');
+  if (srcEl) srcEl.value = 'manual';
+  _mOnRombergSourceChange(); // keep the upload-zone display in sync with the value just set
+  const rqDisplay = document.getElementById('modal-romberg-rq-display');
+  if (rqDisplay) rqDisplay.textContent = '—';
+  const modeBadge = document.getElementById('modal-romberg-mode-badge');
+  if (modeBadge) { modeBadge.textContent = ''; modeBadge.style.background = ''; }
+}
+
+// ===== P0-0: patient-context change orchestrator =====
+// Single entry point every code path that changes the assessment patient
+// context must call. This round only wires the BTracks-domain reset (tab +
+// modal instances); the date-domain reset (assess-date-input lifecycle) is
+// deliberately NOT called here yet.
+//
+// DATE_PATIENT_SWITCH_ENTRY_COVERAGE_GAP: #sessionPatientFilter and
+// #reportPatientFilter change the assessment patient context (they sync
+// #assess-patient-select) but do not call setAssessDateOtherInputMode('NORMAL').
+// Tracked separately — fix deferred to the date lifecycle work, not folded
+// into this commit.
+//
+// B-3: "did the context actually change" is this function's OWN decision —
+// tracked by _previousAssessmentContextPatientId, independent of either
+// domain's internal state. newPatientId === '' ("no patient selected") is a
+// no-op and does NOT update _previousAssessmentContextPatientId, so a
+// genuine later switch to any real patient still resets both domains even
+// after a deselect-then-reselect-blank detour; the interim window where
+// stale state sits unreset is covered by isBTracksOwnershipBlocked()'s
+// mismatch-against-'' check (see predicate test A5).
+let _previousAssessmentContextPatientId = null;
+function onAssessmentPatientContextChanged(newPatientId) {
+  if (newPatientId === '') return;
+  if (newPatientId === _previousAssessmentContextPatientId) return;
+  _previousAssessmentContextPatientId = newPatientId;
+  _resetBTracksTabState();
+  _resetBTracksModalState();
+}
 
 function _mOnRombergSourceChange() {
-  const src      = document.getElementById('modal-romberg-source').value;
+  // D-1: #modal-romberg-source only exists while #a-type is 'romberg'. This
+  // is now called unconditionally from _resetBTracksModalState() on every
+  // real patient switch, regardless of what type is currently selected in
+  // the modal (or whether the modal is even open) — must not assume it's
+  // there. See the tab-side _onRombergSourceChange().
+  const srcEl = document.getElementById('modal-romberg-source');
+  if (!srcEl) return;
+  const src      = srcEl.value;
   const imgZone  = document.getElementById('modal-btracks-dropzone-wrap');
   const htmlZone = document.getElementById('modal-btracks-html-zone');
   if (imgZone)  imgZone.style.display  = src === 'btracks_html'      ? 'block' : 'none';
   if (htmlZone) htmlZone.style.display = src === 'btracks_html_file' ? 'block' : 'none';
-  if (src === 'manual') _mBtracksData = null;
+  // Discards the parsed report, not the ownership claim — see the tab-side
+  // equivalent in _onRombergSourceChange().
+  if (src === 'manual') _mBtracksState = { ..._mBtracksState, data: null };
 }
 
 function _mRombergUpdateRq() {
@@ -8387,12 +8574,21 @@ function _mRombergUpdateRq() {
 }
 
 function _mHandleBTrackSHtmlFile(file) {
+  // B-1: capture the owner at operation START, not at completion — see the
+  // tab-side _handleBTrackSHtmlFile.
+  const _startOwner = document.getElementById('a-patient')?.value || null;
   const summary = document.getElementById('modal-btracks-html-summary');
   if (summary) { summary.style.display = 'block'; summary.innerHTML = '<div style="color:#6b7280;">⏳ 正在解析 HTML 報告…</div>'; }
   const reader = new FileReader();
   reader.onload = e => {
     const parsed = parseBTrackSReport(e.target.result);
-    _mBtracksData = parsed;
+    const _currentOwner = document.getElementById('a-patient')?.value || null;
+    if (isBTracksAcquisitionStale(_startOwner, _currentOwner)) {
+      if (summary) summary.innerHTML = '<div style="color:#d97706;">⚠ 病人已切換，解析結果已捨棄，請重新上傳</div>';
+      return;
+    }
+    // R-1/R-2: atomic — same reasoning as the tab-side _handleBTrackSHtmlFile.
+    _mBtracksState = { data: parsed, dataOwner: _startOwner };
     const eoEl  = document.getElementById('modal-romberg-path-eo');
     const proEl = document.getElementById('modal-romberg-path-pro');
     const visEl = document.getElementById('modal-romberg-path-vis');
@@ -8420,6 +8616,9 @@ function _mHandleBTrackSHtmlFile(file) {
 }
 
 function _mBTrackSFiles(files) {
+  // B-1: capture the owner at operation START, not at completion — see the
+  // tab-side _handleBTrackSFiles.
+  const _startOwner = document.getElementById('a-patient')?.value || null;
   const summary = document.getElementById('modal-btracks-summary');
   if (summary) { summary.style.display = 'block'; summary.innerHTML = '<div style="color:#6b7280;">⏳ AI 正在辨識圖片數值…</div>'; }
 
@@ -8440,7 +8639,13 @@ function _mBTrackSFiles(files) {
     if (!resp.ok) return resp.json().then(e => Promise.reject(new Error(e.error || resp.statusText)));
     return resp.json();
   }).then(parsed => {
-    _mBtracksData = parsed;
+    const _currentOwner = document.getElementById('a-patient')?.value || null;
+    if (isBTracksAcquisitionStale(_startOwner, _currentOwner)) {
+      if (summary) summary.innerHTML = '<div style="color:#d97706;">⚠ 病人已切換，解析結果已捨棄，請重新上傳</div>';
+      return;
+    }
+    // R-1/R-2: atomic — same reasoning as the tab-side image-upload callback.
+    _mBtracksState = { data: parsed, dataOwner: _startOwner };
 
     const eoEl  = document.getElementById('modal-romberg-path-eo');
     const proEl = document.getElementById('modal-romberg-path-pro');
@@ -8479,6 +8684,13 @@ function _mRombergCompute() {
   if (!direction) { showToast('請選擇偏移方向', 'error'); return; }
   if (!(eo > 0) || !(ec > 0)) { showToast('請輸入有效的張眼與閉眼路徑長度', 'error'); return; }
 
+  // P0-0: validate ownership via the shared predicate, never create it here.
+  const _currentPid = document.getElementById('a-patient')?.value || '';
+  if (isBTracksOwnershipBlocked(_mBtracksState, _mBtracksFormOwner, _currentPid)) {
+    showToast('偵測到跨病人殘留資料，請重新輸入本頁欄位後再計算', 'error');
+    return;
+  }
+
   const result = computeRombergRx({
     source_type: source,
     sway_direction: direction,
@@ -8487,8 +8699,8 @@ function _mRombergCompute() {
     rq_override: null,
     jerk_index: jerk !== '' ? parseFloat(jerk) : null,
     righteye_pursuit_vertical: reVertical || null,
-    btracks_cop_x: _mBtracksData?.cop_ml_ves ?? null,
-    btracks_cop_y: _mBtracksData?.cop_ap_ves ?? null,
+    btracks_cop_x: _mBtracksState.data?.cop_ml_ves ?? null,
+    btracks_cop_y: _mBtracksState.data?.cop_ap_ves ?? null,
     btracks_sway_velocity: null,
   });
 
@@ -8857,6 +9069,11 @@ async function saveAssessment() {
 
   let score, extraData = {};
   if (type === 'romberg') {
+    // P0-0: validate ownership via the shared predicate, never create it here.
+    if (isBTracksOwnershipBlocked(_mBtracksState, _mBtracksFormOwner, patientId)) {
+      showToast('偵測到跨病人殘留資料，請重新輸入本頁欄位後再儲存', 'error');
+      return;
+    }
     const eo = parseFloat(document.getElementById('modal-romberg-path-eo')?.value);
     const ec = parseFloat(document.getElementById('modal-romberg-path-ec')?.value);
     const rq = (eo > 0 && ec > 0) ? parseFloat((ec / eo).toFixed(2)) : 0;
@@ -8867,10 +9084,10 @@ async function saveAssessment() {
       sway_direction: direction,
       path_eo: eo || null,
       path_ec: ec || null,
-      btracks_data: _mBtracksData ? {
-        path_std: _mBtracksData.path_std, path_pro: _mBtracksData.path_pro,
-        path_vis: _mBtracksData.path_vis, path_ves: _mBtracksData.path_ves,
-        cop_ap_ves: _mBtracksData.cop_ap_ves, cop_ang_ves: _mBtracksData.cop_ang_ves,
+      btracks_data: _mBtracksState.data ? {
+        path_std: _mBtracksState.data.path_std, path_pro: _mBtracksState.data.path_pro,
+        path_vis: _mBtracksState.data.path_vis, path_ves: _mBtracksState.data.path_ves,
+        cop_ap_ves: _mBtracksState.data.cop_ap_ves, cop_ang_ves: _mBtracksState.data.cop_ang_ves,
       } : null,
     };
   } else {
@@ -11266,6 +11483,7 @@ function initApp() {
     currentGlobalPatientId = document.getElementById('assess-patient-select').value;
     const pid = document.getElementById('assess-patient-select').value;
     setAssessDateOtherInputMode('NORMAL');
+    onAssessmentPatientContextChanged(pid);
     populateAssessDateDropdown(pid, { resetMode: true });
     renderAssessments();
     clearBCFForm();
@@ -11305,6 +11523,7 @@ function initApp() {
       const _rf = document.getElementById('reportPatientFilter');
       if (_as) _as.value = currentGlobalPatientId;
       if (_rf) _rf.value = currentGlobalPatientId;
+      onAssessmentPatientContextChanged(currentGlobalPatientId);
       renderSessions();
     });
 
@@ -11315,6 +11534,7 @@ function initApp() {
       const _sf = document.getElementById('sessionPatientFilter');
       if (_as) _as.value = currentGlobalPatientId;
       if (_sf) _sf.value = currentGlobalPatientId;
+      onAssessmentPatientContextChanged(currentGlobalPatientId);
     });
 
   document.getElementById('global-patient-select')
@@ -11327,6 +11547,7 @@ function initApp() {
         if (el) el.value = currentGlobalPatientId;
       });
       setAssessDateOtherInputMode('NORMAL');
+      onAssessmentPatientContextChanged(currentGlobalPatientId);
       clearBCFAssessmentForm();
       if (typeof clearRightEyeForm === 'function') clearRightEyeForm();
       populateAssessDateDropdown(currentGlobalPatientId, { resetMode: true });
@@ -11346,6 +11567,21 @@ function initApp() {
       }
       document.querySelectorAll('#bcf-interface .bcf-has-diff').forEach(function(el) { el.classList.remove('bcf-has-diff'); });
     });
+
+  // P0-0 (BTracks ownership): delegated listeners — any real input/change
+  // bubbling from inside these containers means "the current patient is now
+  // authoring the plain manual fields." B-2: this may ONLY write
+  // _btracksFormOwner/_mBtracksFormOwner — never _btracksState/_mBtracksState,
+  // which is exclusively assigned atomically by a parse/upload acquisition.
+  ['input', 'change'].forEach(evt => {
+    document.getElementById('btracks-interface')?.addEventListener(evt, () => {
+      _btracksFormOwner = document.getElementById('assess-patient-select')?.value || null;
+    });
+    document.getElementById('assessmentFormDynamic')?.addEventListener(evt, () => {
+      if (document.getElementById('a-type')?.value !== 'romberg') return;
+      _mBtracksFormOwner = document.getElementById('a-patient')?.value || null;
+    });
+  });
 
   document.getElementById('sessionStatusFilter')?.addEventListener('change', renderSessions);
 
