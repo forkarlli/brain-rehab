@@ -41,6 +41,16 @@
 //   (_previousAssessmentContextPatientId), fully independent of either
 //   domain's internal state. The reset functions are now unconditional.
 //
+//   E-1: reset cleared the input fields but not the parse-result summary
+//   panels (#btracks-html-summary / #btracks-parsed-summary and their modal
+//   equivalents) — a separate display surface. Patient A's STD/PRO/VIS/VES/
+//   RQ table stayed visible under patient B even though the fields
+//   themselves were empty and a save would be blocked (§4.5: visible is not
+//   authoritative — a therapist can still read and re-type stale numbers).
+//   Fixed by clearing innerHTML AND hiding (display:'none') both panels in
+//   each reset — display alone would let the stale content reappear next
+//   time the panel is shown without a fresh parse.
+//
 // This file tests every piece above via the same source-slicing technique as
 // the other tests in this directory: isBTracksOwnershipBlocked and
 // isBTracksAcquisitionStale (both pure, no DOM), _resetBTracksTabState /
@@ -124,16 +134,28 @@ const TAB_FIELD_IDS = [
   'romberg-jerk', 'romberg-direction', 'romberg-righteye-vertical', 'romberg-source',
   'romberg-rq-display', 'romberg-mode-badge', 'romberg-result', 'btracks-save-btn',
   'btracks-upload-zone', 'btracks-html-upload-zone',
+  // E-1: parse-result summary panels — a separate display surface from the
+  // fields they were used to fill in.
+  'btracks-html-summary', 'btracks-parsed-summary',
 ];
 const MODAL_FIELD_IDS = [
   'modal-romberg-path-eo', 'modal-romberg-path-ec', 'modal-romberg-path-pro', 'modal-romberg-path-vis',
   'modal-romberg-direction', 'modal-romberg-source',
   'modal-romberg-rq-display', 'modal-romberg-mode-badge',
   'modal-btracks-dropzone-wrap', 'modal-btracks-html-zone',
+  'modal-btracks-html-summary', 'modal-btracks-summary',
 ];
 
 function makeFakeElement(id) {
-  return { id, value: `stale-${id}`, textContent: `stale-${id}`, style: { display: '', background: '' } };
+  return {
+    id,
+    value: `stale-${id}`,
+    textContent: `stale-${id}`,
+    // E-1: a stale-but-nonempty innerHTML simulates patient A's leftover
+    // STD/PRO/VIS/VES/RQ parse-result table still sitting in the DOM.
+    innerHTML: `stale-${id}`,
+    style: { display: '', background: '' },
+  };
 }
 
 // excludeIds lets a test simulate "this DOM never got rendered" (D-1: e.g.
@@ -254,6 +276,13 @@ function extractBlockFrom(text, startLineText) {
   context.__TEST_setBTracksState({ data: { path_std: 1, cop_ml_ves: 2 }, dataOwner: 'P_A' });
   context.__TEST_setBTracksFormOwner('P_A');
   registry['romberg-source'].value = 'btracks_html_file';
+  // E-1 setup: simulate patient A's parse-result summary panels actually
+  // being on screen (real code sets style.display='block' when populating
+  // them — see _handleBTrackSHtmlFile / _handleBTrackSFiles).
+  registry['btracks-html-summary'].innerHTML = 'A STD/PRO/VIS/VES/RQ table';
+  registry['btracks-html-summary'].style.display = 'block';
+  registry['btracks-parsed-summary'].innerHTML = 'A AI-parsed table';
+  registry['btracks-parsed-summary'].style.display = 'block';
   context._resetBTracksTabState();
   check('C1: reset replaces the whole state object', JSON.stringify(context.__TEST_getBTracksState()) === JSON.stringify({ data: null, dataOwner: null }),
     `expected { data: null, dataOwner: null }, got ${JSON.stringify(context.__TEST_getBTracksState())}`);
@@ -266,15 +295,43 @@ function extractBlockFrom(text, startLineText) {
     'expected both upload zones hidden');
   check('C1 (N-2): reset hides the save button', registry['btracks-save-btn'].style.display === 'none',
     `expected 'none', got '${registry['btracks-save-btn'].style.display}'`);
+  check('C1 (E-1): reset clears the HTML-report summary panel innerHTML',
+    registry['btracks-html-summary'].innerHTML === '',
+    `expected '', got '${registry['btracks-html-summary'].innerHTML}' — patient A's parse-result table would stay visible under patient B`);
+  check('C1 (E-1): reset hides the HTML-report summary panel',
+    registry['btracks-html-summary'].style.display === 'none',
+    `expected 'none', got '${registry['btracks-html-summary'].style.display}' — display alone (without clearing innerHTML) would let stale content reappear`);
+  check('C1 (E-1): reset clears the AI-parsed summary panel innerHTML',
+    registry['btracks-parsed-summary'].innerHTML === '',
+    `expected '', got '${registry['btracks-parsed-summary'].innerHTML}'`);
+  check('C1 (E-1): reset hides the AI-parsed summary panel',
+    registry['btracks-parsed-summary'].style.display === 'none',
+    `expected 'none', got '${registry['btracks-parsed-summary'].style.display}'`);
 }
 {
   const { context, registry } = load();
   context.__TEST_setMBTracksState({ data: { path_std: 1 }, dataOwner: 'P_A' });
+  registry['modal-btracks-html-summary'].innerHTML = 'A STD/PRO/VIS/VES/RQ table';
+  registry['modal-btracks-html-summary'].style.display = 'block';
+  registry['modal-btracks-summary'].innerHTML = 'A AI-parsed table';
+  registry['modal-btracks-summary'].style.display = 'block';
   context._resetBTracksModalState();
   check('D1: modal reset replaces the whole state object', JSON.stringify(context.__TEST_getMBTracksState()) === JSON.stringify({ data: null, dataOwner: null }),
     `expected { data: null, dataOwner: null }, got ${JSON.stringify(context.__TEST_getMBTracksState())}`);
   check('D1: modal reset clears DOM fields', registry['modal-romberg-path-eo'].value === '',
     `expected empty value, got '${registry['modal-romberg-path-eo'].value}'`);
+  check('D1 (E-1): reset clears the modal HTML-report summary panel innerHTML',
+    registry['modal-btracks-html-summary'].innerHTML === '',
+    `expected '', got '${registry['modal-btracks-html-summary'].innerHTML}'`);
+  check('D1 (E-1): reset hides the modal HTML-report summary panel',
+    registry['modal-btracks-html-summary'].style.display === 'none',
+    `expected 'none', got '${registry['modal-btracks-html-summary'].style.display}'`);
+  check('D1 (E-1): reset clears the modal AI-parsed summary panel innerHTML',
+    registry['modal-btracks-summary'].innerHTML === '',
+    `expected '', got '${registry['modal-btracks-summary'].innerHTML}'`);
+  check('D1 (E-1): reset hides the modal AI-parsed summary panel',
+    registry['modal-btracks-summary'].style.display === 'none',
+    `expected 'none', got '${registry['modal-btracks-summary'].style.display}'`);
 }
 
 // =============================================================================

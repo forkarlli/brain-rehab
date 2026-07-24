@@ -7556,6 +7556,18 @@ function _resetBTracksTabState() {
   if (resultEl) { resultEl.style.display = 'none'; resultEl.innerHTML = ''; }
   const saveBtn = document.getElementById('btracks-save-btn');
   if (saveBtn) saveBtn.style.display = 'none';
+  // E-1: the parse-result summary panels are a SEPARATE display surface from
+  // the fields they were used to fill — clearing the fields does not clear
+  // these. Left alone, patient A's STD/PRO/VIS/VES/RQ table stays visible
+  // under patient B's name (§4.5: visible is not authoritative — the fields
+  // being empty doesn't stop a therapist from reading and re-typing the
+  // still-displayed numbers). innerHTML='' AND display='none' — display
+  // alone would let the stale content reappear the next time this panel is
+  // shown without a fresh parse.
+  ['btracks-html-summary', 'btracks-parsed-summary'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.innerHTML = ''; el.style.display = 'none'; }
+  });
 }
 
 function renderRombergInterface() {
@@ -8505,6 +8517,12 @@ function _resetBTracksModalState() {
   if (rqDisplay) rqDisplay.textContent = '—';
   const modeBadge = document.getElementById('modal-romberg-mode-badge');
   if (modeBadge) { modeBadge.textContent = ''; modeBadge.style.background = ''; }
+  // E-1: same reasoning as the tab-side reset — the parse-result summary
+  // panels are a separate display surface from the fields.
+  ['modal-btracks-html-summary', 'modal-btracks-summary'].forEach(id => {
+    const el = document.getElementById(id);
+    if (el) { el.innerHTML = ''; el.style.display = 'none'; }
+  });
 }
 
 // ===== P0-0: patient-context change orchestrator =====
