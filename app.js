@@ -298,6 +298,18 @@ const SAMPLE_ASSESSMENT_IDS = new Set(['A001','A002','A003','A004','A005','A006'
 // lands). Display (show/hide of the containing .form-group) stays the
 // caller's responsibility; this function only owns the input element's
 // existence and value sanity.
+// Commit A (CLIENT_DATE_DEFAULT_FIXED): toISOString() converts to UTC first —
+// for a timezone ahead of UTC (e.g. Taiwan, UTC+8), during local early-morning
+// hours this yields YESTERDAY, not the user's actual local today.
+// getFullYear/getMonth/getDate read the local calendar date directly.
+function getLocalTodayDateString() {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
 function setAssessDateOtherInputMode(mode) {
   const cg = document.getElementById('assess-date-custom')?.closest('.form-group');
   const existingInput = document.getElementById('assess-date-input');
@@ -308,7 +320,7 @@ function setAssessDateOtherInputMode(mode) {
         inp.type = 'date';
         inp.id = 'assess-date-input';
         inp.className = 'form-control';
-        inp.value = new Date().toISOString().slice(0, 10);
+        inp.value = getLocalTodayDateString();
         cg.appendChild(inp);
       }
       return;
@@ -316,7 +328,7 @@ function setAssessDateOtherInputMode(mode) {
     // Element survived a prior NORMAL transition with an empty/invalid value
     // (the ASSESS_DATE_SENTINEL bug) — repair in place, don't remove+recreate.
     if (!/^\d{4}-\d{2}-\d{2}$/.test(existingInput.value)) {
-      existingInput.value = new Date().toISOString().slice(0, 10);
+      existingInput.value = getLocalTodayDateString();
     }
     return;
   }
@@ -372,7 +384,7 @@ async function populateAssessDateDropdown(patientId, opts = {}) {
     if (selGroup) selGroup.style.display = 'none';
     if (customGroup) customGroup.style.display = '';
     if (custom) {
-      const today = new Date().toISOString().split('T')[0];
+      const today = getLocalTodayDateString();
       const pastDates = patientId
         ? [...new Set((DB.assessments || [])
             .filter(a => a.patientId === patientId)
@@ -404,7 +416,10 @@ async function populateAssessDateDropdown(patientId, opts = {}) {
     .filter(a => a.patientId === patientId)
     .map(a => a.date)
     .filter(Boolean);
-  const allDates = [...new Set([...sessionDates, ...assessDates])]
+  // Commit A ②: local today is always a selectable option, even if it isn't
+  // already a session/assessment date — otherwise picking today requires
+  // going through "其他日期…" (Other) just for the common case.
+  const allDates = [...new Set([...sessionDates, ...assessDates, getLocalTodayDateString()])]
     .sort((a, b) => b.localeCompare(a));
   sel.innerHTML = allDates
     .map(d => `<option value="${d}">${d}</option>`)
@@ -416,7 +431,9 @@ async function populateAssessDateDropdown(patientId, opts = {}) {
   sel.style.backgroundPosition = 'right 10px center';
   sel.style.paddingRight = '30px';
   sel.style.cursor = 'pointer';
-  // Commit A 將修改 354 的取值，本 if 為 Phase 1 lifecycle 守衛
+  // Commit A: pre-selected default stays sessions[0].date (most recent
+  // session) by explicit decision — only the option list (above) gained
+  // local-today as a pickable entry; this line is unchanged.
   if (!wasOther) sel.value = sessions[0].date;
   if (custom) custom.value = sessions[0].date;
   const otherOpt = document.createElement('option');
