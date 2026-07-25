@@ -325,9 +325,30 @@ function setAssessDateOtherInputMode(mode) {
   existingInput.remove();
 }
 
+// ===== Phase 1b (async guard): generation counter =====
+// Pure, no DOM. Every populateAssessDateDropdown() call captures its own
+// token synchronously before any await; when it resumes after the await, a
+// token that no longer matches the counter means a newer call has started
+// since — this call's result is stale and must not touch the DOM (a stale
+// write could clobber a newer call's already-correct render, or resurrect
+// state a patient-switch reset just cleared).
+let _assessDateGen = 0;
+function beginAssessDateGeneration() { return ++_assessDateGen; }
+function isAssessDateGenerationStale(token) { return token !== _assessDateGen; }
+
+// Phase 1 Other-mode detector, extracted so it's independently testable.
+// Distinct from the generation guard above: the generation guard stops a
+// STALE call from writing; this stops a CURRENT call from misreading
+// sel.value left over from a state that no longer has a live
+// #assess-date-input backing it (the two problems don't overlap).
+function isAssessmentDateOtherMode(sel) {
+  return sel?.value === '__other__' && !!document.getElementById('assess-date-input');
+}
+
 async function populateAssessDateDropdown(patientId, opts = {}) {
   const sel = document.getElementById('assess-date');
   if (!sel || sel.tagName !== 'SELECT') return;
+  const myGen = beginAssessDateGeneration();
   const custom = document.getElementById('assess-date-custom');
   const selGroup = sel.closest('.form-group');
   const customGroup = custom?.closest('.form-group');
@@ -342,6 +363,10 @@ async function populateAssessDateDropdown(patientId, opts = {}) {
       console.error('載入訓練記錄日期失敗:', e);
     }
   }
+  // Covers both the fetch-success and the catch path — both converge here,
+  // before any DOM mutation below. A newer call already started (or already
+  // finished) since this one began; let it own the screen.
+  if (isAssessDateGenerationStale(myGen)) return;
 
   if (sessions.length === 0) {
     if (selGroup) selGroup.style.display = 'none';
@@ -373,7 +398,7 @@ async function populateAssessDateDropdown(patientId, opts = {}) {
   // opts.resetMode：換病人呼叫點（PATIENT CONTEXT CHANGE = HARD UI STATE
   // BOUNDARY）強制視為離開 Other，即使舊病人的 sel.value 還留著 '__other__'，
   // 否則 ③ 剛清掉的 assess-date-input 會被這個守衛在同一輪裡原地復活。
-  const wasOther = !opts.resetMode && sel.value === '__other__';
+  const wasOther = !opts.resetMode && isAssessmentDateOtherMode(sel);
   const sessionDates = sessions.map(s => s.date).filter(Boolean);
   const assessDates = (DB.assessments || [])
     .filter(a => a.patientId === patientId)
