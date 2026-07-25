@@ -125,6 +125,14 @@ function __TEST_getBTracksFormOwner() { return _btracksFormOwner; }
 function __TEST_setMBTracksState(v) { _mBtracksState = v; }
 function __TEST_getMBTracksState() { return _mBtracksState; }
 function __TEST_getPreviousContext() { return _previousAssessmentContextPatientId; }
+// DATE_PATIENT_SWITCH_ENTRY_COVERAGE_GAP: onAssessmentPatientContextChanged
+// now also calls these two date-domain functions as a side effect. This file
+// is only concerned with the BTracks-domain reset, so they're stubbed as
+// no-ops here — their own behavior is covered by
+// assess_date_input_lifecycle.test.js, assess_date_async_guard.test.js, and
+// date_patient_context_coverage.test.js.
+function setAssessDateOtherInputMode() {}
+function populateAssessDateDropdown() {}
 `;
 const SOURCE = BASE_SOURCE + '\n' + ACCESSOR_SHIMS;
 
@@ -490,8 +498,8 @@ function extractBlockFrom(text, startLineText) {
 // Mutation negative control for O3 — reintroduce the old state-based no-op
 // condition and confirm the "laundered" case wrongly skips the reset.
 {
-  const target = 'function onAssessmentPatientContextChanged(newPatientId) {\n  if (newPatientId === \'\') return;\n  if (newPatientId === _previousAssessmentContextPatientId) return;\n  _previousAssessmentContextPatientId = newPatientId;\n  _resetBTracksTabState();\n  _resetBTracksModalState();\n}';
-  const sabotaged = SOURCE.replace(target, 'function onAssessmentPatientContextChanged(newPatientId) {\n  if (newPatientId === \'\') return;\n  if (newPatientId === _btracksState.dataOwner) return;\n  _resetBTracksTabState();\n  _resetBTracksModalState();\n}');
+  const target = 'function onAssessmentPatientContextChanged(newPatientId) {\n  if (newPatientId === \'\') return;\n  if (newPatientId === _previousAssessmentContextPatientId) return;\n  _previousAssessmentContextPatientId = newPatientId;\n  _resetBTracksTabState();\n  _resetBTracksModalState();\n  setAssessDateOtherInputMode(\'NORMAL\');\n  populateAssessDateDropdown(newPatientId, { resetMode: true });\n}';
+  const sabotaged = SOURCE.replace(target, 'function onAssessmentPatientContextChanged(newPatientId) {\n  if (newPatientId === \'\') return;\n  if (newPatientId === _btracksState.dataOwner) return;\n  _resetBTracksTabState();\n  _resetBTracksModalState();\n  setAssessDateOtherInputMode(\'NORMAL\');\n  populateAssessDateDropdown(newPatientId, { resetMode: true });\n}');
   if (sabotaged === SOURCE) {
     check('O3 setup: sabotage replace found onAssessmentPatientContextChanged\'s body', false,
       'body text has changed — update the sabotage string in this test');

@@ -8550,17 +8550,20 @@ function _resetBTracksModalState() {
   });
 }
 
-// ===== P0-0: patient-context change orchestrator =====
+// ===== P0-0 / DATE_PATIENT_SWITCH_ENTRY_COVERAGE_GAP: patient-context change
+// orchestrator =====
 // Single entry point every code path that changes the assessment patient
-// context must call. This round only wires the BTracks-domain reset (tab +
-// modal instances); the date-domain reset (assess-date-input lifecycle) is
-// deliberately NOT called here yet.
+// context must call. Wires both the BTracks-domain reset (tab + modal
+// instances) and the date-domain reset (Other-mode cleanup + dropdown
+// rebuild) so #sessionPatientFilter/#reportPatientFilter — which sync
+// #assess-patient-select but never called setAssessDateOtherInputMode() or
+// populateAssessDateDropdown() themselves — now get the same date reset as
+// #assess-patient-select/#global-patient-select's own handlers, without
+// those handlers having to duplicate the calls.
 //
-// DATE_PATIENT_SWITCH_ENTRY_COVERAGE_GAP: #sessionPatientFilter and
-// #reportPatientFilter change the assessment patient context (they sync
-// #assess-patient-select) but do not call setAssessDateOtherInputMode('NORMAL').
-// Tracked separately — fix deferred to the date lifecycle work, not folded
-// into this commit.
+// resetMode: true is mandatory on the populate call here — its absence is
+// exactly what let a stale sel.value === '__other__' resurrect Other mode
+// for the new patient (Phase 1's wasOther/resetMode design).
 //
 // B-3: "did the context actually change" is this function's OWN decision —
 // tracked by _previousAssessmentContextPatientId, independent of either
@@ -8577,6 +8580,8 @@ function onAssessmentPatientContextChanged(newPatientId) {
   _previousAssessmentContextPatientId = newPatientId;
   _resetBTracksTabState();
   _resetBTracksModalState();
+  setAssessDateOtherInputMode('NORMAL');
+  populateAssessDateDropdown(newPatientId, { resetMode: true });
 }
 
 function _mOnRombergSourceChange() {
@@ -11525,9 +11530,10 @@ function initApp() {
   document.getElementById('assess-patient-select')?.addEventListener('change', () => {
     currentGlobalPatientId = document.getElementById('assess-patient-select').value;
     const pid = document.getElementById('assess-patient-select').value;
-    setAssessDateOtherInputMode('NORMAL');
+    // DATE_PATIENT_SWITCH_ENTRY_COVERAGE_GAP: date reset (setAssessDateOtherInputMode
+    // + populateAssessDateDropdown) is now the orchestrator's job — see
+    // onAssessmentPatientContextChanged(). Do not duplicate the calls here.
     onAssessmentPatientContextChanged(pid);
-    populateAssessDateDropdown(pid, { resetMode: true });
     renderAssessments();
     clearBCFForm();
     clearRightEyeForm();
@@ -11589,11 +11595,12 @@ function initApp() {
         const el = document.getElementById(id);
         if (el) el.value = currentGlobalPatientId;
       });
-      setAssessDateOtherInputMode('NORMAL');
+      // DATE_PATIENT_SWITCH_ENTRY_COVERAGE_GAP: date reset (setAssessDateOtherInputMode
+      // + populateAssessDateDropdown) is now the orchestrator's job — see
+      // onAssessmentPatientContextChanged(). Do not duplicate the calls here.
       onAssessmentPatientContextChanged(currentGlobalPatientId);
       clearBCFAssessmentForm();
       if (typeof clearRightEyeForm === 'function') clearRightEyeForm();
-      populateAssessDateDropdown(currentGlobalPatientId, { resetMode: true });
       const activePage = document.querySelector('.page.active')?.id?.replace('page-','');
       if (activePage === 'assessments') renderAssessments();
       else if (activePage === 'sessions') renderSessions();
