@@ -8372,12 +8372,12 @@ function _renderRombergResultHTML(result) {
       </div>
       <div style="font-size:11px;font-weight:600;color:#0f766e;margin-bottom:6px;">⚡ 警戒指標（任一出現即停止）</div>
       <div style="font-size:12px;color:#134e4a;line-height:2;">
-        <div>🔴 <span style="font-weight:600;">PPG 波幅下降 > 30%</span> → 立即暫停，椅子回正</div>
+        <div>🔴 <span style="font-weight:600;">PPG 波幅下降 > 30%</span> → 操作者須立即手動暫停，並將椅子緩慢回正</div>
         <div>🟡 <span style="font-weight:600;">心率突然上升 > 20 bpm</span> → 降低步進至 2°</div>
         <div>🟡 <span style="font-weight:600;">患者回報頭暈加劇</span> → 停止並記錄當前角度</div>
       </div>
       <div style="margin-top:8px;font-size:11px;color:#0f766e;padding:6px 10px;background:#ccfbf1;border-radius:5px;line-height:1.5;">
-        🛡️ <strong>Emergency Reset：</strong>偵測到 PPG Amplitude 驟減時，系統自動觸發回正至初始 Yaw 角度${bcfChair ? ` (${bcfChair.yawInitial}°)` : ''}
+        🛡️ <strong>Emergency Reset（人工執行）：</strong>偵測到 PPG Amplitude 驟減時，應立即停止椅子動作，並由臨床人員確認後緩慢回正至初始 Yaw 角度${bcfChair ? ` (${bcfChair.yawInitial}°)` : ''}。本系統不執行任何自動控制。
       </div>
     </div>` : '';
 
