@@ -8354,7 +8354,7 @@ function _renderRombergResultHTML(result) {
       </div>
       <div style="font-size:11px;padding:7px 10px;border-radius:5px;background:${lbAmBg};color:${lbAmColor};line-height:1.6;">
         🫀 <strong>PPG 監控建議：</strong>${lb.autoMonitor.severityLabel} — ${lb.autoMonitor.device}（${lb.autoMonitor.pathNote}）
-        ${lb.autoMonitor.severity === 'severe' ? '<br>⚠️ Path &gt;70 cm：CNAP 逐搏監測為必要，需預設 Emergency Reset' : ''}
+        ${lb.autoMonitor.severity === 'severe' ? '<br>⚠️ Path &gt;70 cm：CNAP 逐搏監測為必要，操作者需隨時準備啟動手動 Emergency Reset' : ''}
       </div>
     </div>`;
   })() : '';
