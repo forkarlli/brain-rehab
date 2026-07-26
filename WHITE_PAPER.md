@@ -210,6 +210,243 @@ patient-status 驗證列為後續 defense-in-depth（見 Open Items）。
 
 ---
 
+### §4.11 完成與治理宣稱必須可追溯
+
+> ⚠️ **本條為 2026-07-26 重建版。**
+> 實檔查證顯示 `WHITE_PAPER.md` 原止於 §4.10；
+> ChatGPT 對原始定稿的日期、提出方與逐字原文回覆「無法追溯」。
+> 因此，本條不得被描述為找回的舊條文，而是**首次正式納入 SSOT 的重建條文**。
+> 在找到更早且可驗證的原始定稿之前，本 provenance 附註不得移除。
+
+任何「完成、已修復、已定義、已裁定、已部署」的宣稱，
+若無可追溯的 commit、完整 diff、測試、runtime verification、
+Verification Log 或可驗證原始封包，一律標記 `UNSUBSTANTIATED`，
+不得直接作為後續設計、recon 或實作的前提。
+
+本規則同樣適用於：
+
+- **指涉宣稱**：例如「某代號指的是某工作範圍」
+- **決策宣稱**：例如「上一輪已正式裁定」
+- **編號宣稱**：例如「§4.N 已規定某事項」
+
+僅有檔名、摘要、轉述或 AI-to-AI context passing，
+不足以單獨證明宣稱成立。
+
+---
+
+### §4.12 ACCEPTANCE_SCOPE_TRACEABILITY — 驗收範圍須可追溯
+
+每一項驗收條件必須能追溯至該 changeset **實際修改或刻意保留**的行為。
+若某項既有政策被明確保留，**不得以「該政策沒有改變」判定 changeset 失敗**。
+
+不同證據承擔不同角色：
+
+- `git show --stat` 或等效 name-status：
+  確認 changeset **修改了哪些檔案**
+- 完整 diff：
+  確認**實際修改內容與控制流程**
+- 契約測試：
+  確認**可執行的行為契約與關鍵不變量**
+- runtime verification：
+  確認**目標環境中的實際行為**
+- commit message：
+  **僅代表作者宣告的意圖**，不能取代上述證據
+
+驗收條件不得只取自 backlog 標題、非正式代號、交接摘要或二手轉述。
+
+**若驗收結果與預期不符，在回滾前必須先確認：**
+1. 實作確實未達成其宣告 scope；或
+2. 驗收項目**本來就不屬於**該 changeset 的 scope。
+
+---
+
+### §4.13 代號的生命週期必須與範圍綁定
+
+當一個工作項的**行為目標、臨床 authority、資料契約、主要驗收條件，
+或工作項邊界發生實質變更**時，必須重新命名或建立新工作項。
+
+（小幅 scope refinement 不在此限。）
+
+沿用舊代號會讓所有下游文件（驗收條件、交接摘要、程式註解）
+靜默指向已不存在的東西，而**沒有任何一方會察覺**。
+
+⚠️ **程式碼註解中的代號同樣受此規則約束** ——
+標示「已修正」的代號留在 production 註解裡，
+會讓未來任何讀者誤以為該問題已解決。
+
+---
+
+### §4.14 宣告不是證據（與 §4.11 相互補充）
+
+§4.11 規範宣稱需可追溯。宣告失效有三種形態：
+
+| 形態 | 說明 |
+|---|---|
+| 交接摘要記載 | 摘要對工作範圍的描述 |
+| commit message 的政策宣稱 | 「某行為 unchanged by design」 |
+| commit message 的 scope 宣稱 | 「Scope: 單一檔案」 |
+
+**可執行條款：**
+- `git show <hash> -- <path>` 證明「**該檔改了什麼**」，
+  **不證明「只有該檔被改」** → 範圍確認一律先跑 `--stat`
+- commit message 是判斷 scope 的**起點**，不是終點
+- 以 message 推翻一次錯誤驗收是合理的；
+  以 message **取代** diff 審查，只是換一種宣告來源
+
+---
+
+### §4.15 INVARIANT_CONTRACT_TESTING — 關鍵不變量契約測試
+
+測試通常只驗證新增行為。
+
+當本次修改**鄰近某項關鍵 authority**，或**容易讓審閱者誤以為該既有政策
+也被修改**時，測試應**明確斷言該政策保持不變** ——
+使「未改變」成為可執行的實碼證據，而非 commit message 的宣稱。
+
+⚠️ 本條不要求每個 changeset 斷言所有未改變行為。適用範圍限於上述兩種情形。
+
+---
+
+### §4.16 GOVERNANCE_EFFECTIVE_DATE — 規則有生效日
+
+在判定歷史提交是否違反治理規則前，**必須先確認該規則於提交當時是否已生效**。
+現行規則**不得自動回溯定罪**。
+
+歷史實作仍可依現行風險標準列為待治理項 —— 但那是「**債**」，不是「**失控**」。
+兩者混淆會把注意力從現行風險移開。
+
+**可執行條款**：commit 的日期是判讀其性質的**第一個欄位**，不是最後一個。
+
+---
+
+### §4.17 PRE_GOVERNANCE_COHERENT_SUBSYSTEM — 治理框架外的自洽子系統
+
+治理框架建立前形成的程式與文件，可能構成**內部一致、但未納入現行 SSOT**
+的子系統。文件與 code 互相對得上，內部沒有矛盾 ——
+因此任何單點一致性檢查都不會發出訊號。
+
+**可執行條款**：稽查方向不只是尋找矛盾，而是**盤點所有承載臨床規則的
+文件、程式模組與測試**。問題不是「哪裡對不上」，是「**還有哪裡在寫規則**」。
+
+---
+
+### §4.18 EPHEMERAL_LINE_NUMBER_REFERENCE — 行號有保存期限
+
+行號**只能作為當次 recon 的定位證據**，不得作為長期文件契約。
+寫入當下正確，此後每一次修改都在削弱它，
+**而它不會發出過期訊號**。
+
+**可執行條款**：長期文件引用函式名、symbol、section 或 stable identifier。
+執行前重新 grep 實際行號。
+
+⚠️ 對 executor 每次讀取的規則檔尤其嚴格 ——
+過期行號會被當成實碼事實帶入 recon。
+
+---
+
+### §4.19 DELIVERED_EVIDENCE_BOUNDARY — 證據必須實際送達
+
+產生完整輸出，**不等於審閱者已實際收到完整輸出**。
+
+當傳輸、顯示、折疊、截斷或介面限制使部分內容未送達時，
+該部分不得被標記為 `DELIVERED`、`COMPLETE` 或 `REVIEWED`。
+
+**可執行條款：**
+- 審閱者只能對**實際可見的內容**作出審查宣稱
+- 發現折疊、截斷或缺頁時，該段必須標記 `NOT_DELIVERED`
+- **不得對未送達內容宣稱「與先前一致」或「已完整核對」**
+- executor 的具體分段與輸出方式，另由 executor 操作規則規範
+
+⚠️ 產生輸出的一方通常**偵測不到**下游截斷，
+因此「請你發現截斷時回報」不是有效控制點。
+
+沉默的截斷是一種**管線失效**；不能因沒有錯誤訊息，就視為完整交付。
+
+---
+
+### §4.20 SAME_VALUE_DIFFERENT_AUTHORITY — 同值不代表同一權威
+
+相同數值出現在不同文件或模組時，**不代表它們具有相同的臨床或系統權威**。
+
+稽查不能只比對數值是否一致，還必須比對：
+
+- 該值的狀態：`PROVISIONAL` / `CALIBRATED` / `PLACEHOLDER`
+- 該值**可用於**哪些決策
+- 該值**不得用於**哪些決策
+- 該值的來源與驗證狀態
+- 使用該值的 consumer
+
+任何遷移、引用或 UI 顯示，都必須一併保留其 **authority metadata**。
+不得將暫定、研究或 placeholder 數值，僅因數字相同，
+轉寫為已校準的 production clinical rule。
+
+---
+
+### §4.21 PARALLEL_WORKSTREAM_STATE_ISOLATION — 平行工作流狀態隔離
+
+平行對話、代理、工具或工作階段**不得假定彼此共享完整狀態**。
+
+跨工作流引用任何結論、commit、裁決或驗收結果時，必須附：
+
+- 來源工作流或封包
+- 日期
+- 明確狀態
+- 可驗證證據
+- 尚未完成或已撤回的邊界
+
+同一議題原則上只維持**一個主要治理工作流**。
+若必須切換或平行處理，新的工作流第一則交接必須說明：
+目前已完成什麼、尚未完成什麼、哪些宣稱已被撤回。
+
+**不得因另一工作流的內容不可見，
+將「沒有看到」推論為「沒有發生」或「未獲授權」。**
+
+---
+
+### §4.22 TRACEABILITY_QUERY_CONTRACT — 出處查證必須允許無法追溯
+
+索取一項規則、裁決或宣稱的出處時，查詢必須明確要求：
+
+1. 定稿或封包日期
+2. 原始提出方
+3. 原文段落或可驗證來源
+
+同時必須允許合法結果：
+
+```
+無法追溯
+```
+
+若回覆只能提供摘要、重建文字、推測來源或沒有日期的轉述，
+不得標記為原始定稿，應視為：
+
+```
+UNTRACEABLE
+```
+
+如治理上仍有需要，可另建立重建版，
+但必須明確標記 `RECONSTRUCTED` 與首次正式化日期。
+
+---
+
+### §4.23 SHARED_IDENTIFIER_NAMESPACE — 編號、版號與代號以實檔為準
+
+章節號、版本號、工作項代號與 enum 都屬**共享命名空間**。
+
+在新增或引用任何 identifier 前，必須先查證：
+
+- 實檔是否已存在
+- 是否已被其他內容占用
+- 名稱與 scope 是否仍一致
+- 平行工作流是否只是提案，尚未 commit
+
+版號、章節號與工作項狀態**不得由對話自行成為事實**；
+正式狀態以 repo 實檔與已核准 commit 為準。
+
+⚠️ 編號衝突不會產生任何錯誤訊號，只會產生兩個都叫同一個名字的東西。
+
+---
+
 ## Changelog
 - v1.0 (2026-07-10) SSOT 首次落地
   [NEW]    §1 BPPV 矩陣 + 強制紅旗
@@ -594,6 +831,33 @@ patient-status 驗證列為後續 defense-in-depth（見 Open Items）。
   ⚠️ **這是機會性清理，不是系統性稽查** —— 它們剛好躺在被修改的那幾行旁邊。
     完整的 PHI-in-logs 稽查另立 Open Item。
 
+- v2.2-proposed (2026-07-26) — **STATUS: DRAFT / NOT APPROVED**
+  ⚠️ 本條目於 PM 核准並完成 commit 後，改為正式 `v2.2`。
+
+  治理原則補完、驗收 scope 修正、CLAUDE.md 稽查與相關 Open Items。
+
+  [ADD] §4.11 完成與治理宣稱必須可追溯
+    ⚠️ `RECONSTRUCTED_GOVERNANCE_RULE`，首次正式化 2026-07-26
+  [ADD] §4.12 ACCEPTANCE_SCOPE_TRACEABILITY
+  [ADD] §4.13 代號的生命週期必須與範圍綁定
+  [ADD] §4.14 宣告不是證據（與 §4.11 相互補充）
+  [ADD] §4.15 INVARIANT_CONTRACT_TESTING
+  [ADD] §4.16 GOVERNANCE_EFFECTIVE_DATE
+  [ADD] §4.17 PRE_GOVERNANCE_COHERENT_SUBSYSTEM
+  [ADD] §4.18 EPHEMERAL_LINE_NUMBER_REFERENCE
+  [ADD] §4.19 DELIVERED_EVIDENCE_BOUNDARY
+  [ADD] §4.20 SAME_VALUE_DIFFERENT_AUTHORITY
+  [ADD] §4.21 PARALLEL_WORKSTREAM_STATE_ISOLATION
+  [ADD] §4.22 TRACEABILITY_QUERY_CONTRACT
+  [ADD] §4.23 SHARED_IDENTIFIER_NAMESPACE
+
+  ※ §4.12–§4.15 依 2026-07-26 治理對話草稿整理，
+    **本次為首次提議正式納入實檔**（原始逐字 provenance 不完整）。
+
+  [RETRACT] 對 `bf62ed7` 的四項具體定性宣稱（逐項見 Verification Log）
+  [AUDIT]   CLAUDE.md 全文分類：executor 操作規則 0 節；
+    另有多節臨床規則目前無對應 SSOT 記錄（見 Open Items）
+
 ## Open Items（未解，實作前處理）
 - [PARTIAL] Fastigial alias 已補齊(v1.1)；CAUDAL/單側
   fastigial canonical 命名 scheme 退 P1（bilateral≠caudal、
@@ -848,6 +1112,87 @@ patient-status 驗證列為後續 defense-in-depth（見 Open Items）。
   `{ patientId: "" }` / `{ type: { $exists: false } }`
   ⚠️ 不阻塞 B1A（新規則不依賴這兩個欄位），但影響 collision log 能否
   講清楚「跨病人／跨類型」。
+- [HIGH] PRE_GOVERNANCE_VESTIBULAR_SUBSYSTEM
+  已辨識下列可能構成飛行椅／姿勢與安全監控子系統的符號：
+  `_computeBCFChairRx` / `_selectPosture` /
+  `_computeLateralBiasChairRx` / `autoMonitor`
+  現況：
+  · 臨床說明主要存在於 `CLAUDE.md`
+  · 實作至少部分位於 `app.js`
+  · 相關提交早於 WHITE_PAPER v1.0
+  · **目前 recon 尚未找到其完整 SSOT 對應**，待逐函式與語意級核對
+  · 尚未完成逐函式 authority / inputs / outputs / caller recon
+  風險：
+  · 臨床規則可能存在於非 SSOT 文件
+  · production 行為可能未被白皮書完整治理
+  · 前後端 clinical authority 邊界可能不一致
+  下一步（ChatGPT 裁定順序）：
+  Phase V-0 函式級 recon → V-1 規則入白皮書（只改文件）
+  → V-2 架構裁定（KEEP_IN_APP / MOVE_TO_SERVER / SPLIT / DEPRECATE）
+  → V-3 code migration（獨立實作與驗收）
+  ⚠️ 尚不得宣稱「該 changeset 全部為臨床邏輯」或「應全部移往 server.js」
+  → 合併既有 CLINICAL_LOGIC_IN_APP_JS_AUDIT 之飛行椅部分
+  SOURCE: 部分 EXECUTOR_VERIFIED (2026-07-26)，部分 PENDING_VERIFICATION
+- [HIGH] CLAUDE_MD_STALE_LINE_NUMBERS
+  `CLAUDE.md` 含具體行號，最後更新早於多次 app.js 修改。
+  舊行號具**高度過期風險**；在未重新 grep 前**不得作為實碼定位**。
+  ⚠️ 該檔為 executor 每次讀取之規則檔。→ 見 §4.18
+  SOURCE: EXECUTOR_VERIFIED (2026-07-26)
+- [HIGH] CLAUDE_MD_UNSUBSTANTIATED_COMPLETION_CLAIMS
+  `CLAUDE.md`「已完成（近期）」列六項，**全無 commit hash**。
+  ⚠️ 定性為 `CLAIM STATUS = UNVERIFIED`，
+  **非** `FEATURE STATUS = NOT COMPLETED` ——
+  需經 git log / symbol presence / callers / tests / runtime 確認。
+  SOURCE: EXECUTOR_VERIFIED (2026-07-26)
+- [MEDIUM] CLAUDE_MD_ORPHAN_QUEUE_ITEM
+  `CLAUDE.md`「待完成（優先順序）」僅一項：
+  歷史處方「查看詳情」modal 為 placeholder。
+  【需 recon】不得先假定與 FAKE_EDIT_INTEGRATED_PRESCRIPTION_BUTTON
+  為同一項。需比對 UI 文案／handler 名稱／modal 目標／caller／commit history。
+  SOURCE: EXECUTOR_VERIFIED (2026-07-26)
+- [HIGH] PURSUIT_LATERALIZATION_GOVERNANCE_GAP
+  `CLAUDE.md` 中存在以 ±15% 差異輸出小腦側化的規則
+  （`Right/Left_Cerebellar_Weakness`），並據以產生雙軌處方。
+  其與 WHITE_PAPER §3 的適用範圍關係**尚未確定**。
+  ⚠️ **不得自行將 saccade dysmetria 規則延伸或排除至 smooth pursuit。**
+  需 Gemini 臨床審。
+  SOURCE: EXECUTOR_VERIFIED (2026-07-26)
+- [HIGH] SACCADE_PCT_THRESHOLD_AUTHORITY_CONFLICT
+  Overshoot 四等級閾值：白皮書列為待校準 placeholder
+  （`TOTAL_PCT_MILD/MODERATE/SEVERE_MIN`），`CLAUDE.md` 呈現為
+  臨床定位表。同一組數值，兩種 authority 狀態。→ 見 §4.20
+  遷移或引用須帶 `PROVISIONAL` 標記。
+  SOURCE: EXECUTOR_VERIFIED (2026-07-26)
+- [MEDIUM] PARALLEL_WORKSTREAM_DUPLICATION_2026_07_26
+  同一議題曾同時存在兩個治理工作流，彼此不可見，導致重複調查
+  與一次定性誤判。→ 見 §4.21，事件細節見 Verification Log。
+  下一步：確立單一主工作流與交接宣告格式。
+- [MEDIUM] REPO_IN_ONEDRIVE_SYNC_PATH
+  repo 可能位於 OneDrive 同步目錄下，`.git` 與 `.env` 亦在同步範圍。
+  風險：git 操作中鎖檔、衝突副本、憑證上雲。
+  ⚠️ **具體路徑與 `.env` 是否確在同步範圍，須現場確認後才可視為既定事實。**
+  遷移須在無進行中工作時執行。
+  SOURCE: PENDING_VERIFICATION
+- [LOW] STATE_A_DATE_LABEL_MISSING
+  無療程病人（State A）畫面疑缺「評估日期」標籤。
+  不影響資料正確性。
+  ⚠️ 若後續發現導致使用者誤判日期 → 升 MEDIUM（date SOP 仍生效期間）。
+  SOURCE: PENDING_VERIFICATION
+- [HISTORICAL] CLAUDE_MD_MIXED_COMMIT — 不追究
+  早期存在文件與 code 混於同一 commit 之情形，
+  發生時間早於單檔鐵律成立。
+  標 `HISTORICAL_PRE_GOVERNANCE` / `NO_RETROACTIVE_VIOLATION`。
+  可作為未來「文件／code 分離」原則的背景案例。→ 見 §4.16
+- [LOW] ASSESS_DATE_CODENAME_DEBT_CLEANUP
+  過期代號需更名為描述性名稱，至少兩處（app.js 註解、測試檔標頭）。
+  純註解 commit，**無預期 runtime 行為變更**
+  （⚠️ 註解錯誤描述本身仍是風險，非零風險）。→ 見 §4.13
+  SOURCE: PENDING_VERIFICATION（實際出現處數待 grep）
+- [OPEN] ASSESS_DATE_DEFAULT_POLICY_CHANGE（原非正式代號「Commit A」，已退役）
+  預設由「最近療程日」改為「今天」—— **從未實作**。
+  ⚠️ 臨床操作語意變更 → 需 ChatGPT 架構 + **Gemini 臨床審**。
+  ⚠️ 此項未完成前，**SOP date 條款維持**。
+  ⚠️ 既有錯誤日期記錄之清理仍以此為解鎖點。
 
 ---
 
@@ -948,3 +1293,60 @@ patient-status 驗證列為後續 defense-in-depth（見 Open Items）。
   → **R2 假設驗證完成**：`e.code === 11000` 成立，非 fallback 接住
 - `/api/version` = 616fd73
 - 結論：**guard 會擋，但不誤傷。** X-ZERO-B1A CLOSED。
+
+### 2026-07-26 — §4.11 於實檔中不存在（SSOT 缺漏）
+- `grep -n '4\.11' WHITE_PAPER.md` → **No matches found**
+- `grep -n '^### §4\.'` → §4.1 … §4.10，**止於 §4.10**
+- §4.12–§4.15 同樣未 commit
+- 然 §4.11 曾被多處援引為既有規則（本工作流、ChatGPT 裁定書、
+  平行工作流、CLAUDE.md 草稿、交接文件）
+- 依 §4.22 索取原始定稿（要求日期／提出方／原文）→ 回覆 **「無法追溯」**
+- 處置：以 `RECONSTRUCTED` 版納入，首次正式化日期 2026-07-26，
+  provenance 附註留於條文本體
+- SOURCE: EXECUTOR_VERIFIED (2026-07-26)
+
+### 2026-07-26 — v2.1 版號占用查證
+- `git log --oneline -5 -- WHITE_PAPER.md` 顯示 `v2.1` 已由既有 commit
+  占用（內容為 `XZERO_A_GENID_UUID` open item 修正），與本次治理擴充無關
+- 本次因此採 **v2.2**。→ 見 §4.23
+- SOURCE: EXECUTOR_VERIFIED (2026-07-26)
+
+### 2026-07-26 — 對 bf62ed7 的定性撤回（逐項）
+先前於本工作流中提出並現予撤回的**具體宣稱**：
+
+| # | 已撤回之宣稱 |
+|---|---|
+| 1 | 「`bf62ed7` 為未歸屬提交（`UNATTRIBUTED_PRODUCTION_COMMIT`）」 |
+| 2 | 「該 commit 經由不留痕路徑進入 production」 |
+| 3 | 「成因為 session 級 auto-accept，且 `MECHANISM_UNPROVABLE`」 |
+| 4 | 「據此推得提交管線存在控制缺口」 |
+
+**撤回依據**：現有證據顯示該 commit 具有明示授權、測試與 production
+驗收鏈（來源為平行工作流紀錄，**非本 session repo 實查**）。
+
+⚠️ **本撤回僅限上列四項具體宣稱。**
+不得由此推論「整個流程不存在任何控制缺口」——
+單一實例的定性錯誤，不證明抽象風險不存在。
+
+⚠️ 原據此提出的兩條原則候選（「內容正確的違規仍是違規」、
+「提示 ≠ guard」）一併撤回**其實例**；原則本身若日後有獨立實例，
+可另案重提。
+
+- SOURCE: PENDING_VERIFICATION（授權鏈細節來自平行工作流，未於本 session 實查）
+
+### 2026-07-26 — 平行工作流重複與定性誤判
+- 同一議題同時存在兩個治理工作流，彼此不可見
+- 後開工作流重複執行前者已完成之調查，並對前者的動作作出錯誤定性
+- 兩者各自產生治理原則，編號未事先對照
+- → 原則見 §4.21；後續處置見 Open Item
+  `PARALLEL_WORKSTREAM_DUPLICATION_2026_07_26`
+
+### 2026-07-26 — ASSESS_DATE changeset 範圍釐清
+- 相關 changeset 內容為：① UTC → 本機日曆日；② 今日加入下拉選項清單
+- **預設值維持最近療程日**，程式註解明文標示為刻意保留
+  （diff 中相關行為 context，非增刪）
+- 誤判成因：驗收標準取自 backlog 非正式代號，而非 changeset 實際範圍
+  → 見 §4.12
+- PM 實測：評估日期下拉含當日 → ② 驗收 PASS
+- ⚠️ `DEFAULT_DATE_IS_LAST_THERAPY_SESSION` **未修復，SOP date 條款維持**
+- SOURCE: 部分 EXECUTOR_VERIFIED，部分 PM 實測 (2026-07-26)
