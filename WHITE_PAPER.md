@@ -831,8 +831,7 @@ UNTRACEABLE
   ⚠️ **這是機會性清理，不是系統性稽查** —— 它們剛好躺在被修改的那幾行旁邊。
     完整的 PHI-in-logs 稽查另立 Open Item。
 
-- v2.2-proposed (2026-07-26) — **STATUS: DRAFT / NOT APPROVED**
-  ⚠️ 本條目於 PM 核准並完成 commit 後，改為正式 `v2.2`。
+- v2.2 (2026-07-26) commit 718bdc7
 
   治理原則補完、驗收 scope 修正、CLAUDE.md 稽查與相關 Open Items。
 
