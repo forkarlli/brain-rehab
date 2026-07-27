@@ -447,6 +447,44 @@ UNTRACEABLE
 
 ---
 
+### §4.24 COMMENT_ASSERTED_GOVERNANCE — 註解中的治理宣稱不是治理紀錄
+
+程式註解**可以**描述目前行為、限制與不變量（例如
+`// Keep the current selected date when rebuilding options.`），
+但**不得**以無來源的 `approved` / `by explicit decision` /
+`clinically validated` 等措辭，替代正式決策紀錄。
+
+一則註解可能同時混合三種不同性質的陳述，必須分別對待：
+
+| 層次 | 性質 | 驗證方式 |
+|---|---|---|
+| 技術描述 | 可由實碼驗證 | grep / diff / runtime |
+| 語意宣稱 | 尚待證據 | 需額外 recon 才能成立 |
+| 治理宣稱 | 必須具 provenance | commit hash / Verification Log / 可驗證封包 |
+
+⚠️ **危險正來自三者並存**：一個可驗證為真的技術描述，會替同一則
+註解裡尚未證實的語意宣稱與無出處的治理宣稱**背書**，讓讀者連帶
+採信。若治理來源對理解風險確有必要，應引用 stable decision ID、
+commit hash 或 Verification Log 條目，而非只寫自然語言宣稱。
+
+此類宣稱**比交接摘要中的更危險** —— 它座落於 recon 的證據來源內，
+會讓後續查證在此**直接停止**。
+
+**revert / reapply 條款：** revert／reapply 只能證明變更集合被移除
+或重新引入，**不能自動證明其中每一項宣稱具有有效治理來源**。若
+reapply 穿越了新的治理邊界，或重新引入已知 disputed content，該
+部分**必須重新審查**。
+
+> **Verification Example（2026-07-27）：** app.js 日期選取註解
+> （2026-07-27 recon 時位於 434–435 行）同時含三層 ——
+> `sessions[0].date`（技術，實碼確認）、`most recent session`
+> （語意，取決於未 recon 的 server query 排序，見
+> DATE_DEFAULT_SORT_AUTHORITY_SPLIT）、`by explicit decision`
+> （治理：查無可追溯的核准紀錄，且 PM 明確不承認曾核准該宣稱；
+> 全站唯一出現處）。此註解之更名已登記於 Open Item
+> ASSESS_DATE_CODENAME_DEBT_CLEANUP；除代號過期（§4.13）外，其
+> `by explicit decision` 措辭另構成本條所述之無出處治理宣稱。
+
 ## Changelog
 - v1.0 (2026-07-10) SSOT 首次落地
   [NEW]    §1 BPPV 矩陣 + 強制紅旗
@@ -1167,11 +1205,32 @@ UNTRACEABLE
   與一次定性誤判。→ 見 §4.21，事件細節見 Verification Log。
   下一步：確立單一主工作流與交接宣告格式。
 - [MEDIUM] REPO_IN_ONEDRIVE_SYNC_PATH
-  repo 可能位於 OneDrive 同步目錄下，`.git` 與 `.env` 亦在同步範圍。
-  風險：git 操作中鎖檔、衝突副本、憑證上雲。
-  ⚠️ **具體路徑與 `.env` 是否確在同步範圍，須現場確認後才可視為既定事實。**
-  遷移須在無進行中工作時執行。
-  SOURCE: PENDING_VERIFICATION
+  repo 已於 2026-07-27 現場 recon 確認位於 OneDrive 同步樹；
+  `.git` 與 `.env` 亦位於該同步範圍。
+
+  風險：
+  - git metadata 寫入期間可能受到同步程序的檔案鎖定或版本還原干擾
+  - 可能產生衝突副本
+  - `.env` 位於雲端同步範圍，形成憑證上雲風險
+
+  OneDrive 是檔案同步層，不是 git remote；此風險不應描述為
+  OneDrive 與 GitHub 的「雙重版本控制」。
+
+  現況：2026-07-27 執行 `git fsck --no-progress`，未發現
+  missing / corrupt object；僅回報一筆正常的 dangling commit。
+
+  短期緩解：
+  - 寫檔、commit 與其他會修改 `.git` 的操作前，手動暫停 OneDrive 同步
+  - 操作完成並確認 working tree clean 後，再恢復同步
+  - 恢復後確認未產生衝突副本
+
+  長期處置：
+  - 評估將 repo 移出雲端同步樹
+  - `.env` 應另行評估移出同步範圍及憑證輪替需求
+    （獨立憑證治理項 ENV_FILE_CLOUD_SYNC_EXPOSURE_REMEDIATION，本輪僅登記）
+  - 遷移須另開工作項，並在無進行中修改時執行
+
+  SOURCE: EXECUTOR_VERIFIED + PM 現場 recon（2026-07-27）
 - [LOW] STATE_A_DATE_LABEL_MISSING
   無療程病人（State A）畫面疑缺「評估日期」標籤。
   不影響資料正確性。
@@ -1192,6 +1251,21 @@ UNTRACEABLE
   ⚠️ 臨床操作語意變更 → 需 ChatGPT 架構 + **Gemini 臨床審**。
   ⚠️ 此項未完成前，**SOP date 條款維持**。
   ⚠️ 既有錯誤日期記錄之清理仍以此為解鎖點。
+- [HIGH] DATE_DEFAULT_SORT_AUTHORITY_SPLIT
+  日期 select 的「選項顯示順序」與「預設選中值」由兩個不同來源決定：
+    OPTION_LIST_ORDER_SOURCE       = app.js allDates.sort(date descending)（已確認，app.js:423）
+    DEFAULT_SELECTION_ORDER_SOURCE = /api/therapy-sessions response order
+    GOVERNED ORDER CONTRACT        = not yet established
+  風險：UI 以降序呈現日期，使畫面隱含「最新」語意，但實際選中的預設值
+  取自另一個排序未定的陣列 → 顯示順序保證不了選中值的「最近」性。
+  ⚠️ 列為 ASSESS_DATE_DEFAULT_POLICY_CHANGE 的**前置證據閘門**：policy
+  方案設計前須先確定 sessions[0] 是否穩定代表最近療程。
+  下一個唯讀 recon（僅查 server，不改）：/api/therapy-sessions route /
+  Mongo query / .sort(...) / 同日多筆 tie-break / null·invalid date /
+  response order contract。
+  ⚠️ 與 BTRACKS_LATEST_RECORD_SELECTION_NONDETERMINISTIC 呈現相似風險
+  型態：皆需確認排序欄位及同值 tie-break；是否共用相同成因尚未證實。
+  SOURCE: 實碼 recon (2026-07-27)，server-side PENDING
 
 ---
 
@@ -1349,3 +1423,33 @@ UNTRACEABLE
 - PM 實測：評估日期下拉含當日 → ② 驗收 PASS
 - ⚠️ `DEFAULT_DATE_IS_LAST_THERAPY_SESSION` **未修復，SOP date 條款維持**
 - SOURCE: 部分 EXECUTOR_VERIFIED，部分 PM 實測 (2026-07-26)
+
+### 2026-07-27 — 日期預設選取 trace 結案（唯讀 recon，Claude + Claude Code）
+- follow-up to 2026-07-26 ASSESS_DATE changeset 範圍釐清
+- 錨定：production HEAD = b2359f8，working tree clean，app.js 自
+  b2359f8 未變 → §4.11–§4.23 行號經 §4.18 重驗有效
+- Q1｜sel.value 賦值：app.js:436 `if (!wasOther) sel.value = sessions[0].date`
+  → **實碼確認**。2026-07-26 條目「預設值維持最近療程日（註解標示
+  刻意保留）」的賦值語句由此送達，不再僅依註解自述。
+- Q2｜sessions 來源：app.js:371 `fetch('/api/therapy-sessions?patientId=...')`
+  → `data.sessions`。先前交接中所列的「來源未確認」狀態至此解除。
+  （grep DB.therapySessions 附近零命中僅代表「不經該全域」，非來源不明。）
+- Q3｜sessions[0] 是否可由目前已取得的 client-side 實碼保證為最近療程？
+  → **否**；client-side 無此保證，server-side 排序契約尚未查證。
+  · option 清單 allDates 以 `.sort((a,b)=>b.localeCompare(a))` 降序（app.js:423）
+  · 但 sel.value 取自**未排序的 sessions[0]**，sessions 在已取得的
+    app.js 路徑中無任何 .sort()
+  · sessions[0] 在 client 端只能稱「API 回傳第一筆」，不能稱「最近療程」
+  · 「最近」語意取決於 server-side /api/therapy-sessions query 排序契約
+    → 尚未 recon（本輪不碰 server.js）
+- 衍生 Open Item：DATE_DEFAULT_SORT_AUTHORITY_SPLIT
+- 註解 `by explicit decision`（app.js:435）維持 **UNSUBSTANTIATED**：
+  全站唯一出現處，查無 commit / Log / 封包出處，PM 不承認曾核准。
+- 附帶查證：2026-07-27 對 WHITE_PAPER.md 執行名稱搜尋，
+  `GATE-1` / `GATE_1` / `GATE 1` / `GATE-2` / `GATE_2` 均為零命中。
+  故目前 SSOT 實檔中查無 GATE-1／GATE-2 的定義、裁決或狀態紀錄。
+- 本次查證不證明其他歷史載體從未存在相關裁決；僅證明現行
+  WHITE_PAPER.md 未記錄。若需將其正式納入 SSOT，應依 §4.11 / §4.22
+  另循 RECONSTRUCTED DECISION RECORD，由 PM 對完整內容明示核准，
+  不得依摘要直接視為既成裁定。
+- SOURCE: EXECUTOR_VERIFIED + 實碼 grep/sed + repo file grep（2026-07-27）
