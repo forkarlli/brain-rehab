@@ -1,0 +1,356 @@
+{
+ "artifact": "BCF_Core24",
+ "version": "1.0",
+ "status": "FROZEN",
+ "frozen_date": "2026-07-27",
+ "authority": "Phase 5 Core-24 Clinical Content SSOT",
+ "definition": "Localization + Neural Phenotype instrument (not a balanced questionnaire; not Localization-only).",
+ "total": 24,
+ "class_distribution": {
+  "LOCALIZING": 22,
+  "NON_LOCALIZING_PHENOTYPE": 2
+ },
+ "domain_distribution": {
+  "VESTIBULAR": 5,
+  "OCULOMOTOR": 5,
+  "CEREBELLAR": 5,
+  "COGNITIVE": 4,
+  "BRAINSTEM_AUTONOMIC": 5
+ },
+ "items": [
+  {
+   "item_id": "QB-L3-VES-02",
+   "item_class": "LOCALIZING",
+   "domain": "VESTIBULAR",
+   "anat_primary": [
+    "PVES"
+   ],
+   "is_phenotype": false,
+   "mandatory": false
+  },
+  {
+   "item_id": "QB-L3-VES-03",
+   "item_class": "LOCALIZING",
+   "domain": "VESTIBULAR",
+   "anat_primary": [
+    "VCBL",
+    "VNUC"
+   ],
+   "is_phenotype": false,
+   "mandatory": false
+  },
+  {
+   "item_id": "QB-L3-VES-04",
+   "item_class": "LOCALIZING",
+   "domain": "VESTIBULAR",
+   "anat_primary": [
+    "TEMP"
+   ],
+   "is_phenotype": false,
+   "mandatory": false
+  },
+  {
+   "item_id": "QB-L3-VES-05",
+   "item_class": "LOCALIZING",
+   "domain": "VESTIBULAR",
+   "anat_primary": [
+    "PVES",
+    "VNUC"
+   ],
+   "is_phenotype": false,
+   "mandatory": false
+  },
+  {
+   "item_id": "QB-L3-VES-08",
+   "item_class": "LOCALIZING",
+   "domain": "VESTIBULAR",
+   "anat_primary": [
+    "PVES"
+   ],
+   "is_phenotype": false,
+   "mandatory": false
+  },
+  {
+   "item_id": "QB-L3-OCM-01",
+   "item_class": "LOCALIZING",
+   "domain": "OCULOMOTOR",
+   "anat_primary": [
+    "PAR"
+   ],
+   "is_phenotype": false,
+   "mandatory": false
+  },
+  {
+   "item_id": "QB-L3-OCM-02",
+   "item_class": "LOCALIZING",
+   "domain": "OCULOMOTOR",
+   "anat_primary": [
+    "MIDB"
+   ],
+   "is_phenotype": false,
+   "mandatory": false
+  },
+  {
+   "item_id": "QB-L3-OCM-06",
+   "item_class": "LOCALIZING",
+   "domain": "OCULOMOTOR",
+   "anat_primary": [
+    "PAR",
+    "TEMP"
+   ],
+   "is_phenotype": false,
+   "mandatory": false
+  },
+  {
+   "item_id": "QB-L3-OCM-07",
+   "item_class": "LOCALIZING",
+   "domain": "OCULOMOTOR",
+   "anat_primary": [
+    "PONS"
+   ],
+   "is_phenotype": false,
+   "mandatory": true
+  },
+  {
+   "item_id": "QB-L3-OCM-04",
+   "item_class": "NON_LOCALIZING_PHENOTYPE",
+   "domain": "OCULOMOTOR",
+   "anat_primary": [],
+   "is_phenotype": true,
+   "mandatory": false
+  },
+  {
+   "item_id": "QB-L3-CBL-01",
+   "item_class": "LOCALIZING",
+   "domain": "CEREBELLAR",
+   "anat_primary": [
+    "OMV",
+    "cFN"
+   ],
+   "is_phenotype": false,
+   "mandatory": true
+  },
+  {
+   "item_id": "QB-L3-CBL-02",
+   "item_class": "LOCALIZING",
+   "domain": "CEREBELLAR",
+   "anat_primary": [
+    "CBH"
+   ],
+   "is_phenotype": false,
+   "mandatory": false
+  },
+  {
+   "item_id": "QB-L3-CBL-03",
+   "item_class": "LOCALIZING",
+   "domain": "CEREBELLAR",
+   "anat_primary": [
+    "VCBL",
+    "cFN"
+   ],
+   "is_phenotype": false,
+   "mandatory": false
+  },
+  {
+   "item_id": "QB-L3-CBL-05",
+   "item_class": "LOCALIZING",
+   "domain": "CEREBELLAR",
+   "anat_primary": [
+    "CBH"
+   ],
+   "is_phenotype": false,
+   "mandatory": false
+  },
+  {
+   "item_id": "QB-L3-CBL-07",
+   "item_class": "LOCALIZING",
+   "domain": "CEREBELLAR",
+   "anat_primary": [
+    "CBH"
+   ],
+   "is_phenotype": false,
+   "mandatory": false
+  },
+  {
+   "item_id": "QB-L3-COG-01",
+   "item_class": "LOCALIZING",
+   "domain": "COGNITIVE",
+   "anat_primary": [
+    "FEF"
+   ],
+   "is_phenotype": false,
+   "mandatory": false
+  },
+  {
+   "item_id": "QB-L3-COG-02",
+   "item_class": "LOCALIZING",
+   "domain": "COGNITIVE",
+   "anat_primary": [
+    "FEF",
+    "PAR"
+   ],
+   "is_phenotype": false,
+   "mandatory": false
+  },
+  {
+   "item_id": "QB-L3-COG-04",
+   "item_class": "LOCALIZING",
+   "domain": "COGNITIVE",
+   "anat_primary": [
+    "TEMP"
+   ],
+   "is_phenotype": false,
+   "mandatory": false
+  },
+  {
+   "item_id": "QB-L3-COG-06",
+   "item_class": "LOCALIZING",
+   "domain": "COGNITIVE",
+   "anat_primary": [
+    "PAR"
+   ],
+   "is_phenotype": false,
+   "mandatory": false
+  },
+  {
+   "item_id": "QB-L3-BSA-01",
+   "item_class": "LOCALIZING",
+   "domain": "BRAINSTEM_AUTONOMIC",
+   "anat_primary": [
+    "AUTO"
+   ],
+   "is_phenotype": false,
+   "mandatory": false
+  },
+  {
+   "item_id": "QB-L3-BSA-04",
+   "item_class": "LOCALIZING",
+   "domain": "BRAINSTEM_AUTONOMIC",
+   "anat_primary": [
+    "MEDU"
+   ],
+   "is_phenotype": false,
+   "mandatory": false
+  },
+  {
+   "item_id": "QB-L3-BSA-05",
+   "item_class": "LOCALIZING",
+   "domain": "BRAINSTEM_AUTONOMIC",
+   "anat_primary": [
+    "AUTO",
+    "MEDU"
+   ],
+   "is_phenotype": false,
+   "mandatory": false
+  },
+  {
+   "item_id": "QB-L3-BSA-06",
+   "item_class": "LOCALIZING",
+   "domain": "BRAINSTEM_AUTONOMIC",
+   "anat_primary": [
+    "MEDU"
+   ],
+   "is_phenotype": false,
+   "mandatory": false
+  },
+  {
+   "item_id": "QB-L3-BSA-08",
+   "item_class": "NON_LOCALIZING_PHENOTYPE",
+   "domain": "BRAINSTEM_AUTONOMIC",
+   "anat_primary": [],
+   "is_phenotype": true,
+   "mandatory": false
+  }
+ ],
+ "mandatory_items": [
+  "QB-L3-OCM-07",
+  "QB-L3-CBL-01"
+ ],
+ "accept_zero_coverage": [
+  "BG",
+  "CERV"
+ ],
+ "coverage_primary": {
+  "PVES": 3,
+  "VNUC": 2,
+  "VCBL": 2,
+  "OMV": 1,
+  "cFN": 2,
+  "CBH": 3,
+  "MIDB": 1,
+  "PONS": 1,
+  "MEDU": 3,
+  "FEF": 2,
+  "PAR": 4,
+  "TEMP": 3,
+  "BG": 0,
+  "AUTO": 2,
+  "CERV": 0
+ },
+ "inv_p5_1": "PASS",
+ "canonical_item_class_tokens": [
+  "LOCALIZING",
+  "NON_LOCALIZING_PHENOTYPE",
+  "IMPACT"
+ ],
+ "selection_lineage": [
+  {
+   "candidate": "B1",
+   "n": 25,
+   "result": "REJECTED_ON_COUNT (BSA had 6; target 24)"
+  },
+  {
+   "candidate": "B1.1",
+   "n": 24,
+   "result": "OBJECTIVE_PASS",
+   "sa_ruling": "OUT QB-L3-BSA-07; keep QB-L3-BSA-06; Gemini swap CBL-05->COG-03 NOT ADOPTED"
+  }
+ ],
+ "reviewer_scenarios_not_adopted": {
+  "gemini_B1_revised": "OUT CBL-05 / IN COG-03 — retained for v1.1 consideration"
+ },
+ "gemini_mapping_corrections_accepted": {
+  "FEF_primary_carriers": [
+   "QB-L3-COG-01",
+   "QB-L3-COG-02"
+  ],
+  "CBL-05_primary": "CBH",
+  "CBL-02_primary": "CBH"
+ },
+ "approvals": {
+  "clinical_selection_authority": "System Architect (ChatGPT) — authored B1.1, 2026-07-27",
+  "gemini_independent_review": "CHALLENGE_COMPLETE_APPROVED, no objections, 2026-07-27",
+  "pm_final_approval": "Karl Li (PM) — \"核准 Core-24 v1.0 凍結（B1.1）\", 2026-07-27"
+ },
+ "source_artifacts": {
+  "BCF_L3_item_class_registry.json": "2fd9d9f2f7c70343f264644e0f17858ed7d7c678870e6bd4fb5290fdbcc54d79",
+  "BCF_KnowledgeGraph_L3_localizes_to.json": "c00b17443da296d245cbf80cfb74f698b5dd437e54bba85cea5e21420b1c5f56"
+ },
+ "freeze_gate": {
+  "exact_item_count_24": true,
+  "item_ids_unique": true,
+  "class_distribution_22_2_0": true,
+  "mandatory_items_present": true,
+  "inv_p5_1_violations_0": true,
+  "non_exempt_primary_zero_count_0": true,
+  "only_BG_CERV_zero": true,
+  "item_class_valid_canonical": true,
+  "impact_items_in_core24_0": true,
+  "domain_5_5_5_4_5": true,
+  "dual_candidate_7_of_7": true,
+  "pair_constraints": true,
+  "eligible_pool_membership": true,
+  "neural_phenotype_reviewed": true,
+  "machine_readable_manifest": true,
+  "source_hashes_recorded": true,
+  "source_artifacts_unchanged": true,
+  "gemini_independent_review_PASS": true,
+  "pm_clinical_approval_APPROVED": true
+ },
+ "freeze_gate_all_green": true,
+ "downstream": {
+  "pg_6a_04": "BLOCKED — requires separate authorization",
+  "phase_6a": "modification PROHIBITED"
+ },
+ "note": "Core-24 selection does not modify the 48-item Phase-4 candidate pool; unselected items remain in the pool."
+}

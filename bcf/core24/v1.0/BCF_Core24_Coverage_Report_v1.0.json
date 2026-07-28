@@ -1,0 +1,34 @@
+{
+ "artifact": "BCF_Core24_Coverage_Report",
+ "version": "1.0",
+ "status": "FROZEN",
+ "frozen_date": "2026-07-27",
+ "substrate_primary_coverage": {
+  "PVES": 3,
+  "VNUC": 2,
+  "VCBL": 2,
+  "OMV": 1,
+  "cFN": 2,
+  "CBH": 3,
+  "MIDB": 1,
+  "PONS": 1,
+  "MEDU": 3,
+  "FEF": 2,
+  "PAR": 4,
+  "TEMP": 3,
+  "BG": 0,
+  "AUTO": 2,
+  "CERV": 0
+ },
+ "zeroed_non_exempt": [],
+ "accept_zero_coverage": [
+  "BG",
+  "CERV"
+ ],
+ "inv_p5_1": "PASS",
+ "sole_coverage": {
+  "PONS": "QB-L3-OCM-07",
+  "OMV": "QB-L3-CBL-01"
+ },
+ "notes": "AUTO=2 (BSA-01,BSA-05) after BSA-07 removal; MEDU=3 (BSA-04,05,06); BG/CERV = Layer-5 exclusive (accepted zero)."
+}

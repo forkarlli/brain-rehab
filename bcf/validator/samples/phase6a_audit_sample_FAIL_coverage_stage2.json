@@ -1,0 +1,641 @@
+{
+ "run_id": "SAMPLE-FAIL-COVERAGE",
+ "timestamp": "2026-07-27T00:00:00Z",
+ "validator_version": "phase6a-validator-stage2-0.1",
+ "execution_mode": "DEVELOPMENT",
+ "release_scope": "BUILD_ONLY",
+ "resource_status": "NON_RELEASE_ELIGIBLE",
+ "loader_provenance": [
+  {
+   "artifact_id": "L3_ITEM_CLASS_REGISTRY",
+   "path": "registry.json",
+   "declared_version": "test",
+   "declared_sha256": "2fd9d9f2f7c70343f264644e0f17858ed7d7c678870e6bd4fb5290fdbcc54d79",
+   "source_status": "VERIFIED_SEED_NON_RELEASE_ELIGIBLE",
+   "release_eligible": false,
+   "load_result": "LOADED",
+   "load_sha256": "2fd9d9f2f7c70343f264644e0f17858ed7d7c678870e6bd4fb5290fdbcc54d79"
+  },
+  {
+   "artifact_id": "L3_KNOWLEDGE_GRAPH",
+   "path": "kg.json",
+   "declared_version": "test",
+   "declared_sha256": "c00b17443da296d245cbf80cfb74f698b5dd437e54bba85cea5e21420b1c5f56",
+   "source_status": "PHASE4_FROZEN_BASELINE",
+   "release_eligible": true,
+   "load_result": "LOADED",
+   "load_sha256": "c00b17443da296d245cbf80cfb74f698b5dd437e54bba85cea5e21420b1c5f56"
+  },
+  {
+   "artifact_id": "L3_NPI_QUESTION_BANK",
+   "path": "qb.md",
+   "declared_version": "v0.2",
+   "declared_sha256": "0e55936e09b70a122899dc99145130cd09a15fdc7869b4a2076291038e97d09b",
+   "source_status": "DRAFT_PINNED_RECON_FIXTURE",
+   "release_eligible": false,
+   "load_result": "LOADED",
+   "load_sha256": "0e55936e09b70a122899dc99145130cd09a15fdc7869b4a2076291038e97d09b"
+  }
+ ],
+ "control_manifests": [
+  {
+   "artifact_id": "VALIDATOR_MANIFEST",
+   "path": "manifest.json",
+   "manifest_version": "stage2-0.1",
+   "manifest_status": "STAGE_2_ADDITIVE_PG6A04",
+   "sha256": "85d297285523f2719190957efb6e2c889168a3cdbed46b0bb878c25d15e224fa"
+  },
+  {
+   "artifact_id": "REQUIRED_METADATA_MANIFEST",
+   "path": "mdm.json",
+   "manifest_version": "stage1-0.1",
+   "manifest_status": "STAGE_1_FIXTURE_APPROVED",
+   "review_status": {
+    "pm_reviewed": true,
+    "pm_reviewed_by": "Karl Li (PM)",
+    "pm_reviewed_date": "2026-07-27",
+    "pm_reviewed_note": "PM 於 2026-07-27 交接中核准 Stage 1 fixture manifest，SA 正式接受；為 archival closeout evidence，非 Stage 2。此核准不使 manifest 成為 production release-gate 輸入。",
+    "system_architect_reviewed": true,
+    "system_architect_reviewed_by": "System Architect (ChatGPT) ruling 2026-07-27",
+    "usable_as_release_gate_input": false,
+    "usable_as_stage1_fixture": true
+   },
+   "sha256": "1c845e99d36d12e8e30a302f40534088fbbd6a21ac9bbd64c058bd5b18fb759d"
+  }
+ ],
+ "gate_order": [
+  "PG-6A-01",
+  "PG-6A-02",
+  "PG-6A-03",
+  "PG-6A-04"
+ ],
+ "gate_results": {
+  "PG-6A-01": "PASS",
+  "PG-6A-02": "PASS",
+  "PG-6A-03": "PASS",
+  "PG-6A-04": "FAIL"
+ },
+ "prior_fatal_source": "PG-6A-04",
+ "read_only_evidence": {
+  "unchanged": [
+   {
+    "artifact_id": "L3_ITEM_CLASS_REGISTRY",
+    "before": "2fd9d9f2f7c70343f264644e0f17858ed7d7c678870e6bd4fb5290fdbcc54d79",
+    "after": "2fd9d9f2f7c70343f264644e0f17858ed7d7c678870e6bd4fb5290fdbcc54d79",
+    "unchanged": true
+   },
+   {
+    "artifact_id": "L3_KNOWLEDGE_GRAPH",
+    "before": "c00b17443da296d245cbf80cfb74f698b5dd437e54bba85cea5e21420b1c5f56",
+    "after": "c00b17443da296d245cbf80cfb74f698b5dd437e54bba85cea5e21420b1c5f56",
+    "unchanged": true
+   },
+   {
+    "artifact_id": "L3_NPI_QUESTION_BANK",
+    "before": "0e55936e09b70a122899dc99145130cd09a15fdc7869b4a2076291038e97d09b",
+    "after": "0e55936e09b70a122899dc99145130cd09a15fdc7869b4a2076291038e97d09b",
+    "unchanged": true
+   },
+   {
+    "artifact_id": "CORE24_V1_0",
+    "before": "49714db21292534e7748d5661041e1c6b1b8e5407fd72c37547891f9863896d9",
+    "after": "49714db21292534e7748d5661041e1c6b1b8e5407fd72c37547891f9863896d9",
+    "unchanged": true
+   }
+  ],
+  "all_unchanged": true
+ },
+ "pg_6a_final": {
+  "status": "BLOCKED",
+  "release_eligible": false,
+  "reasons": [
+   "inputs NON_RELEASE_ELIGIBLE (DRAFT QB / seed registry; frozen SSOT not designated, CL-4)",
+   "PG-6A-05 / PG-6A-06 not implemented or not authorized this stage"
+  ]
+ },
+ "audit_records": [
+  {
+   "run_id": "SAMPLE-FAIL-COVERAGE",
+   "timestamp": "2026-07-27T00:00:00Z",
+   "validator_version": "phase6a-validator-stage2-0.1",
+   "gate_id": "PG-6A-01",
+   "invariant_id": "INV-RESOURCE-1",
+   "result": "PASS",
+   "failure_class": "FATAL",
+   "blocking_scope": "BUILD",
+   "predicate_id": "pred_resource_present",
+   "normative_source": {
+    "artifact": "PEC v1.0",
+    "section": "§3.2 INV-RESOURCE-1 + Stage-1 ruling CL-3",
+    "version": "1.0"
+   },
+   "evidence_artifacts": [
+    {
+     "artifact_id": "L3_ITEM_CLASS_REGISTRY",
+     "declared_version": "test",
+     "sha256": "2fd9d9f2f7c70343f264644e0f17858ed7d7c678870e6bd4fb5290fdbcc54d79",
+     "source_status": "VERIFIED_SEED_NON_RELEASE_ELIGIBLE"
+    },
+    {
+     "artifact_id": "L3_KNOWLEDGE_GRAPH",
+     "declared_version": "test",
+     "sha256": "c00b17443da296d245cbf80cfb74f698b5dd437e54bba85cea5e21420b1c5f56",
+     "source_status": "PHASE4_FROZEN_BASELINE"
+    },
+    {
+     "artifact_id": "L3_NPI_QUESTION_BANK",
+     "declared_version": "v0.2",
+     "sha256": "0e55936e09b70a122899dc99145130cd09a15fdc7869b4a2076291038e97d09b",
+     "source_status": "DRAFT_PINNED_RECON_FIXTURE"
+    }
+   ],
+   "vacuous": false,
+   "exercised": true,
+   "production_complete": true,
+   "findings": [
+    {
+     "result": "PASS",
+     "failure_class": "FATAL",
+     "entity_id": "*",
+     "actual": "all_loaded",
+     "expected": "all_loaded",
+     "message": "all required artifacts present, hash-verified, parsed",
+     "vacuous": false,
+     "exercised": true
+    }
+   ]
+  },
+  {
+   "run_id": "SAMPLE-FAIL-COVERAGE",
+   "timestamp": "2026-07-27T00:00:00Z",
+   "validator_version": "phase6a-validator-stage2-0.1",
+   "gate_id": "PG-6A-01",
+   "invariant_id": "INV-VERSION-1",
+   "result": "PASS",
+   "failure_class": "FATAL",
+   "blocking_scope": "BUILD",
+   "predicate_id": "pred_version_identity",
+   "normative_source": {
+    "artifact": "PEC v1.0",
+    "section": "§3.2 INV-VERSION-1 + CL-3/CL-5",
+    "version": "1.0"
+   },
+   "evidence_artifacts": [
+    {
+     "artifact_id": "L3_ITEM_CLASS_REGISTRY",
+     "declared_version": "test",
+     "sha256": "2fd9d9f2f7c70343f264644e0f17858ed7d7c678870e6bd4fb5290fdbcc54d79",
+     "source_status": "VERIFIED_SEED_NON_RELEASE_ELIGIBLE"
+    },
+    {
+     "artifact_id": "L3_KNOWLEDGE_GRAPH",
+     "declared_version": "test",
+     "sha256": "c00b17443da296d245cbf80cfb74f698b5dd437e54bba85cea5e21420b1c5f56",
+     "source_status": "PHASE4_FROZEN_BASELINE"
+    },
+    {
+     "artifact_id": "L3_NPI_QUESTION_BANK",
+     "declared_version": "v0.2",
+     "sha256": "0e55936e09b70a122899dc99145130cd09a15fdc7869b4a2076291038e97d09b",
+     "source_status": "DRAFT_PINNED_RECON_FIXTURE"
+    }
+   ],
+   "vacuous": false,
+   "exercised": true,
+   "production_complete": true,
+   "findings": [
+    {
+     "result": "PASS",
+     "failure_class": "FATAL",
+     "entity_id": "*",
+     "actual": "bound",
+     "expected": "bound",
+     "message": "all required artifacts have declared_version + sha256",
+     "vacuous": false,
+     "exercised": true
+    }
+   ]
+  },
+  {
+   "run_id": "SAMPLE-FAIL-COVERAGE",
+   "timestamp": "2026-07-27T00:00:00Z",
+   "validator_version": "phase6a-validator-stage2-0.1",
+   "gate_id": "PG-6A-02",
+   "invariant_id": "INV-ID-1",
+   "result": "PASS",
+   "failure_class": "FATAL",
+   "blocking_scope": "BUILD",
+   "predicate_id": "pred_unique_id",
+   "normative_source": {
+    "artifact": "PEC v1.0",
+    "section": "§3.2 INV-ID-1 + CL-3",
+    "version": "1.0"
+   },
+   "evidence_artifacts": [
+    {
+     "artifact_id": "L3_ITEM_CLASS_REGISTRY",
+     "declared_version": "test",
+     "sha256": "2fd9d9f2f7c70343f264644e0f17858ed7d7c678870e6bd4fb5290fdbcc54d79",
+     "source_status": "VERIFIED_SEED_NON_RELEASE_ELIGIBLE"
+    }
+   ],
+   "vacuous": false,
+   "exercised": true,
+   "production_complete": true,
+   "findings": [
+    {
+     "result": "PASS",
+     "failure_class": "FATAL",
+     "entity_id": "*",
+     "actual": "48 unique",
+     "expected": "unique",
+     "message": "all item ids non-empty and unique",
+     "vacuous": false,
+     "exercised": true
+    }
+   ]
+  },
+  {
+   "run_id": "SAMPLE-FAIL-COVERAGE",
+   "timestamp": "2026-07-27T00:00:00Z",
+   "validator_version": "phase6a-validator-stage2-0.1",
+   "gate_id": "PG-6A-02",
+   "invariant_id": "INV-META-1",
+   "result": "PASS",
+   "failure_class": "FATAL",
+   "blocking_scope": "BUILD",
+   "predicate_id": "pred_required_metadata",
+   "normative_source": {
+    "artifact": "PEC v1.0",
+    "section": "§3.2 INV-META-1 + CL-7",
+    "version": "1.0"
+   },
+   "evidence_artifacts": [
+    {
+     "artifact_id": "L3_ITEM_CLASS_REGISTRY",
+     "declared_version": "test",
+     "sha256": "2fd9d9f2f7c70343f264644e0f17858ed7d7c678870e6bd4fb5290fdbcc54d79",
+     "source_status": "VERIFIED_SEED_NON_RELEASE_ELIGIBLE"
+    },
+    {
+     "artifact_id": "phase6a_required_metadata_manifest.json",
+     "declared_version": null,
+     "sha256": null,
+     "source_status": null
+    }
+   ],
+   "vacuous": false,
+   "exercised": true,
+   "production_complete": false,
+   "findings": [
+    {
+     "result": "PASS",
+     "failure_class": "FATAL",
+     "entity_id": "*",
+     "actual": "48 items",
+     "expected": "required fields present",
+     "message": "INV-META-1 Stage 1 fixture only; NOT production-complete until metadata manifest approved (CL-7 rule 5).",
+     "vacuous": false,
+     "exercised": true
+    }
+   ]
+  },
+  {
+   "run_id": "SAMPLE-FAIL-COVERAGE",
+   "timestamp": "2026-07-27T00:00:00Z",
+   "validator_version": "phase6a-validator-stage2-0.1",
+   "gate_id": "PG-6A-02",
+   "invariant_id": "INV-CLASS-2",
+   "result": "PASS",
+   "failure_class": "FATAL",
+   "blocking_scope": "BUILD",
+   "predicate_id": "pred_item_class_enum",
+   "normative_source": {
+    "artifact": "BCF_DATA_DICTIONARY_v0.2.md",
+    "section": "§6.0 line 475-476",
+    "version": "v0.2"
+   },
+   "evidence_artifacts": [
+    {
+     "artifact_id": "L3_ITEM_CLASS_REGISTRY",
+     "declared_version": "test",
+     "sha256": "2fd9d9f2f7c70343f264644e0f17858ed7d7c678870e6bd4fb5290fdbcc54d79",
+     "source_status": "VERIFIED_SEED_NON_RELEASE_ELIGIBLE"
+    }
+   ],
+   "vacuous": false,
+   "exercised": true,
+   "production_complete": true,
+   "findings": [
+    {
+     "result": "PASS",
+     "failure_class": "FATAL",
+     "entity_id": "*",
+     "actual": "48 items",
+     "expected": "enum-valid",
+     "message": "all item_class values in accepted enum",
+     "vacuous": false,
+     "exercised": true
+    }
+   ]
+  },
+  {
+   "run_id": "SAMPLE-FAIL-COVERAGE",
+   "timestamp": "2026-07-27T00:00:00Z",
+   "validator_version": "phase6a-validator-stage2-0.1",
+   "gate_id": "PG-6A-02",
+   "invariant_id": "INV-KG-1",
+   "result": "PASS",
+   "failure_class": "FATAL",
+   "blocking_scope": "BUILD",
+   "predicate_id": "pred_kg_referential",
+   "normative_source": {
+    "artifact": "PEC v1.0",
+    "section": "§3.2 INV-KG-1 + CL-3",
+    "version": "1.0"
+   },
+   "evidence_artifacts": [
+    {
+     "artifact_id": "L3_KNOWLEDGE_GRAPH",
+     "declared_version": "test",
+     "sha256": "c00b17443da296d245cbf80cfb74f698b5dd437e54bba85cea5e21420b1c5f56",
+     "source_status": "PHASE4_FROZEN_BASELINE"
+    },
+    {
+     "artifact_id": "L3_ITEM_CLASS_REGISTRY",
+     "declared_version": "test",
+     "sha256": "2fd9d9f2f7c70343f264644e0f17858ed7d7c678870e6bd4fb5290fdbcc54d79",
+     "source_status": "VERIFIED_SEED_NON_RELEASE_ELIGIBLE"
+    }
+   ],
+   "vacuous": false,
+   "exercised": true,
+   "production_complete": true,
+   "findings": [
+    {
+     "result": "PASS",
+     "failure_class": "FATAL",
+     "entity_id": "*",
+     "actual": "all endpoints resolve",
+     "expected": "resolve",
+     "message": "every edge endpoint resolves to a declared node",
+     "vacuous": false,
+     "exercised": true
+    }
+   ]
+  },
+  {
+   "run_id": "SAMPLE-FAIL-COVERAGE",
+   "timestamp": "2026-07-27T00:00:00Z",
+   "validator_version": "phase6a-validator-stage2-0.1",
+   "gate_id": "PG-6A-02",
+   "invariant_id": "INV-KG-2",
+   "result": "PASS",
+   "failure_class": "FATAL",
+   "blocking_scope": "BUILD",
+   "predicate_id": "pred_kg_schema",
+   "normative_source": {
+    "artifact": "CLINICAL_KNOWLEDGE_GRAPH.md",
+    "section": "§edge/node tables + CL-2/CL-3",
+    "version": "phase4"
+   },
+   "evidence_artifacts": [
+    {
+     "artifact_id": "L3_KNOWLEDGE_GRAPH",
+     "declared_version": "test",
+     "sha256": "c00b17443da296d245cbf80cfb74f698b5dd437e54bba85cea5e21420b1c5f56",
+     "source_status": "PHASE4_FROZEN_BASELINE"
+    }
+   ],
+   "vacuous": false,
+   "exercised": true,
+   "production_complete": true,
+   "findings": [
+    {
+     "result": "PASS",
+     "failure_class": "FATAL",
+     "entity_id": "*",
+     "actual": "schema-legal",
+     "expected": "schema-legal",
+     "message": "all edge types/combos/levels permitted by frozen KG schema",
+     "vacuous": false,
+     "exercised": true
+    }
+   ]
+  },
+  {
+   "run_id": "SAMPLE-FAIL-COVERAGE",
+   "timestamp": "2026-07-27T00:00:00Z",
+   "validator_version": "phase6a-validator-stage2-0.1",
+   "gate_id": "PG-6A-03",
+   "invariant_id": "INV-CLASS-1",
+   "result": "PASS",
+   "failure_class": "FATAL",
+   "blocking_scope": "BUILD",
+   "predicate_id": "pred_class_consistency_bidirectional",
+   "normative_source": {
+    "artifact": "BCF_DATA_DICTIONARY_v0.2.md",
+    "section": "§2 line 89 + §6.0 line 480 + CL-1",
+    "version": "v0.2"
+   },
+   "evidence_artifacts": [
+    {
+     "artifact_id": "L3_ITEM_CLASS_REGISTRY",
+     "declared_version": "test",
+     "sha256": "2fd9d9f2f7c70343f264644e0f17858ed7d7c678870e6bd4fb5290fdbcc54d79",
+     "source_status": "VERIFIED_SEED_NON_RELEASE_ELIGIBLE"
+    },
+    {
+     "artifact_id": "L3_KNOWLEDGE_GRAPH",
+     "declared_version": "test",
+     "sha256": "c00b17443da296d245cbf80cfb74f698b5dd437e54bba85cea5e21420b1c5f56",
+     "source_status": "PHASE4_FROZEN_BASELINE"
+    }
+   ],
+   "vacuous": false,
+   "exercised": true,
+   "production_complete": true,
+   "findings": [
+    {
+     "result": "PASS",
+     "failure_class": "FATAL",
+     "entity_id": "*",
+     "actual": "36 LOCALIZING consistent",
+     "expected": "bidirectional-consistent",
+     "message": "INV-CLASS-1 holds both directions (anatomical PRIMARY; NONLOC excluded)",
+     "vacuous": false,
+     "exercised": true
+    }
+   ]
+  },
+  {
+   "run_id": "SAMPLE-FAIL-COVERAGE",
+   "timestamp": "2026-07-27T00:00:00Z",
+   "validator_version": "phase6a-validator-stage2-0.1",
+   "gate_id": "PG-6A-04",
+   "invariant_id": "INV-CORE24-1",
+   "result": "PASS",
+   "failure_class": "FATAL",
+   "blocking_scope": "BUILD",
+   "predicate_id": "pred_core24_integrity",
+   "normative_source": {
+    "artifact": "BCF_Core24_v1.0.json + BCF_Core24_Freeze_Record_v1.0.md",
+    "section": "Core-24 frozen manifest",
+    "version": "1.0"
+   },
+   "evidence_artifacts": [
+    {
+     "artifact_id": "CORE24_V1_0",
+     "declared_version": "1.0",
+     "sha256": "49714db21292534e7748d5661041e1c6b1b8e5407fd72c37547891f9863896d9",
+     "source_status": "PHASE5_FROZEN"
+    },
+    {
+     "artifact_id": "L3_ITEM_CLASS_REGISTRY",
+     "declared_version": "test",
+     "sha256": "2fd9d9f2f7c70343f264644e0f17858ed7d7c678870e6bd4fb5290fdbcc54d79",
+     "source_status": "VERIFIED_SEED_NON_RELEASE_ELIGIBLE"
+    }
+   ],
+   "vacuous": false,
+   "exercised": true,
+   "production_complete": true,
+   "findings": [
+    {
+     "result": "PASS",
+     "failure_class": "FATAL",
+     "entity_id": "*",
+     "actual": "integrity OK",
+     "expected": "integrity OK",
+     "message": "Core-24 v1.0 FROZEN integrity verified (sha256 49714db21292.., 24 items)",
+     "vacuous": false,
+     "exercised": true,
+     "evidence": {
+      "version": "1.0",
+      "status": "FROZEN",
+      "sha256": "49714db21292534e7748d5661041e1c6b1b8e5407fd72c37547891f9863896d9",
+      "authority": "Phase 5 Core-24 Clinical Content SSOT",
+      "item_count": 24,
+      "class_distribution": {
+       "LOCALIZING": 22,
+       "NON_LOCALIZING_PHENOTYPE": 2
+      },
+      "registry_identity": "all 24 Core-24 IDs present in Registry"
+     }
+    }
+   ]
+  },
+  {
+   "run_id": "SAMPLE-FAIL-COVERAGE",
+   "timestamp": "2026-07-27T00:00:00Z",
+   "validator_version": "phase6a-validator-stage2-0.1",
+   "gate_id": "PG-6A-04",
+   "invariant_id": "INV-P5-1",
+   "result": "FAIL",
+   "failure_class": "FATAL",
+   "blocking_scope": "BUILD",
+   "predicate_id": "pred_core24_coverage_preservation",
+   "normative_source": {
+    "artifact": "BCF_DATA_DICTIONARY_v0.2.md",
+    "section": "§2 (INV-P5-1 coverage preservation)",
+    "version": "v0.2"
+   },
+   "evidence_artifacts": [
+    {
+     "artifact_id": "CORE24_V1_0",
+     "declared_version": "1.0",
+     "sha256": "49714db21292534e7748d5661041e1c6b1b8e5407fd72c37547891f9863896d9",
+     "source_status": "PHASE5_FROZEN"
+    },
+    {
+     "artifact_id": "L3_KNOWLEDGE_GRAPH",
+     "declared_version": "test",
+     "sha256": "c00b17443da296d245cbf80cfb74f698b5dd437e54bba85cea5e21420b1c5f56",
+     "source_status": "PHASE4_FROZEN_BASELINE"
+    },
+    {
+     "artifact_id": "L3_ITEM_CLASS_REGISTRY",
+     "declared_version": "test",
+     "sha256": "2fd9d9f2f7c70343f264644e0f17858ed7d7c678870e6bd4fb5290fdbcc54d79",
+     "source_status": "VERIFIED_SEED_NON_RELEASE_ELIGIBLE"
+    }
+   ],
+   "vacuous": false,
+   "exercised": true,
+   "production_complete": true,
+   "findings": [
+    {
+     "result": "FAIL",
+     "failure_class": "FATAL",
+     "entity_id": "MIDB",
+     "actual": "baseline=2 core24=0",
+     "expected": "core24>0",
+     "message": "INV-P5-1: substrate MIDB PRIMARY coverage reduced >0 -> 0 (non-exempt)",
+     "vacuous": false,
+     "exercised": true,
+     "evidence": {
+      "kg_recomputed": true,
+      "manifest_declared_coverage_ignored": true,
+      "baseline_primary": {
+       "CERV": 0,
+       "TEMP": 4,
+       "BG": 0,
+       "OMV": 1,
+       "AUTO": 5,
+       "PVES": 5,
+       "PONS": 1,
+       "MEDU": 3,
+       "FEF": 5,
+       "MIDB": 2,
+       "PAR": 5,
+       "CBH": 3,
+       "cFN": 3,
+       "VNUC": 2,
+       "VCBL": 4
+      },
+      "core24_primary": {
+       "CERV": 0,
+       "TEMP": 3,
+       "BG": 0,
+       "OMV": 1,
+       "AUTO": 2,
+       "PVES": 3,
+       "PONS": 1,
+       "MEDU": 3,
+       "FEF": 2,
+       "MIDB": 0,
+       "PAR": 5,
+       "CBH": 3,
+       "cFN": 2,
+       "VNUC": 2,
+       "VCBL": 2
+      },
+      "exceptions": [
+       "BG",
+       "CERV"
+      ],
+      "zeroed_non_exempt": [
+       "MIDB"
+      ]
+     }
+    }
+   ]
+  }
+ ],
+ "decisions": [
+  {
+   "id": "DECISION-CLASS2-ENUM",
+   "status": "RESOLVED",
+   "resolution": "Canonical machine token is NON_LOCALIZING_PHENOTYPE.",
+   "authority": [
+    "BCF_DATA_DICTIONARY_v0.2.md §6.0",
+    "BCF_L3_item_class_registry.json"
+   ],
+   "clarification": "PHENOTYPE in the prior Stage-1 CL-3 ruling was a transcription shorthand, not a machine-readable item_class token. It may appear in human narrative only, never as an item_class value.",
+   "migration_required": false,
+   "resolved_by": "System Architect (ChatGPT) ruling 2026-07-27",
+   "prior_id": "OPEN-CLASS2-ENUM"
+  }
+ ],
+ "open_issues": []
+}

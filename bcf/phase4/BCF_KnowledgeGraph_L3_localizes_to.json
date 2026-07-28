@@ -1,0 +1,1004 @@
+{
+ "graph_version": "phase4-v0.4",
+ "source_matrix": "BCF_Neural_Mapping_Matrix_v0.4.xlsx",
+ "generated": "2026-07-27",
+ "edge_types_populated": [
+  "SUGGESTS",
+  "LOCALIZES_TO"
+ ],
+ "edge_types_absent_until_phase6": [
+  "VERIFIED_BY",
+  "TREATED_BY",
+  "DELIVERED_ON",
+  "CONSTRAINS",
+  "GATES"
+ ],
+ "localizes_to_edges": [
+  {
+   "from": "QB-L3-VES-01",
+   "to": "PVES",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-VES-01",
+   "to": "VNUC",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-VES-01",
+   "to": "VCBL",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-VES-01",
+   "to": "CERV",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-VES-02",
+   "to": "PVES",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-VES-02",
+   "to": "VNUC",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-VES-02",
+   "to": "VCBL",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-VES-03",
+   "to": "VNUC",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-VES-03",
+   "to": "VCBL",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-VES-03",
+   "to": "TEMP",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-VES-03",
+   "to": "CERV",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-VES-04",
+   "to": "VNUC",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-VES-04",
+   "to": "VCBL",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-VES-04",
+   "to": "PAR",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-VES-04",
+   "to": "TEMP",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-VES-05",
+   "to": "PVES",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-VES-05",
+   "to": "VNUC",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-VES-05",
+   "to": "VCBL",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-VES-06",
+   "to": "VNUC",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-VES-06",
+   "to": "VCBL",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-VES-06",
+   "to": "TEMP",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-VES-06",
+   "to": "AUTO",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-VES-07",
+   "to": "PVES",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-VES-07",
+   "to": "VNUC",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-VES-08",
+   "to": "PVES",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-VES-08",
+   "to": "VNUC",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-VES-08",
+   "to": "TEMP",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-OCM-01",
+   "to": "PONS",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-OCM-01",
+   "to": "FEF",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-OCM-01",
+   "to": "PAR",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-OCM-02",
+   "to": "MIDB",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-OCM-02",
+   "to": "PONS",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-OCM-02",
+   "to": "FEF",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-OCM-03",
+   "to": "MIDB",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-OCM-03",
+   "to": "PONS",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-OCM-03",
+   "to": "FEF",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-OCM-04",
+   "to": "FEF",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-OCM-05",
+   "to": "VCBL",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-OCM-05",
+   "to": "PONS",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-OCM-05",
+   "to": "FEF",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-OCM-05",
+   "to": "PAR",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-OCM-06",
+   "to": "VNUC",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-OCM-06",
+   "to": "VCBL",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-OCM-06",
+   "to": "PAR",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-OCM-06",
+   "to": "TEMP",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-OCM-07",
+   "to": "MIDB",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-OCM-07",
+   "to": "PONS",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-OCM-07",
+   "to": "FEF",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-OCM-08",
+   "to": "MIDB",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-OCM-08",
+   "to": "TEMP",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-CBL-01",
+   "to": "OMV",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-CBL-01",
+   "to": "cFN",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-CBL-01",
+   "to": "CBH",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-CBL-02",
+   "to": "CBH",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-CBL-02",
+   "to": "BG",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-CBL-02",
+   "to": "CERV",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-CBL-03",
+   "to": "VCBL",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-CBL-03",
+   "to": "cFN",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-CBL-03",
+   "to": "CBH",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-CBL-04",
+   "to": "VCBL",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-CBL-04",
+   "to": "cFN",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-CBL-04",
+   "to": "CBH",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-CBL-05",
+   "to": "CBH",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-CBL-05",
+   "to": "PONS",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-CBL-05",
+   "to": "MEDU",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-CBL-06",
+   "to": "cFN",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-CBL-06",
+   "to": "CBH",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-CBL-06",
+   "to": "BG",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-CBL-07",
+   "to": "CBH",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-CBL-07",
+   "to": "BG",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-CBL-08",
+   "to": "VNUC",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-CBL-08",
+   "to": "VCBL",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-CBL-08",
+   "to": "CBH",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-COG-01",
+   "to": "FEF",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-COG-01",
+   "to": "TEMP",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-COG-02",
+   "to": "FEF",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-COG-02",
+   "to": "PAR",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-COG-02",
+   "to": "BG",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-COG-03",
+   "to": "FEF",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-COG-03",
+   "to": "BG",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-COG-04",
+   "to": "FEF",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-COG-04",
+   "to": "TEMP",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-COG-05",
+   "to": "FEF",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-COG-05",
+   "to": "BG",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-COG-06",
+   "to": "PAR",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-COG-06",
+   "to": "TEMP",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-COG-07",
+   "to": "FEF",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-COG-07",
+   "to": "PAR",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-COG-07",
+   "to": "BG",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-COG-08",
+   "to": "FEF",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-COG-08",
+   "to": "AUTO",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-BSA-01",
+   "to": "VNUC",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-BSA-01",
+   "to": "MEDU",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-BSA-01",
+   "to": "AUTO",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-BSA-02",
+   "to": "MEDU",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-BSA-02",
+   "to": "AUTO",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-BSA-03",
+   "to": "MEDU",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-BSA-03",
+   "to": "AUTO",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-BSA-04",
+   "to": "PONS",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-BSA-04",
+   "to": "MEDU",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-BSA-05",
+   "to": "VNUC",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-BSA-05",
+   "to": "MEDU",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-BSA-05",
+   "to": "AUTO",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-BSA-06",
+   "to": "PONS",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-BSA-06",
+   "to": "MEDU",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-BSA-06",
+   "to": "AUTO",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-BSA-07",
+   "to": "MEDU",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-BSA-07",
+   "to": "AUTO",
+   "level": "PRIMARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-BSA-08",
+   "to": "MEDU",
+   "level": "SECONDARY",
+   "type": "LOCALIZES_TO"
+  },
+  {
+   "from": "QB-L3-BSA-08",
+   "to": "AUTO",
+   "level": "SUPPORTIVE",
+   "type": "LOCALIZES_TO"
+  }
+ ],
+ "suggests_edges": [
+  {
+   "from": "QB-L3-VES-01",
+   "to": "VESTIBULAR",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-VES-02",
+   "to": "VESTIBULAR",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-VES-03",
+   "to": "VESTIBULAR",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-VES-04",
+   "to": "VESTIBULAR",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-VES-05",
+   "to": "VESTIBULAR",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-VES-06",
+   "to": "VESTIBULAR",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-VES-07",
+   "to": "VESTIBULAR",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-VES-08",
+   "to": "VESTIBULAR",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-OCM-01",
+   "to": "OCULOMOTOR",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-OCM-02",
+   "to": "OCULOMOTOR",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-OCM-03",
+   "to": "OCULOMOTOR",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-OCM-04",
+   "to": "OCULOMOTOR",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-OCM-05",
+   "to": "OCULOMOTOR",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-OCM-06",
+   "to": "OCULOMOTOR",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-OCM-07",
+   "to": "OCULOMOTOR",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-OCM-08",
+   "to": "OCULOMOTOR",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-CBL-01",
+   "to": "CEREBELLAR",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-CBL-02",
+   "to": "CEREBELLAR",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-CBL-03",
+   "to": "CEREBELLAR",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-CBL-04",
+   "to": "CEREBELLAR",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-CBL-05",
+   "to": "CEREBELLAR",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-CBL-06",
+   "to": "CEREBELLAR",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-CBL-07",
+   "to": "CEREBELLAR",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-CBL-08",
+   "to": "CEREBELLAR",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-COG-01",
+   "to": "COGNITIVE",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-COG-02",
+   "to": "COGNITIVE",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-COG-03",
+   "to": "COGNITIVE",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-COG-04",
+   "to": "COGNITIVE",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-COG-05",
+   "to": "COGNITIVE",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-COG-06",
+   "to": "COGNITIVE",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-COG-07",
+   "to": "COGNITIVE",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-COG-08",
+   "to": "COGNITIVE",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-BSA-01",
+   "to": "BRAINSTEM_AUTONOMIC",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-BSA-02",
+   "to": "BRAINSTEM_AUTONOMIC",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-BSA-03",
+   "to": "BRAINSTEM_AUTONOMIC",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-BSA-04",
+   "to": "BRAINSTEM_AUTONOMIC",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-BSA-05",
+   "to": "BRAINSTEM_AUTONOMIC",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-BSA-06",
+   "to": "BRAINSTEM_AUTONOMIC",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-BSA-07",
+   "to": "BRAINSTEM_AUTONOMIC",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-BSA-08",
+   "to": "BRAINSTEM_AUTONOMIC",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-DFN-01",
+   "to": "DAILY_FUNCTION",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-DFN-02",
+   "to": "DAILY_FUNCTION",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-DFN-03",
+   "to": "DAILY_FUNCTION",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-DFN-04",
+   "to": "DAILY_FUNCTION",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-DFN-05",
+   "to": "DAILY_FUNCTION",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-DFN-06",
+   "to": "DAILY_FUNCTION",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-DFN-07",
+   "to": "DAILY_FUNCTION",
+   "type": "SUGGESTS"
+  },
+  {
+   "from": "QB-L3-DFN-08",
+   "to": "DAILY_FUNCTION",
+   "type": "SUGGESTS"
+  }
+ ],
+ "non_localizing_items": [
+  "QB-L3-BSA-08",
+  "QB-L3-COG-08",
+  "QB-L3-DFN-01",
+  "QB-L3-DFN-02",
+  "QB-L3-DFN-03",
+  "QB-L3-DFN-04",
+  "QB-L3-DFN-05",
+  "QB-L3-DFN-06",
+  "QB-L3-DFN-07",
+  "QB-L3-DFN-08",
+  "QB-L3-OCM-04",
+  "QB-L3-OCM-08"
+ ],
+ "dual_candidate_items": [
+  {
+   "item": "QB-L3-VES-03",
+   "primaries": [
+    "VNUC",
+    "VCBL"
+   ]
+  },
+  {
+   "item": "QB-L3-VES-05",
+   "primaries": [
+    "PVES",
+    "VNUC"
+   ]
+  },
+  {
+   "item": "QB-L3-OCM-06",
+   "primaries": [
+    "PAR",
+    "TEMP"
+   ]
+  },
+  {
+   "item": "QB-L3-CBL-01",
+   "primaries": [
+    "OMV",
+    "cFN"
+   ]
+  },
+  {
+   "item": "QB-L3-CBL-03",
+   "primaries": [
+    "VCBL",
+    "cFN"
+   ]
+  },
+  {
+   "item": "QB-L3-COG-02",
+   "primaries": [
+    "FEF",
+    "PAR"
+   ]
+  },
+  {
+   "item": "QB-L3-BSA-05",
+   "primaries": [
+    "MEDU",
+    "AUTO"
+   ]
+  }
+ ],
+ "primary_substrate_obligations": {
+  "PVES": 5,
+  "VNUC": 2,
+  "VCBL": 4,
+  "TEMP": 4,
+  "PAR": 5,
+  "MIDB": 2,
+  "PONS": 1,
+  "OMV": 1,
+  "cFN": 3,
+  "CBH": 3,
+  "FEF": 5,
+  "AUTO": 5,
+  "MEDU": 3
+ },
+ "inv1_status": "ARCHITECTURALLY_SATISFIED_BY_CONSTRUCTION",
+ "note": "NONLOC is a non-localizing sentinel; an item whose only PRIMARY is NONLOC produces no anatomical PRIMARY LOCALIZES_TO edge.",
+ "inv1_runtime_status": "DEFERRED_TO_PHASE6",
+ "phase4_status": "COMPLETE_FROZEN_BASELINE"
+}

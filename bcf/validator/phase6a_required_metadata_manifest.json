@@ -1,0 +1,53 @@
+{
+  "manifest_kind": "PHASE6A_REQUIRED_METADATA_MANIFEST",
+  "manifest_version": "stage1-0.1",
+  "manifest_status": "STAGE_1_FIXTURE_APPROVED",
+  "not_a_clinical_ssot": true,
+  "governance_note": "CL-7：本 manifest 之 required_fields 必須逐項具 normative_source；缺 source 之欄位不得由工程端自行升格為 FATAL requirement。須經 PM／System Architect review 後方可作為 release gate 輸入。未核准前，INV-META-1 不得宣稱 production-complete（CL-7 rule 5）。",
+  "review_status": {
+    "pm_reviewed": true,
+    "pm_reviewed_by": "Karl Li (PM)",
+    "pm_reviewed_date": "2026-07-27",
+    "pm_reviewed_note": "PM 於 2026-07-27 交接中核准 Stage 1 fixture manifest，SA 正式接受；為 archival closeout evidence，非 Stage 2。此核准不使 manifest 成為 production release-gate 輸入。",
+    "system_architect_reviewed": true,
+    "system_architect_reviewed_by": "System Architect (ChatGPT) ruling 2026-07-27",
+    "usable_as_release_gate_input": false,
+    "usable_as_stage1_fixture": true
+  },
+  "entity_types": [
+    {
+      "entity_type": "QUESTION_ITEM",
+      "evidence_artifact": "L3_ITEM_CLASS_REGISTRY",
+      "note": "Stage 1 fixture 僅涵蓋 registry 可機器讀取之最小欄位；QB markdown 之完整逐題 metadata 待正式 frozen QB 指定（CL-4）後擴充。",
+      "required_fields": [
+        {
+          "name": "item_id",
+          "type": "string",
+          "nullable": false,
+          "normative_source": {"artifact": "BCF_L3_item_class_registry.json", "section": "declared keys"}
+        },
+        {
+          "name": "item_class",
+          "type": "string",
+          "nullable": false,
+          "enum_ref": "item_class_accepted",
+          "normative_source": {"artifact": "BCF_DATA_DICTIONARY_v0.2.md", "section": "§6.0 line 479 (item_class 為必填 metadata)"}
+        }
+      ],
+      "recommended_fields": [
+        {
+          "name": "domain",
+          "type": "string",
+          "normative_source": {"artifact": "CLINICAL_KNOWLEDGE_GRAPH.md", "section": "SUGGESTS domain"},
+          "note": "缺此欄不得阻斷（recommended, not required）。目前僅存在於 QB/Matrix，registry 未帶。"
+        },
+        {
+          "name": "zh_text",
+          "type": "string",
+          "normative_source": {"artifact": "BCF_NPI_QUESTION_BANK_v0.2.md", "section": "題幹"},
+          "note": "缺此欄不得阻斷。DRAFT QB fixture。"
+        }
+      ]
+    }
+  ]
+}
