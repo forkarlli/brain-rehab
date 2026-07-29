@@ -1,0 +1,35 @@
+{
+  "manifest_kind": "PHASE6A_TEST_FIXTURE_MANIFEST",
+  "manifest_version": "1.0",
+  "status": "TEST_ONLY",
+  "not_a_clinical_ssot": true,
+  "not_a_runtime_artifact_manifest": true,
+  "purpose": "Declares immutable seed fixtures used ONLY by phase6a_tests.py (legacy Stage-1+2 suite). Never read by the runtime validator/ReadOnlyLoader; never participates in release_eligible, PG-6A-1B, patient-wording or mapping authority; no fallback from the runtime manifest.",
+  "authority_note": "SA ruling 2026-07-28 (Option D): legacy test fixtures are decoupled from the runtime authority manifest. This file is the SINGLE fixture-location truth for the legacy suite; the runtime phase6a_validator_manifest.json remains the sole runtime/authority binding and is not altered for test compatibility.",
+  "fixtures": {
+    "LEGACY_L3_ITEM_CLASS_REGISTRY": {
+      "path": "../phase4/BCF_L3_item_class_registry.json",
+      "format": "json",
+      "declared_version": "0.1",
+      "sha256": "2fd9d9f2f7c70343f264644e0f17858ed7d7c678870e6bd4fb5290fdbcc54d79",
+      "note": "v0.1 declared-schema registry (has 'declared' map); legacy reg_with() seed."
+    },
+    "L3_KNOWLEDGE_GRAPH": {
+      "path": "../phase4/BCF_KnowledgeGraph_L3_localizes_to.json",
+      "format": "json",
+      "sha256": "c00b17443da296d245cbf80cfb74f698b5dd437e54bba85cea5e21420b1c5f56"
+    },
+    "LEGACY_NPI_QUESTION_BANK": {
+      "path": "../reference/BCF_NPI_QUESTION_BANK_v0.2.md",
+      "format": "markdown",
+      "declared_version": "v0.2",
+      "sha256": "0e55936e09b70a122899dc99145130cd09a15fdc7869b4a2076291038e97d09b"
+    },
+    "CORE24_V1_0": {
+      "path": "../core24/v1.0/BCF_Core24_v1.0.json",
+      "format": "json",
+      "declared_version": "1.0",
+      "sha256": "7bfaf2dced2132120b0531da84ceae8c928d727ba58a4b12402015b7f46c9ac5"
+    }
+  }
+}

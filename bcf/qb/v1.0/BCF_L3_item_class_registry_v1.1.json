@@ -1,0 +1,618 @@
+{
+ "artifact": "BCF_L3_item_class_registry",
+ "version": "1.1",
+ "schema": "authority-split (per-item wording_source | mapping_source)",
+ "status": "ACTIVE",
+ "date": "2026-07-28",
+ "gate": "Phase 6A Stage 3D — Release Eligibility Designation & Registry Authority Split",
+ "migrated_from": {
+  "artifact": "BCF_L3_item_class_registry.json",
+  "sha256": "2fd9d9f2f7c70343f264644e0f17858ed7d7c678870e6bd4fb5290fdbcc54d79",
+  "source": "BCF_NPI_QUESTION_BANK (declared)",
+  "verified_against": "Phase 4 frozen matrix v0.4"
+ },
+ "release_eligibility": {
+  "BCF_QUESTION_BANK_v1.0": {
+   "status": "RELEASE_ELIGIBLE",
+   "role": "canonical_patient_facing_wording_SSOT (Layer-A)",
+   "frozen_md": {
+    "path": "BCF_QUESTION_BANK_v1.0_FROZEN.md",
+    "sha256": "9e298e6660556b3384f9b432d3ff9f9a5b39115e782dfd9d9fbd34658c4c7533"
+   },
+   "frozen_json": {
+    "path": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "pm_approval": "Karl Li — APPROVED_FINAL_FREEZE 2026-07-28",
+   "sa_technical_review": "Phase 6A Stage 3C CLOSED_APPROVED"
+  }
+ },
+ "authority_model": {
+  "wording_source": "sole authority for patient-facing wording (Layer-A frozen QB)",
+  "mapping_source": "neural localization / mapping REFERENCE only (Layer-B, non-authoritative for wording)",
+  "validator_rule": "validator MUST NOT use mapping_source to validate patient wording",
+  "npi_reference_provenance": {
+   "artifact": "BCF_NPI_QUESTION_BANK_v0.2.md",
+   "sha256": "0e55936e09b70a122899dc99145130cd09a15fdc7869b4a2076291038e97d09b",
+   "status": "REFERENCE"
+  }
+ },
+ "items": [
+  {
+   "item_id": "QB-L3-VES-01",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-VES-02",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-VES-03",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-VES-04",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-VES-05",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-VES-06",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-VES-07",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-VES-08",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-OCM-01",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-OCM-02",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-OCM-03",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-OCM-04",
+   "item_class": "NON_LOCALIZING_PHENOTYPE",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-OCM-05",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-OCM-06",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-OCM-07",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-OCM-08",
+   "item_class": "NON_LOCALIZING_PHENOTYPE",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-CBL-01",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-CBL-02",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-CBL-03",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-CBL-04",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-CBL-05",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-CBL-06",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-CBL-07",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-CBL-08",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-COG-01",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-COG-02",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-COG-03",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-COG-04",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-COG-05",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-COG-06",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-COG-07",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-COG-08",
+   "item_class": "NON_LOCALIZING_PHENOTYPE",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-BSA-01",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-BSA-02",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-BSA-03",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-BSA-04",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-BSA-05",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-BSA-06",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-BSA-07",
+   "item_class": "LOCALIZING",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-BSA-08",
+   "item_class": "NON_LOCALIZING_PHENOTYPE",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-DFN-01",
+   "item_class": "IMPACT",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-DFN-02",
+   "item_class": "IMPACT",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-DFN-03",
+   "item_class": "IMPACT",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-DFN-04",
+   "item_class": "IMPACT",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-DFN-05",
+   "item_class": "IMPACT",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-DFN-06",
+   "item_class": "IMPACT",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-DFN-07",
+   "item_class": "IMPACT",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  },
+  {
+   "item_id": "QB-L3-DFN-08",
+   "item_class": "IMPACT",
+   "wording_source": {
+    "artifact": "BCF_QUESTION_BANK_v1.0_FROZEN.json",
+    "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+   },
+   "mapping_source": {
+    "artifact": "BCF_NPI_QUESTION_BANK_v0.2",
+    "status": "REFERENCE"
+   }
+  }
+ ]
+}

@@ -1,59 +1,176 @@
 {
   "manifest_kind": "PHASE6A_VALIDATOR_MANIFEST",
-  "manifest_version": "stage2-0.1",
-  "manifest_status": "STAGE_2_ADDITIVE_PG6A04",
+  "manifest_version": "stage3e-0.3",
+  "manifest_status": "STAGE_3E_REPO_MATERIALIZED_CANDIDATE_OPTION_A",
   "not_a_clinical_ssot": true,
   "purpose": "Implementation-control artifact: binds each invariant to its normative source + deterministic predicate + gate + failure class. Does NOT define clinical rules and must not be treated as a clinical SSOT (CL-3/CL-6).",
-  "pec_reference": {"version": "PEC v1.0", "status": "FROZEN", "note": "PEC text lives in project/governance SSOT, not present as a hashable workspace file this stage; predicate normative text taken verbatim from ChatGPT Stage-1 ruling 2026-07-27."},
-  "authorized_scope": ["ReadOnlyLoader", "Artifact Manifest", "PG-6A-01", "PG-6A-02", "PG-6A-03", "Negative Tests", "Build Audit Record foundation"],
-  "execution_modes": ["DEVELOPMENT", "PRODUCTION"],
-
+  "pec_reference": {
+    "version": "PEC v1.0",
+    "status": "FROZEN",
+    "note": "PEC text lives in project/governance SSOT, not present as a hashable workspace file this stage; predicate normative text taken verbatim from ChatGPT Stage-1 ruling 2026-07-27."
+  },
+  "authorized_scope": [
+    "ReadOnlyLoader",
+    "Artifact Manifest",
+    "PG-6A-01",
+    "PG-6A-02",
+    "PG-6A-03",
+    "Negative Tests",
+    "Build Audit Record foundation"
+  ],
+  "execution_modes": [
+    "DEVELOPMENT",
+    "PRODUCTION"
+  ],
   "decisions": [
     {
       "id": "DECISION-CLASS2-ENUM",
       "status": "RESOLVED",
       "resolution": "Canonical machine token is NON_LOCALIZING_PHENOTYPE.",
-      "authority": ["BCF_DATA_DICTIONARY_v0.2.md §6.0", "BCF_L3_item_class_registry.json"],
+      "authority": [
+        "BCF_DATA_DICTIONARY_v0.2.md §6.0",
+        "BCF_L3_item_class_registry.json"
+      ],
       "clarification": "PHENOTYPE in the prior Stage-1 CL-3 ruling was a transcription shorthand, not a machine-readable item_class token. It may appear in human narrative only, never as an item_class value.",
       "migration_required": false,
       "resolved_by": "System Architect (ChatGPT) ruling 2026-07-27",
       "prior_id": "OPEN-CLASS2-ENUM"
     }
   ],
-
   "enums": {
-    "item_class_accepted": ["LOCALIZING", "NON_LOCALIZING_PHENOTYPE", "IMPACT"],
-    "item_class_normative_source": {"artifact": "BCF_DATA_DICTIONARY_v0.2.md", "section": "§6.0 line 475-476", "cross_ref": "BCF_L3_item_class_registry.json"},
-    "localizes_to_levels": ["PRIMARY", "SECONDARY", "SUPPORTIVE"],
+    "item_class_accepted": [
+      "LOCALIZING",
+      "NON_LOCALIZING_PHENOTYPE",
+      "IMPACT"
+    ],
+    "item_class_normative_source": {
+      "artifact": "BCF_DATA_DICTIONARY_v0.2.md",
+      "section": "§6.0 line 475-476",
+      "cross_ref": "BCF_L3_item_class_registry.json"
+    },
+    "localizes_to_levels": [
+      "PRIMARY",
+      "SECONDARY",
+      "SUPPORTIVE"
+    ],
     "localizes_to_level_field_name_in_artifact": "level",
     "level_field_note": "CL-1 predicate 以 'evidence_level' 稱之；KG JSON 實際欄位名為 'level'。Validator 讀 'level'。"
   },
-
   "graph_schema": {
-    "normative_source": {"artifact": "CLINICAL_KNOWLEDGE_GRAPH.md", "section": "§node/edge tables + §SUBSTRATE", "cross_ref": "BCF_Neural_Mapping_Matrix_v0.4.xlsx (16 substrate columns)"},
-    "substrate_all": ["PVES", "VNUC", "VCBL", "OMV", "cFN", "CBH", "MIDB", "PONS", "MEDU", "FEF", "PAR", "TEMP", "BG", "AUTO", "CERV", "NONLOC"],
-    "anatomical_targets": ["PVES", "VNUC", "VCBL", "OMV", "cFN", "CBH", "MIDB", "PONS", "MEDU", "FEF", "PAR", "TEMP", "BG", "AUTO", "CERV"],
+    "normative_source": {
+      "artifact": "CLINICAL_KNOWLEDGE_GRAPH.md",
+      "section": "§node/edge tables + §SUBSTRATE",
+      "cross_ref": "BCF_Neural_Mapping_Matrix_v0.4.xlsx (16 substrate columns)"
+    },
+    "substrate_all": [
+      "PVES",
+      "VNUC",
+      "VCBL",
+      "OMV",
+      "cFN",
+      "CBH",
+      "MIDB",
+      "PONS",
+      "MEDU",
+      "FEF",
+      "PAR",
+      "TEMP",
+      "BG",
+      "AUTO",
+      "CERV",
+      "NONLOC"
+    ],
+    "anatomical_targets": [
+      "PVES",
+      "VNUC",
+      "VCBL",
+      "OMV",
+      "cFN",
+      "CBH",
+      "MIDB",
+      "PONS",
+      "MEDU",
+      "FEF",
+      "PAR",
+      "TEMP",
+      "BG",
+      "AUTO",
+      "CERV"
+    ],
     "nonloc_sentinel": "NONLOC",
     "nonloc_rule": "CL-2: NONLOC 可作為 graph classification/explanatory target（schema 允許之處），但 MUST NOT 被計入 anatomical PRIMARY localization。本輪不全面禁止 LOCALIZES_TO→NONLOC edge。",
-    "domains": ["VESTIBULAR", "OCULOMOTOR", "CEREBELLAR", "COGNITIVE", "BRAINSTEM_AUTONOMIC", "DAILY_FUNCTION"],
-    "node_types": ["SYMPTOM", "DOMAIN", "SUBSTRATE", "OBJECTIVE_TEST", "TRAINING_MODULE", "DEVICE", "CLINICAL_FLAG", "MODIFIER"],
+    "domains": [
+      "VESTIBULAR",
+      "OCULOMOTOR",
+      "CEREBELLAR",
+      "COGNITIVE",
+      "BRAINSTEM_AUTONOMIC",
+      "DAILY_FUNCTION"
+    ],
+    "node_types": [
+      "SYMPTOM",
+      "DOMAIN",
+      "SUBSTRATE",
+      "OBJECTIVE_TEST",
+      "TRAINING_MODULE",
+      "DEVICE",
+      "CLINICAL_FLAG",
+      "MODIFIER"
+    ],
     "edge_types_permitted_stage1": {
-      "LOCALIZES_TO": {"from_type": "SYMPTOM", "to_type": "SUBSTRATE", "level_field": "level", "level_enum": "localizes_to_levels"},
-      "SUGGESTS": {"from_type": "SYMPTOM", "to_type": "DOMAIN"}
+      "LOCALIZES_TO": {
+        "from_type": "SYMPTOM",
+        "to_type": "SUBSTRATE",
+        "level_field": "level",
+        "level_enum": "localizes_to_levels"
+      },
+      "SUGGESTS": {
+        "from_type": "SYMPTOM",
+        "to_type": "DOMAIN"
+      }
     },
-    "edge_types_absent_until_phase6": ["VERIFIED_BY", "TREATED_BY", "DELIVERED_ON", "CONSTRAINS", "GATES"]
+    "edge_types_absent_until_phase6": [
+      "VERIFIED_BY",
+      "TREATED_BY",
+      "DELIVERED_ON",
+      "CONSTRAINS",
+      "GATES"
+    ]
   },
-
   "artifacts": [
     {
-      "artifact_id": "L3_ITEM_CLASS_REGISTRY",
-      "path": "../phase4/BCF_L3_item_class_registry.json",
+      "artifact_id": "L3_CANONICAL_WORDING_QB",
+      "path": "../qb/v1.0/BCF_QUESTION_BANK_v1.0_FROZEN.json",
       "format": "json",
-      "declared_version": "phase4-v0.4-seed",
-      "sha256": "2fd9d9f2f7c70343f264644e0f17858ed7d7c678870e6bd4fb5290fdbcc54d79",
-      "source_status": "VERIFIED_SEED_NON_RELEASE_ELIGIBLE",
-      "release_eligible": false,
-      "reason": "宣告的是 DRAFT L3 NPI Question Bank 之題目分類；在正式 frozen QB 指定前不得作為 release 輸入（CL-4）。"
+      "declared_version": "1.0-FROZEN",
+      "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6",
+      "source_status": "FROZEN_RELEASE_ELIGIBLE_WORDING_SSOT",
+      "release_eligible": true,
+      "authority_role": "PATIENT_WORDING_SSOT",
+      "permitted_uses": [
+        "PATIENT_WORDING_VALIDATION"
+      ],
+      "forbidden_uses": [],
+      "reason": "QB v1.0 FROZEN (PM APPROVED_FINAL_FREEZE 2026-07-28; SA Stage 3C CLOSED_APPROVED). Canonical patient-facing wording SSOT (Layer-A)."
+    },
+    {
+      "artifact_id": "L3_ITEM_CLASS_REGISTRY",
+      "path": "../qb/v1.0/BCF_L3_item_class_registry_v1.1.json",
+      "format": "json",
+      "declared_version": "1.1",
+      "sha256": "7911a701cc9dafcdf19409aa63d3822a4a0bf713291b75d720fe54439b5070e7",
+      "source_status": "AUTHORITY_SPLIT_RELEASE_ELIGIBLE",
+      "release_eligible": true,
+      "reason": "Registry v1.1 authority-split (Stage 3D CLOSED_APPROVED). Per-item wording_source->frozen QB, mapping_source->NPI REFERENCE. 48 item_ids + item_class preserved from seed 2fd9d9f2.",
+      "authority_role": "IDENTITY_CLASS_AUTHORITY",
+      "permitted_uses": [
+        "ITEM_ID_VALIDATION",
+        "ITEM_CLASS_VALIDATION",
+        "AUTHORITY_POINTER_VALIDATION"
+      ],
+      "forbidden_uses": [
+        "PATIENT_WORDING_VALIDATION"
+      ]
     },
     {
       "artifact_id": "L3_KNOWLEDGE_GRAPH",
@@ -63,18 +180,40 @@
       "intrinsic_version_field": "graph_version",
       "sha256": "c00b17443da296d245cbf80cfb74f698b5dd437e54bba85cea5e21420b1c5f56",
       "source_status": "PHASE4_FROZEN_BASELINE",
-      "release_eligible": true
+      "release_eligible": true,
+      "authority_role": "MAPPING_EVIDENCE",
+      "permitted_uses": [
+        "MAPPING_REFERENCE",
+        "KG_REFERENTIAL",
+        "CLASS_CONSISTENCY_EVIDENCE"
+      ],
+      "forbidden_uses": [
+        "PATIENT_WORDING_VALIDATION"
+      ]
     },
     {
-      "artifact_id": "L3_NPI_QUESTION_BANK",
+      "artifact_id": "L3_NPI_MAPPING_REFERENCE",
       "path": "../reference/BCF_NPI_QUESTION_BANK_v0.2.md",
       "format": "markdown",
       "declared_version": "v0.2",
       "sha256": "0e55936e09b70a122899dc99145130cd09a15fdc7869b4a2076291038e97d09b",
-      "source_status": "DRAFT_PINNED_RECON_FIXTURE",
+      "source_status": "DRAFT_MAPPING_REFERENCE_ONLY",
       "release_eligible": false,
-      "fixture_purpose": ["loader_dev", "schema_parsing", "negative_tests", "gate_engine", "audit_record_tests"],
-      "reason": "L3 NPI QB v0.2 為 DRAFT，僅作 Stage 1 fixture；PG-6A-01 production 判定為 FAIL / DEVELOPMENT 模式標 NON_RELEASE_ELIGIBLE（CL-4）。"
+      "fixture_purpose": [
+        "loader_dev",
+        "schema_parsing",
+        "negative_tests",
+        "gate_engine",
+        "audit_record_tests"
+      ],
+      "reason": "Stage 3E: NPI v0.2 demoted to Layer-B mapping REFERENCE only. DRAFT/non-release-eligible; MUST NOT validate patient wording, and non-eligibility MUST NOT block the Layer-A wording gate (not a claim of full mapping verification).",
+      "authority_role": "MAPPING_REFERENCE",
+      "permitted_uses": [
+        "MAPPING_REFERENCE"
+      ],
+      "forbidden_uses": [
+        "PATIENT_WORDING_VALIDATION"
+      ]
     },
     {
       "artifact_id": "DATA_DICTIONARY",
@@ -95,7 +234,6 @@
       "release_eligible": true
     }
   ],
-
   "core24_binding": {
     "artifact_id": "CORE24_V1_0",
     "path": "../core24/v1.0/BCF_Core24_v1.0.json",
@@ -105,17 +243,56 @@
     "source_status": "PHASE5_FROZEN",
     "release_eligible": true,
     "binding_note": "Core-24 is NOT a generic loader artifact; INV-CORE24-1 owns its existence/parse/hash/integrity so all integrity failures (missing/parse/hash/version/status/count/token/membership/mandatory/IMPACT) surface at INV-CORE24-1 (SA §2/§5/§7), keeping the Stage-1 loader and INV-RESOURCE-1/VERSION-1 triad untouched.",
-    "expected": {"version": "1.0", "status": "FROZEN", "authority": "Phase 5 Core-24 Clinical Content SSOT", "item_count": 24, "class_distribution": {"LOCALIZING": 22, "NON_LOCALIZING_PHENOTYPE": 2, "IMPACT": 0}, "mandatory": ["QB-L3-OCM-07", "QB-L3-CBL-01"]}
+    "expected": {
+      "version": "1.0",
+      "status": "FROZEN",
+      "authority": "Phase 5 Core-24 Clinical Content SSOT",
+      "item_count": 24,
+      "class_distribution": {
+        "LOCALIZING": 22,
+        "NON_LOCALIZING_PHENOTYPE": 2,
+        "IMPACT": 0
+      },
+      "mandatory": [
+        "QB-L3-OCM-07",
+        "QB-L3-CBL-01"
+      ]
+    }
   },
-
-  "gate_order": ["PG-6A-01", "PG-6A-02", "PG-6A-03", "PG-6A-04"],
+  "gate_order": [
+    "PG-6A-01",
+    "PG-6A-1B",
+    "PG-6A-02",
+    "PG-6A-03",
+    "PG-6A-04"
+  ],
   "gate_invariants": {
-    "PG-6A-01": ["INV-RESOURCE-1", "INV-VERSION-1"],
-    "PG-6A-02": ["INV-ID-1", "INV-META-1", "INV-CLASS-2", "INV-KG-1", "INV-KG-2"],
-    "PG-6A-03": ["INV-CLASS-1"],
-    "PG-6A-04": ["INV-CORE24-1", "INV-P5-1"]
+    "PG-6A-01": [
+      "INV-RESOURCE-1",
+      "INV-VERSION-1"
+    ],
+    "PG-6A-02": [
+      "INV-ID-1",
+      "INV-META-1",
+      "INV-CLASS-2",
+      "INV-KG-1",
+      "INV-KG-2"
+    ],
+    "PG-6A-03": [
+      "INV-CLASS-1"
+    ],
+    "PG-6A-04": [
+      "INV-CORE24-1",
+      "INV-P5-1"
+    ],
+    "PG-6A-1B": [
+      "INV-QB-RESOURCE-1",
+      "INV-REG-SPLIT-1",
+      "INV-WORDING-AUTH-1",
+      "INV-MAP-NOT-WORD-1",
+      "INV-QB-REG-IDENTITY-1"
+    ]
   },
-
   "invariants": [
     {
       "invariant_id": "INV-RESOURCE-1",
@@ -123,8 +300,17 @@
       "predicate_id": "pred_resource_present",
       "failure_class": "FATAL",
       "blocking_scope": "BUILD",
-      "normative_source": {"artifact": "PEC v1.0", "section": "§3.2 INV-RESOURCE-1 + Stage-1 ruling CL-3", "version": "1.0"},
-      "evidence_sources": ["L3_ITEM_CLASS_REGISTRY", "L3_KNOWLEDGE_GRAPH", "L3_NPI_QUESTION_BANK"],
+      "normative_source": {
+        "artifact": "PEC v1.0",
+        "section": "§3.2 INV-RESOURCE-1 + Stage-1 ruling CL-3",
+        "version": "1.0"
+      },
+      "evidence_sources": [
+        "L3_CANONICAL_WORDING_QB",
+        "L3_ITEM_CLASS_REGISTRY",
+        "L3_KNOWLEDGE_GRAPH",
+        "L3_NPI_MAPPING_REFERENCE"
+      ],
       "predicate_text": "All required artifacts exist; are readable; are regular files; match the declared content hash; and parse in the declared format."
     },
     {
@@ -133,9 +319,102 @@
       "predicate_id": "pred_version_identity",
       "failure_class": "FATAL",
       "blocking_scope": "BUILD",
-      "normative_source": {"artifact": "PEC v1.0", "section": "§3.2 INV-VERSION-1 + CL-3/CL-5", "version": "1.0"},
-      "evidence_sources": ["L3_ITEM_CLASS_REGISTRY", "L3_KNOWLEDGE_GRAPH", "L3_NPI_QUESTION_BANK"],
+      "normative_source": {
+        "artifact": "PEC v1.0",
+        "section": "§3.2 INV-VERSION-1 + CL-3/CL-5",
+        "version": "1.0"
+      },
+      "evidence_sources": [
+        "L3_CANONICAL_WORDING_QB",
+        "L3_ITEM_CLASS_REGISTRY",
+        "L3_KNOWLEDGE_GRAPH",
+        "L3_NPI_MAPPING_REFERENCE"
+      ],
       "predicate_text": "Every required artifact has a validator-resolvable version identity = declared_version + exact sha256 (manifest-supplied). Filename-only inference is insufficient."
+    },
+    {
+      "invariant_id": "INV-QB-RESOURCE-1",
+      "gate": "PG-6A-1B",
+      "predicate_id": "pred_qb_resource",
+      "failure_class": "FATAL",
+      "blocking_scope": "BUILD",
+      "normative_source": {
+        "artifact": "SA Stage 3E plan",
+        "section": "§C INV-QB-RESOURCE-1",
+        "version": "3E"
+      },
+      "evidence_sources": [
+        "L3_CANONICAL_WORDING_QB"
+      ],
+      "predicate_text": "Frozen QB hash matches manifest (loader-verified); status FROZEN; release_eligible true; item_count 48; authority_role PATIENT_WORDING_SSOT. HARD_FAIL otherwise."
+    },
+    {
+      "invariant_id": "INV-REG-SPLIT-1",
+      "gate": "PG-6A-1B",
+      "predicate_id": "pred_registry_authority_split",
+      "failure_class": "FATAL",
+      "blocking_scope": "BUILD",
+      "normative_source": {
+        "artifact": "SA Stage 3E plan",
+        "section": "§C INV-REG-SPLIT-1",
+        "version": "3E"
+      },
+      "evidence_sources": [
+        "L3_ITEM_CLASS_REGISTRY",
+        "L3_CANONICAL_WORDING_QB"
+      ],
+      "predicate_text": "Registry v1.1 hash matches; 48 unique items; every item has wording_source AND mapping_source; every wording_source points to the frozen QB artifact+sha256; every mapping_source is REFERENCE to the authorized NPI artifact. HARD_FAIL otherwise."
+    },
+    {
+      "invariant_id": "INV-WORDING-AUTH-1",
+      "gate": "PG-6A-1B",
+      "predicate_id": "pred_patient_wording_authority",
+      "failure_class": "FATAL",
+      "blocking_scope": "BUILD",
+      "normative_source": {
+        "artifact": "SA Stage 3E plan",
+        "section": "§C INV-WORDING-AUTH-1",
+        "version": "3E"
+      },
+      "evidence_sources": [
+        "L3_CANONICAL_WORDING_QB",
+        "L3_ITEM_CLASS_REGISTRY"
+      ],
+      "predicate_text": "Patient wording is read-only from the frozen QB; the Registry holds only an authority POINTER, never a duplicate copy of patient wording. HARD_FAIL otherwise."
+    },
+    {
+      "invariant_id": "INV-MAP-NOT-WORD-1",
+      "gate": "PG-6A-1B",
+      "predicate_id": "pred_mapping_not_wording",
+      "failure_class": "FATAL",
+      "blocking_scope": "BUILD",
+      "normative_source": {
+        "artifact": "SA Stage 3E plan",
+        "section": "§C INV-MAP-NOT-WORD-1",
+        "version": "3E"
+      },
+      "evidence_sources": [
+        "L3_NPI_MAPPING_REFERENCE",
+        "L3_CANONICAL_WORDING_QB"
+      ],
+      "predicate_text": "Mapping reference never used as a wording source; forbidden_uses contains PATIENT_WORDING_VALIDATION and permitted_uses does not; wording_evidence_sources is exactly the frozen QB. HARD_FAIL otherwise."
+    },
+    {
+      "invariant_id": "INV-QB-REG-IDENTITY-1",
+      "gate": "PG-6A-1B",
+      "predicate_id": "pred_qb_registry_identity",
+      "failure_class": "FATAL",
+      "blocking_scope": "BUILD",
+      "normative_source": {
+        "artifact": "SA Stage 3E plan",
+        "section": "§C INV-QB-REG-IDENTITY-1",
+        "version": "3E"
+      },
+      "evidence_sources": [
+        "L3_CANONICAL_WORDING_QB",
+        "L3_ITEM_CLASS_REGISTRY"
+      ],
+      "predicate_text": "Frozen QB item_ids equal Registry v1.1 item_ids (48/48 set equality); item_class matches 48/48. HARD_FAIL otherwise."
     },
     {
       "invariant_id": "INV-ID-1",
@@ -143,8 +422,14 @@
       "predicate_id": "pred_unique_id",
       "failure_class": "FATAL",
       "blocking_scope": "BUILD",
-      "normative_source": {"artifact": "PEC v1.0", "section": "§3.2 INV-ID-1 + CL-3", "version": "1.0"},
-      "evidence_sources": ["L3_ITEM_CLASS_REGISTRY"],
+      "normative_source": {
+        "artifact": "PEC v1.0",
+        "section": "§3.2 INV-ID-1 + CL-3",
+        "version": "1.0"
+      },
+      "evidence_sources": [
+        "L3_ITEM_CLASS_REGISTRY"
+      ],
       "predicate_text": "Every governed entity in its declared namespace has a non-empty identifier, exactly one occurrence, no collision after canonical parsing. NO invented ID naming regex."
     },
     {
@@ -154,8 +439,15 @@
       "failure_class": "FATAL",
       "blocking_scope": "BUILD",
       "production_complete": false,
-      "normative_source": {"artifact": "PEC v1.0", "section": "§3.2 INV-META-1 + CL-7", "version": "1.0"},
-      "evidence_sources": ["L3_ITEM_CLASS_REGISTRY", "phase6a_required_metadata_manifest.json"],
+      "normative_source": {
+        "artifact": "PEC v1.0",
+        "section": "§3.2 INV-META-1 + CL-7",
+        "version": "1.0"
+      },
+      "evidence_sources": [
+        "L3_ITEM_CLASS_REGISTRY",
+        "phase6a_required_metadata_manifest.json"
+      ],
       "predicate_text": "Every governed item contains all REQUIRED metadata fields per approved metadata manifest (key exists; not null; declared type; enum if specified). Stage 1: engine + fixture only; NOT production-complete until metadata manifest approved (CL-7 rule 5)."
     },
     {
@@ -164,8 +456,14 @@
       "predicate_id": "pred_item_class_enum",
       "failure_class": "FATAL",
       "blocking_scope": "BUILD",
-      "normative_source": {"artifact": "BCF_DATA_DICTIONARY_v0.2.md", "section": "§6.0 line 475-476", "version": "v0.2"},
-      "evidence_sources": ["L3_ITEM_CLASS_REGISTRY"],
+      "normative_source": {
+        "artifact": "BCF_DATA_DICTIONARY_v0.2.md",
+        "section": "§6.0 line 475-476",
+        "version": "v0.2"
+      },
+      "evidence_sources": [
+        "L3_ITEM_CLASS_REGISTRY"
+      ],
       "predicate_text": "item_class must exactly equal one accepted enum value. Aliases, spelling variants, lowercase normalization and silent repair prohibited. See DECISION-CLASS2-ENUM (RESOLVED: canonical token NON_LOCALIZING_PHENOTYPE)."
     },
     {
@@ -174,8 +472,15 @@
       "predicate_id": "pred_kg_referential",
       "failure_class": "FATAL",
       "blocking_scope": "BUILD",
-      "normative_source": {"artifact": "PEC v1.0", "section": "§3.2 INV-KG-1 + CL-3", "version": "1.0"},
-      "evidence_sources": ["L3_KNOWLEDGE_GRAPH", "L3_ITEM_CLASS_REGISTRY"],
+      "normative_source": {
+        "artifact": "PEC v1.0",
+        "section": "§3.2 INV-KG-1 + CL-3",
+        "version": "1.0"
+      },
+      "evidence_sources": [
+        "L3_KNOWLEDGE_GRAPH",
+        "L3_ITEM_CLASS_REGISTRY"
+      ],
       "predicate_text": "Every edge source and target resolves to exactly one declared node or governed entity. Dangling/ambiguous/duplicate endpoint resolution is FATAL."
     },
     {
@@ -184,8 +489,14 @@
       "predicate_id": "pred_kg_schema",
       "failure_class": "FATAL",
       "blocking_scope": "BUILD",
-      "normative_source": {"artifact": "CLINICAL_KNOWLEDGE_GRAPH.md", "section": "§edge/node tables + CL-2/CL-3", "version": "phase4"},
-      "evidence_sources": ["L3_KNOWLEDGE_GRAPH"],
+      "normative_source": {
+        "artifact": "CLINICAL_KNOWLEDGE_GRAPH.md",
+        "section": "§edge/node tables + CL-2/CL-3",
+        "version": "phase4"
+      },
+      "evidence_sources": [
+        "L3_KNOWLEDGE_GRAPH"
+      ],
       "predicate_text": "Every node type, edge type and source-target combination must be permitted by the frozen KG schema. Unsupported combinations rejected, not silently dropped. NONLOC allowed as target where schema permits, never counted as anatomical PRIMARY (CL-2)."
     },
     {
@@ -194,8 +505,15 @@
       "predicate_id": "pred_class_consistency_bidirectional",
       "failure_class": "FATAL",
       "blocking_scope": "BUILD",
-      "normative_source": {"artifact": "BCF_DATA_DICTIONARY_v0.2.md", "section": "§2 line 89 + §6.0 line 480 + CL-1", "version": "v0.2"},
-      "evidence_sources": ["L3_ITEM_CLASS_REGISTRY", "L3_KNOWLEDGE_GRAPH"],
+      "normative_source": {
+        "artifact": "BCF_DATA_DICTIONARY_v0.2.md",
+        "section": "§2 line 89 + §6.0 line 480 + CL-1",
+        "version": "v0.2"
+      },
+      "evidence_sources": [
+        "L3_ITEM_CLASS_REGISTRY",
+        "L3_KNOWLEDGE_GRAPH"
+      ],
       "predicate_text": "BIDIRECTIONAL. (A) Declared LOCALIZING => >=1 anatomical LOCALIZES_TO edge with level==PRIMARY (target in anatomical_targets, excluding NONLOC). (B) Has >=1 anatomical PRIMARY => must be declared LOCALIZING. NONLOC PRIMARY never qualifies (CL-1/CL-2)."
     },
     {
@@ -204,8 +522,15 @@
       "predicate_id": "pred_core24_integrity",
       "failure_class": "FATAL",
       "blocking_scope": "BUILD",
-      "normative_source": {"artifact": "BCF_Core24_v1.0.json + BCF_Core24_Freeze_Record_v1.0.md", "section": "Core-24 frozen manifest", "version": "1.0"},
-      "evidence_sources": ["CORE24_V1_0", "L3_ITEM_CLASS_REGISTRY"],
+      "normative_source": {
+        "artifact": "BCF_Core24_v1.0.json + BCF_Core24_Freeze_Record_v1.0.md",
+        "section": "Core-24 frozen manifest",
+        "version": "1.0"
+      },
+      "evidence_sources": [
+        "CORE24_V1_0",
+        "L3_ITEM_CLASS_REGISTRY"
+      ],
       "expected_ref": "core24_binding.expected + core24_binding.frozen_sha256",
       "predicate_text": "Frozen Core-24 build-artifact integrity: exists/readable/parseable; frozen_sha256 match; version==1.0; status==FROZEN; authority match; item_count==24; unique IDs; all IDs exist in Registry; canonical item_class only; class distribution 22/2/0; mandatory OCM-07/CBL-01 present; no IMPACT item. Build artifact integrity, NOT a clinical rule (SA §2)."
     },
@@ -215,10 +540,68 @@
       "predicate_id": "pred_core24_coverage_preservation",
       "failure_class": "FATAL",
       "blocking_scope": "BUILD",
-      "normative_source": {"artifact": "BCF_DATA_DICTIONARY_v0.2.md", "section": "§2 (INV-P5-1 coverage preservation)", "version": "v0.2"},
-      "evidence_sources": ["CORE24_V1_0", "L3_KNOWLEDGE_GRAPH", "L3_ITEM_CLASS_REGISTRY"],
-      "exceptions": ["BG", "CERV"],
+      "normative_source": {
+        "artifact": "BCF_DATA_DICTIONARY_v0.2.md",
+        "section": "§2 (INV-P5-1 coverage preservation)",
+        "version": "v0.2"
+      },
+      "evidence_sources": [
+        "CORE24_V1_0",
+        "L3_KNOWLEDGE_GRAPH",
+        "L3_ITEM_CLASS_REGISTRY"
+      ],
+      "exceptions": [
+        "BG",
+        "CERV"
+      ],
       "predicate_text": "Coverage preservation ONLY: for each anatomical substrate S, if Phase-4 baseline PRIMARY coverage(S) > 0 AND Core-24 PRIMARY coverage(S) == 0 AND S not in {BG,CERV}, then FAIL. Coverage RECOMPUTED from frozen KG (must NOT trust Core-24 manifest coverage_primary). Prohibited: domain balance, importance scoring, phenotype preference, sole-coverage rules, secondary/supportive coverage, severity, runtime mapping (SA §2)."
     }
-  ]
+  ],
+  "stage3e_note": "Stage 3E validator binding re-applied onto the verified Stage-2 base (validator 3e596755 / manifest da1dc6ed). PRESERVES core24_binding + PG-6A-04 (INV-CORE24-1 + INV-P5-1) unchanged; ADDS frozen-QB wording SSOT + Registry v1.1 authority split + NPI mapping-reference-only + PG-6A-1B (5 invariants) + capability-scoped fail-closed resource_status. Bare-filename paths = WORKSPACE variant; a repo-relative path-only derivative is produced separately for materialization. NO clinical/mapping/Core-24 content change; formal PG rerun NOT executed; PG-6A-FINAL BLOCKED.",
+  "authority_binding": {
+    "stage": "Phase 6A Stage 3E",
+    "patient_wording_validation_source": {
+      "artifact_id": "L3_CANONICAL_WORDING_QB",
+      "path": "../qb/v1.0/BCF_QUESTION_BANK_v1.0_FROZEN.json",
+      "sha256": "cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6"
+    },
+    "registry_authority_source": {
+      "artifact_id": "L3_ITEM_CLASS_REGISTRY",
+      "path": "../qb/v1.0/BCF_L3_item_class_registry_v1.1.json",
+      "sha256": "7911a701cc9dafcdf19409aa63d3822a4a0bf713291b75d720fe54439b5070e7"
+    },
+    "mapping_reference": {
+      "artifact_id": "L3_NPI_MAPPING_REFERENCE",
+      "path": "../reference/BCF_NPI_QUESTION_BANK_v0.2.md",
+      "sha256": "0e55936e09b70a122899dc99145130cd09a15fdc7869b4a2076291038e97d09b",
+      "permitted_use": "MAPPING_REFERENCE_ONLY",
+      "forbidden_use": "PATIENT_WORDING_VALIDATION"
+    },
+    "wording_evidence_sources": [
+      "L3_CANONICAL_WORDING_QB"
+    ],
+    "identity_class_evidence_sources": [
+      "L3_ITEM_CLASS_REGISTRY"
+    ],
+    "mapping_evidence_sources": [
+      "L3_ITEM_CLASS_REGISTRY",
+      "L3_KNOWLEDGE_GRAPH",
+      "L3_NPI_MAPPING_REFERENCE"
+    ],
+    "wording_release_gate": {
+      "requires_release_eligible": [
+        "L3_CANONICAL_WORDING_QB",
+        "L3_ITEM_CLASS_REGISTRY"
+      ]
+    },
+    "mapping_release_gate": {
+      "status": "DEFERRED_OR_SEPARATE",
+      "must_not_block_wording_binding": [
+        "L3_NPI_MAPPING_REFERENCE"
+      ],
+      "note": "NPI v0.2 DRAFT mapping reference; non-eligibility must not block Layer-A wording gate and is not a claim of full mapping verification."
+    },
+    "rule": "validator MUST NOT use mapping_source / mapping_reference to validate patient wording"
+  },
+  "repo_layout_note": "Option A (bcf/qb/v1.0/). Materialized = tested workspace Stage 3E manifest with repo-relative paths; preserves 648860b1 Stage-2 blocks. CANDIDATE — not committed."
 }

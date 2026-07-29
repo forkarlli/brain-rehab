@@ -43,6 +43,20 @@ def _safe_sha(path):
         return None
 
 
+def _logical_artifact_name(path, *, strip_extension=False):
+    """Logical artifact NAME (basename) for registry-pointer identity comparison ONLY (SA fix A,
+    2026-07-28). A manifest `path` is a filesystem location (repo-relative loader path); the frozen
+    Registry v1.1 `wording_source.artifact` / `mapping_source.artifact` are LOGICAL artifact names.
+    The two must not be compared as raw strings (repo-relative path != basename). This normalization is
+    used solely for the pointer-identity check: loading + integrity always use the full repo-relative
+    path + exact sha256 (ReadOnlyLoader). NEVER used for loading, and never enables basename-only
+    loading or fallback search — so it does not weaken fail-closed behavior."""
+    name = os.path.basename(os.path.normpath(path))
+    if strip_extension:
+        name = os.path.splitext(name)[0]
+    return name
+
+
 def find_duplicate_keys(raw):
     """Detect duplicate object keys at any level (json.loads would otherwise collapse them)."""
     dups = []
@@ -127,11 +141,16 @@ class ReadOnlyLoader:
 def pred_resource_present(ctx):
     findings = list(ctx["loader_findings"])
     if ctx["execution_mode"] == "PRODUCTION":
-        for a in ctx["manifest"]["artifacts"]:
-            if a["artifact_id"] in ("L3_ITEM_CLASS_REGISTRY", "L3_KNOWLEDGE_GRAPH", "L3_NPI_QUESTION_BANK") \
-               and a.get("release_eligible") is not True:
-                findings.append(_f(R_FAIL, FC_FATAL, a["artifact_id"], a.get("source_status"), "RELEASE_ELIGIBLE",
-                                   "PRODUCTION: %s is NON_RELEASE_ELIGIBLE; frozen SSOT not designated (CL-4)." % a["artifact_id"]))
+        # Stage 3E: capability-scoped. Only the wording_release_gate artifacts (frozen QB + Registry v1.1)
+        # must be release-eligible; the DRAFT NPI mapping reference must NOT block the wording gate.
+        amap = {a["artifact_id"]: a for a in ctx["manifest"]["artifacts"]}
+        wording_req = ctx["manifest"].get("authority_binding", {}).get("wording_release_gate", {}) \
+            .get("requires_release_eligible", ["L3_CANONICAL_WORDING_QB", "L3_ITEM_CLASS_REGISTRY"])
+        for aid in wording_req:
+            a = amap.get(aid, {})
+            if a.get("release_eligible") is not True:
+                findings.append(_f(R_FAIL, FC_FATAL, aid, a.get("source_status"), "RELEASE_ELIGIBLE",
+                                   "PRODUCTION: wording_release_gate artifact %s is NON_RELEASE_ELIGIBLE (CL-4)." % aid))
     if not findings:
         return [_f(R_PASS, FC_FATAL, "*", "all_loaded", "all_loaded", "all required artifacts present, hash-verified, parsed")]
     return findings
@@ -139,7 +158,9 @@ def pred_resource_present(ctx):
 
 def pred_version_identity(ctx):
     findings = []
-    required = ("L3_ITEM_CLASS_REGISTRY", "L3_KNOWLEDGE_GRAPH", "L3_NPI_QUESTION_BANK")
+    # every bound artifact must carry a resolvable version identity (declared_version + sha256);
+    # derived from the manifest so the predicate is binding-agnostic (works for any manifest).
+    required = tuple(a["artifact_id"] for a in ctx["manifest"]["artifacts"])
     amap = {a["artifact_id"]: a for a in ctx["manifest"]["artifacts"]}
     for aid in required:
         a = amap.get(aid)
@@ -168,6 +189,18 @@ def pred_unique_id(ctx):
     for k in dups:
         if k in declared:
             findings.append(_f(R_FAIL, FC_FATAL, k, "duplicate", "single_occurrence", "duplicate item id '%s' in registry" % k))
+    # Stage 3E: authority-split Registry v1.1 stores items in an array; JSON-key dup detection cannot
+    # catch a repeated item_id VALUE across array objects, so check the array explicitly.
+    reg_items = ctx.get("registry_items")
+    if reg_items is not None:
+        seen = {}
+        for it in reg_items:
+            iid = it.get("item_id")
+            seen[iid] = seen.get(iid, 0) + 1
+        for iid, n in seen.items():
+            if n > 1:
+                findings.append(_f(R_FAIL, FC_FATAL, iid, "%d occurrences" % n, "single_occurrence",
+                                   "duplicate item id '%s' in Registry v1.1 items[]" % iid))
     for iid in declared.keys():
         if iid is None or str(iid).strip() == "":
             findings.append(_f(R_FAIL, FC_FATAL, repr(iid), "empty", "non_empty", "empty item id"))
@@ -438,6 +471,146 @@ def pred_core24_coverage_preservation(ctx):
     return [f]
 
 
+# ------------------------- Stage 3E authority-binding predicates (PG-6A-1B) -------------------------
+# Additive: none of the Stage-1/Stage-2 predicates (incl. Core-24) are changed.
+
+def _amap(ctx):
+    return {a["artifact_id"]: a for a in ctx["manifest"]["artifacts"]}
+
+
+def pred_qb_resource(ctx):
+    """INV-QB-RESOURCE-1: frozen QB is the release-eligible wording SSOT (hash loader-verified),
+    status FROZEN, release_eligible True, item_count 48, authority_role PATIENT_WORDING_SSOT."""
+    qb = ctx.get("frozen_qb"); a = _amap(ctx).get("L3_CANONICAL_WORDING_QB")
+    if qb is None or a is None:
+        return [_f(R_FAIL, FC_FATAL, "L3_CANONICAL_WORDING_QB", "unloaded/unbound", "loaded+bound",
+                   "frozen QB not loaded or not bound in manifest")]
+    findings = []
+    if qb.get("status") != "FROZEN":
+        findings.append(_f(R_FAIL, FC_FATAL, "L3_CANONICAL_WORDING_QB", qb.get("status"), "FROZEN", "frozen QB status is not FROZEN"))
+    if a.get("release_eligible") is not True:
+        findings.append(_f(R_FAIL, FC_FATAL, "L3_CANONICAL_WORDING_QB", a.get("release_eligible"), True, "frozen QB not release_eligible in manifest"))
+    n = len(qb.get("items", []))
+    if n != 48:
+        findings.append(_f(R_FAIL, FC_FATAL, "L3_CANONICAL_WORDING_QB", n, 48, "frozen QB item_count != 48"))
+    if a.get("authority_role") != "PATIENT_WORDING_SSOT":
+        findings.append(_f(R_FAIL, FC_FATAL, "L3_CANONICAL_WORDING_QB", a.get("authority_role"), "PATIENT_WORDING_SSOT", "frozen QB authority_role wrong"))
+    if not findings:
+        return [_f(R_PASS, FC_FATAL, "L3_CANONICAL_WORDING_QB", "FROZEN/48/release-eligible", "wording SSOT bound",
+                   "frozen QB is the hash-verified, release-eligible patient-wording SSOT (48 items)")]
+    return findings
+
+
+def pred_registry_authority_split(ctx):
+    """INV-REG-SPLIT-1: Registry v1.1 has 48 unique items; every item has wording_source AND
+    mapping_source; every wording_source points to the frozen QB artifact+sha256; every
+    mapping_source is a REFERENCE to the authorized NPI mapping artifact."""
+    items = ctx.get("registry_items"); a = _amap(ctx).get("L3_CANONICAL_WORDING_QB")
+    if items is None:
+        return [_f(R_FAIL, FC_FATAL, "L3_ITEM_CLASS_REGISTRY", "no items[]", "authority-split v1.1",
+                   "Registry is not authority-split (no items[]); Stage 3E requires Registry v1.1")]
+    qb_sha = (a or {}).get("sha256")
+    # Expected authority artifacts DERIVED from manifest authority_binding as LOGICAL artifact NAMES
+    # (SA fix A 2026-07-28): compare logical basenames, never raw repo-relative paths vs the frozen
+    # Registry's basename pointers. Loading/integrity still uses the full repo-relative path + sha256.
+    ab = ctx["manifest"].get("authority_binding", {})
+    exp_wording_artifact = _logical_artifact_name(
+        ab.get("patient_wording_validation_source", {}).get("path") or "BCF_QUESTION_BANK_v1.0_FROZEN.json")
+    exp_mapping_artifact = _logical_artifact_name(
+        ab.get("mapping_reference", {}).get("path") or "BCF_NPI_QUESTION_BANK_v0.2.md", strip_extension=True)
+    findings = []
+    ids = [it.get("item_id") for it in items]
+    if len(items) != 48 or len(set(ids)) != 48:
+        findings.append(_f(R_FAIL, FC_FATAL, "L3_ITEM_CLASS_REGISTRY", "%d items / %d unique" % (len(items), len(set(ids))),
+                           "48/48", "Registry v1.1 is not 48 unique items"))
+    for it in items:
+        iid = it.get("item_id")
+        ws = it.get("wording_source"); ms = it.get("mapping_source")
+        if not isinstance(ws, dict) or ws.get("artifact") != exp_wording_artifact or ws.get("sha256") != qb_sha:
+            findings.append(_f(R_FAIL, FC_FATAL, iid, ws, "wording_source->%s sha256 %s" % (exp_wording_artifact, (qb_sha or "?")[:12]),
+                               "item %s wording_source not bound to the authorized frozen QB" % iid))
+        if not isinstance(ms, dict) or ms.get("status") != "REFERENCE" or ms.get("artifact") != exp_mapping_artifact:
+            findings.append(_f(R_FAIL, FC_FATAL, iid, ms, "mapping_source->%s status=REFERENCE" % exp_mapping_artifact,
+                               "item %s mapping_source not a REFERENCE to the authorized NPI mapping reference" % iid))
+    if not findings:
+        return [_f(R_PASS, FC_FATAL, "*", "48/48 wording_source+mapping_source", "authority-split",
+                   "Registry v1.1 authority-split valid: wording_source->frozen QB, mapping_source=REFERENCE->authorized NPI")]
+    return findings
+
+
+def pred_patient_wording_authority(ctx):
+    """INV-WORDING-AUTH-1: patient wording read-only from frozen QB; Registry holds a POINTER, never a
+    duplicated copy of patient wording."""
+    items = ctx.get("registry_items"); qb = ctx.get("frozen_qb")
+    if items is None or qb is None:
+        return [_f(R_FAIL, FC_FATAL, "wording_authority", "unloaded", "loaded", "Registry v1.1 / frozen QB not loaded")]
+    findings = []
+    wording_fields = ("patient_wording_zh", "patient_wording", "wording", "zh", "label_en", "stem", "text")
+    for it in items:
+        embedded = [k for k in wording_fields if k in it]
+        if embedded:
+            findings.append(_f(R_FAIL, FC_FATAL, it.get("item_id"), "embeds %s" % embedded, "pointer only",
+                               "Registry item %s embeds patient wording (must be a pointer, not a copy)" % it.get("item_id")))
+    if not all("patient_wording_zh" in i for i in qb.get("items", [])):
+        findings.append(_f(R_FAIL, FC_FATAL, "L3_CANONICAL_WORDING_QB", "missing patient_wording_zh", "present on all items",
+                           "frozen QB items missing patient_wording_zh (wording SSOT must hold the wording)"))
+    if not findings:
+        return [_f(R_PASS, FC_FATAL, "*", "pointer-only registry / wording in frozen QB", "read-only from frozen QB",
+                   "patient wording sourced only from frozen QB; Registry holds pointers, no duplicated wording")]
+    return findings
+
+
+def pred_mapping_not_wording(ctx):
+    """INV-MAP-NOT-WORD-1: mapping reference is never a wording source; its forbidden_uses contains
+    PATIENT_WORDING_VALIDATION (and permitted_uses does not); wording_evidence_sources is exactly the
+    frozen QB, never the mapping reference."""
+    npi = _amap(ctx).get("L3_NPI_MAPPING_REFERENCE")
+    ab = ctx["manifest"].get("authority_binding", {})
+    findings = []
+    if npi is None:
+        findings.append(_f(R_FAIL, FC_FATAL, "L3_NPI_MAPPING_REFERENCE", "unbound", "bound as mapping reference",
+                           "NPI mapping reference not bound in manifest"))
+    else:
+        if "PATIENT_WORDING_VALIDATION" not in npi.get("forbidden_uses", []):
+            findings.append(_f(R_FAIL, FC_FATAL, "L3_NPI_MAPPING_REFERENCE", npi.get("forbidden_uses"),
+                               "forbidden_uses contains PATIENT_WORDING_VALIDATION", "NPI forbidden_uses missing PATIENT_WORDING_VALIDATION"))
+        if "PATIENT_WORDING_VALIDATION" in npi.get("permitted_uses", []):
+            findings.append(_f(R_FAIL, FC_FATAL, "L3_NPI_MAPPING_REFERENCE", npi.get("permitted_uses"),
+                               "permitted_uses excludes PATIENT_WORDING_VALIDATION", "NPI permitted_uses must not include PATIENT_WORDING_VALIDATION"))
+    wes = ab.get("wording_evidence_sources")
+    if wes != ["L3_CANONICAL_WORDING_QB"]:
+        findings.append(_f(R_FAIL, FC_FATAL, "wording_evidence_sources", wes, "['L3_CANONICAL_WORDING_QB']",
+                           "wording_evidence_sources must be exactly the frozen QB (never the mapping reference)"))
+    if not findings:
+        return [_f(R_PASS, FC_FATAL, "*", "mapping-reference != wording-source", "separated",
+                   "mapping reference forbidden for patient-wording validation; wording bound only to frozen QB")]
+    return findings
+
+
+def pred_qb_registry_identity(ctx):
+    """INV-QB-REG-IDENTITY-1: frozen QB item_ids == Registry v1.1 item_ids (48/48 set equality);
+    item_class matches 48/48."""
+    items = ctx.get("registry_items"); qb = ctx.get("frozen_qb")
+    if items is None or qb is None:
+        return [_f(R_FAIL, FC_FATAL, "qb_registry_identity", "unloaded", "loaded", "Registry v1.1 / frozen QB not loaded")]
+    reg_class = {it.get("item_id"): it.get("item_class") for it in items}
+    qb_class = {i.get("item_id"): i.get("item_class") for i in qb.get("items", [])}
+    reg_ids = set(reg_class); qb_ids = set(qb_class)
+    findings = []
+    if reg_ids != qb_ids:
+        findings.append(_f(R_FAIL, FC_FATAL, "*", "reg_only=%s qb_only=%s" % (sorted(reg_ids - qb_ids), sorted(qb_ids - reg_ids)),
+                           "identical 48 id sets", "frozen QB / Registry item_id sets differ"))
+    else:
+        mm = [i for i in reg_ids if reg_class[i] != qb_class[i]]
+        if mm:
+            findings.append(_f(R_FAIL, FC_FATAL, "*", "class mismatch %s" % mm, "48/48 item_class match",
+                               "frozen QB / Registry item_class mismatch"))
+    if not findings:
+        return [_f(R_PASS, FC_FATAL, "*", "48/48 id+class identical", "identical",
+                   "frozen QB and Registry v1.1 share identical 48 item_ids + item_class")]
+    return findings
+
+
 PREDICATES = {
     "pred_resource_present": pred_resource_present,
     "pred_version_identity": pred_version_identity,
@@ -449,6 +622,11 @@ PREDICATES = {
     "pred_class_consistency_bidirectional": pred_class_consistency_bidirectional,
     "pred_core24_integrity": pred_core24_integrity,
     "pred_core24_coverage_preservation": pred_core24_coverage_preservation,
+    "pred_qb_resource": pred_qb_resource,
+    "pred_registry_authority_split": pred_registry_authority_split,
+    "pred_patient_wording_authority": pred_patient_wording_authority,
+    "pred_mapping_not_wording": pred_mapping_not_wording,
+    "pred_qb_registry_identity": pred_qb_registry_identity,
 }
 
 
@@ -481,10 +659,23 @@ def run_validation(manifest_path, metadata_manifest_path, base_dir,
     loader = ReadOnlyLoader(base_dir, manifest["artifacts"])
     loader_findings = loader.load_all()
 
+    # Stage 3E: normalize the authority-split Registry v1.1 (items[]) into a backward-compatible
+    # `declared` (item_id -> item_class) view so existing identity/class/KG/Core-24 predicates run
+    # unchanged, while exposing the raw items[] for the new authority-split invariants. No content altered.
+    reg_parsed = loader.parsed.get("L3_ITEM_CLASS_REGISTRY")
+    reg_items = None
+    if isinstance(reg_parsed, dict) and "items" in reg_parsed and "declared" not in reg_parsed:
+        reg_items = reg_parsed.get("items") or []
+        reg_norm = dict(reg_parsed)
+        reg_norm["declared"] = {it.get("item_id"): it.get("item_class") for it in reg_items}
+        reg_parsed = reg_norm
+
     ctx = {
         "manifest": manifest, "metadata_manifest": metadata_manifest,
         "loader_findings": loader_findings, "execution_mode": execution_mode,
-        "registry": loader.parsed.get("L3_ITEM_CLASS_REGISTRY"),
+        "registry": reg_parsed,
+        "registry_items": reg_items,
+        "frozen_qb": loader.parsed.get("L3_CANONICAL_WORDING_QB"),
         "kg": loader.parsed.get("L3_KNOWLEDGE_GRAPH"),
         "raw": loader.raw,
         "base_dir": base_dir,
@@ -545,17 +736,46 @@ def run_validation(manifest_path, metadata_manifest_path, base_dir,
     # (unchanged=None) is not a violation, so it does not force all_unchanged False, but a False does.
     all_unchanged = all(u["unchanged"] is True for u in unchanged if u["unchanged"] is not None)
 
-    # resource / release eligibility (CL-4): never RELEASE_ELIGIBLE while DRAFT inputs present
-    req_ids = ("L3_ITEM_CLASS_REGISTRY", "L3_KNOWLEDGE_GRAPH", "L3_NPI_QUESTION_BANK")
+    # Stage 3E: capability-scoped, FAIL-CLOSED resource status. Separate the governance DECLARATION
+    # (manifest release_eligible booleans) from the VALIDATED status. A declared-eligible resource is
+    # only RELEASE_ELIGIBLE_VALIDATED if the integrity/authority gates actually PASSED and no source
+    # changed; any hash mismatch / missing / parse error / authority failure => INVALID_RESOURCE. Never
+    # emit an eligible label on a failed run (PEC: no silent failure, fail-closed).
     amap = {a["artifact_id"]: a for a in manifest["artifacts"]}
-    release_eligible_inputs = all(amap.get(a, {}).get("release_eligible") is True for a in req_ids)
-    resource_status = "RELEASE_ELIGIBLE" if release_eligible_inputs else "NON_RELEASE_ELIGIBLE"
+    ab = manifest.get("authority_binding", {})
+    wording_req = ab.get("wording_release_gate", {}).get("requires_release_eligible",
+                                                         ["L3_CANONICAL_WORDING_QB", "L3_ITEM_CLASS_REGISTRY"])
+    wording_declared_eligible = all(amap.get(a, {}).get("release_eligible") is True for a in wording_req)
+    _req_gates = [g for g in ("PG-6A-01", "PG-6A-1B") if g in set(manifest["gate_order"])]
+    required_integrity_ok = all(gate_results.get(g) == R_PASS for g in _req_gates) and all_unchanged
+    if not required_integrity_ok:
+        resource_status = "INVALID_RESOURCE"
+    elif wording_declared_eligible:
+        resource_status = "RELEASE_ELIGIBLE_VALIDATED"
+    else:
+        resource_status = "NON_RELEASE_ELIGIBLE"
+    wording_release_eligible = (resource_status == "RELEASE_ELIGIBLE_VALIDATED")
+    mapping_gate_status = ab.get("mapping_release_gate", {}).get("status", "DEFERRED_OR_SEPARATE")
+    authority_binding_status = {
+        "wording_release_gate": {"requires_release_eligible": wording_req,
+                                 "declared_eligible": wording_declared_eligible,
+                                 "integrity_ok": required_integrity_ok,
+                                 "validated_release_eligible": wording_release_eligible},
+        "mapping_release_gate": {"status": mapping_gate_status,
+                                 "note": "NPI mapping content NOT production-released; does not block wording gate; not a claim of full mapping verification"},
+        "patient_wording_validation_source": ab.get("patient_wording_validation_source"),
+        "registry_authority_source": ab.get("registry_authority_source"),
+        "mapping_reference": ab.get("mapping_reference"),
+    }
 
-    # PG-6A-FINAL: Stage 1 only implements 01/02/03 -> FINAL is structurally BLOCKED (never green).
+    # PG-6A-FINAL: structurally BLOCKED (PG-6A-05/06 not implemented/authorized; formal PG rerun not
+    # authorized in this workspace reconstruction). Capability-scoped wording eligibility does NOT unblock.
     final_reasons = []
-    if not release_eligible_inputs:
-        final_reasons.append("inputs NON_RELEASE_ELIGIBLE (DRAFT QB / seed registry; frozen SSOT not designated, CL-4)")
-    final_reasons.append("PG-6A-05 / PG-6A-06 not implemented or not authorized this stage")
+    if not wording_release_eligible:
+        final_reasons.append("wording_release_gate not validated-eligible: resource_status=%s (declared_eligible=%s, integrity_ok=%s)"
+                             % (resource_status, wording_declared_eligible, required_integrity_ok))
+    final_reasons.append("PG-6A-05 / PG-6A-06 not implemented or not authorized this stage; formal PG-6A-01~04 rerun NOT executed")
+    final_reasons.append("mapping_release_gate=%s (NPI mapping content not production-released; does not block wording gate)" % mapping_gate_status)
     if not all_unchanged:
         final_reasons.append("source artifact changed during validation (read-only violation)")
     pg_final = {"status": "BLOCKED", "release_eligible": False, "reasons": final_reasons}
@@ -580,6 +800,7 @@ def run_validation(manifest_path, metadata_manifest_path, base_dir,
         "run_id": run_id, "timestamp": timestamp, "validator_version": VALIDATOR_VERSION,
         "execution_mode": execution_mode, "release_scope": "BUILD_ONLY",
         "resource_status": resource_status,
+        "authority_binding_status": authority_binding_status,
         "loader_provenance": loader.provenance,
         "control_manifests": control_manifests,
         "gate_order": manifest["gate_order"], "gate_results": gate_results,

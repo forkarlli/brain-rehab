@@ -19,22 +19,35 @@ def _loadj_path(path):
 def _resolve(rel_path):
     return os.path.normpath(os.path.join(BASE, rel_path))
 
-# B+ii repo-layout (SA ruling 2026-07-27): template inputs are resolved through the (repo-relative)
-# validator manifest — the SINGLE location-truth — instead of assuming co-location by bare filename.
-# No second location set is hard-coded; no input is duplicated; temp-fixture/predicate/expected logic
-# is unchanged. In a flat/co-located layout the manifest paths are bare, so this also works there.
+# B+ii resolver pattern preserved (SA ruling 2026-07-27): fixture LOCATIONS stay declarative — never
+# hard-coded in Python. SA ruling 2026-07-28 (Option D): the legacy Stage-1+2 seed fixtures resolve
+# through a SEPARATE test-only fixture manifest (this suite's single fixture-location truth), NOT the
+# runtime authority manifest — so the Stage-3E rebind (L3_ITEM_CLASS_REGISTRY->v1.1) and rename
+# (L3_NPI_QUESTION_BANK->L3_NPI_MAPPING_REFERENCE) cannot perturb these v0.1-seed fixtures.
+# Fail-closed: every fixture is hash-verified against its declared sha256 BEFORE parse; no fallback to
+# the runtime manifest, no bare-filename search, no auto-update of expected hashes.
+TEST_FIXTURE_MANIFEST = _loadj_path(os.path.join(BASE, "phase6a_test_fixture_manifest.json"))
+
+def _fixture_bytes(fixture_id):
+    spec = TEST_FIXTURE_MANIFEST["fixtures"][fixture_id]
+    path = _resolve(spec["path"])
+    with open(path, "rb") as f:
+        raw = f.read()
+    actual = hashlib.sha256(raw).hexdigest()
+    if actual != spec["sha256"]:
+        raise RuntimeError("fixture hash mismatch: %s: expected=%s actual=%s"
+                           % (fixture_id, spec["sha256"], actual))
+    return raw
+
+# The runtime authority manifest is still loaded, but ONLY as the template make_env() clones to build
+# each synthetic per-test manifest — never as a legacy fixture source.
 BASEMAN = _loadj_path(os.path.join(BASE, "phase6a_validator_manifest.json"))
 
-def _artifact_path(artifact_id):
-    artifact = next(a for a in BASEMAN["artifacts"] if a["artifact_id"] == artifact_id)
-    return _resolve(artifact["path"])
-
-REG0 = _loadj_path(_artifact_path("L3_ITEM_CLASS_REGISTRY"))
-KG0 = _loadj_path(_artifact_path("L3_KNOWLEDGE_GRAPH"))
-with open(_artifact_path("L3_NPI_QUESTION_BANK"), encoding="utf-8") as f:
-    QB0 = f.read()
+REG0 = json.loads(_fixture_bytes("LEGACY_L3_ITEM_CLASS_REGISTRY").decode("utf-8"))
+KG0 = json.loads(_fixture_bytes("L3_KNOWLEDGE_GRAPH").decode("utf-8"))
+QB0 = _fixture_bytes("LEGACY_NPI_QUESTION_BANK").decode("utf-8")
 MDM = _loadj_path(os.path.join(BASE, "phase6a_required_metadata_manifest.json"))
-CORE24_FROZEN = _loadj_path(_resolve(BASEMAN["core24_binding"]["path"]))
+CORE24_FROZEN = json.loads(_fixture_bytes("CORE24_V1_0").decode("utf-8"))
 
 def sha_b(b): return hashlib.sha256(b).hexdigest()
 
@@ -89,6 +102,21 @@ def make_env(tmp, registry_obj=None, registry_raw=None, kg_obj=None, qb_text=Non
     # fixture's own hash so semantic mutations isolate their check; core24_break_hash forces mismatch.
     man["core24_binding"]["path"] = "core24_missing.json" if core24_missing else "core24.json"
     man["core24_binding"]["frozen_sha256"] = ("0" * 64) if core24_break_hash else sha_b(core_bytes)
+    # --- Stage-3E legacy scoping (SA 2026-07-28): this suite exercises the Stage-1+2 engine only.
+    # Scope the cloned runtime manifest back to the Stage-1+2 gate/invariant set so PG-6A-1B and the
+    # Stage-3E authority binding do not run against these v0.1-seed synthetic fixtures. Operates ONLY
+    # on the per-test synthetic manifest; the production runtime manifest is never modified. ---
+    man["gate_order"] = ["PG-6A-01", "PG-6A-02", "PG-6A-03", "PG-6A-04"]
+    man["gate_invariants"] = {
+        "PG-6A-01": ["INV-RESOURCE-1", "INV-VERSION-1"],
+        "PG-6A-02": ["INV-ID-1", "INV-META-1", "INV-CLASS-2", "INV-KG-1", "INV-KG-2"],
+        "PG-6A-03": ["INV-CLASS-1"],
+        "PG-6A-04": ["INV-CORE24-1", "INV-P5-1"],
+    }
+    _keep = {"INV-RESOURCE-1", "INV-VERSION-1", "INV-ID-1", "INV-META-1", "INV-CLASS-2",
+             "INV-KG-1", "INV-KG-2", "INV-CLASS-1", "INV-CORE24-1", "INV-P5-1"}
+    man["invariants"] = [i for i in man["invariants"] if i["invariant_id"] in _keep]
+    man.pop("authority_binding", None)
     json.dump(man, open(os.path.join(tmp, "manifest.json"), "w", encoding="utf-8"), ensure_ascii=False)
     return os.path.join(tmp, "manifest.json"), os.path.join(tmp, "mdm.json")
 

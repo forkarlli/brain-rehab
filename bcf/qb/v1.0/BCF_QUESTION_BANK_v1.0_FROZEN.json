@@ -1,0 +1,443 @@
+{
+ "artifact": "BCF_QUESTION_BANK",
+ "version": "1.0",
+ "status": "FROZEN",
+ "authority": "Layer-A Canonical Patient-Facing Wording SSOT (Dual-Layer, SA Stage 3A)",
+ "date": "2026-07-28",
+ "count": 48,
+ "lineage": "v0.1 DRAFT (sha256 1865f7b2de6e225b) -> Gemini Stage 3B review (47 ACCEPT + 1 EDIT_NON_SEMANTIC) -> PM adopt VES-07 markdown removal -> v1.0 candidate",
+ "single_edit": {
+  "QB-L3-VES-07": {
+   "from": "每次暈眩發作**在一分鐘內**就停止",
+   "to": "每次暈眩發作在一分鐘內就停止",
+   "type": "REMOVE_MARKDOWN_BOLD_MARKERS_ONLY"
+  }
+ },
+ "class_distribution": {
+  "LOCALIZING": 36,
+  "NON_LOCALIZING_PHENOTYPE": 4,
+  "IMPACT": 8
+ },
+ "layer_b_mapping_reference": "BCF_NPI_QUESTION_BANK_v0.2 (not patient-facing wording authority)",
+ "items": [
+  {
+   "item_id": "QB-L3-VES-01",
+   "domain": "VESTIBULAR",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "轉動頭部時感到旋轉或天旋地轉",
+   "label_en": "Spinning/vertigo on head turn",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-VES-02",
+   "domain": "VESTIBULAR",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "躺下、起身或翻身時出現短暫暈眩",
+   "label_en": "Brief positional vertigo",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-VES-03",
+   "domain": "VESTIBULAR",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "站立或行走時覺得搖晃、像踩在船上",
+   "label_en": "Unsteadiness / floating",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-VES-04",
+   "domain": "VESTIBULAR",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "在超市貨架、人群或花紋地板等視覺複雜環境中不適",
+   "label_en": "Visual-complexity intolerance",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-VES-05",
+   "domain": "VESTIBULAR",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "快速轉頭時視線短暫模糊或跳動",
+   "label_en": "Oscillopsia on rapid head movement",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-VES-06",
+   "domain": "VESTIBULAR",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "搭車、電梯或手扶梯時症狀加重",
+   "label_en": "Motion-provoked aggravation",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-VES-07",
+   "domain": "VESTIBULAR",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "每次暈眩發作在一分鐘內就停止",
+   "label_en": "Attacks resolving within one minute",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-VES-08",
+   "domain": "VESTIBULAR",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "暈眩伴隨耳鳴、耳悶或聽力變化",
+   "label_en": "Vertigo with cochlear symptoms",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-OCM-01",
+   "domain": "OCULOMOTOR",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "閱讀時會跳行，或需要用手指指著才讀得下去",
+   "label_en": "Line-skipping while reading",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-OCM-02",
+   "domain": "OCULOMOTOR",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "近距離用眼後眼睛疲勞、痠脹",
+   "label_en": "Near-work eye strain",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-OCM-03",
+   "domain": "OCULOMOTOR",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "看遠看近切換時對焦變慢或模糊",
+   "label_en": "Slowed accommodative shift",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-OCM-04",
+   "domain": "OCULOMOTOR",
+   "item_class": "NON_LOCALIZING_PHENOTYPE",
+   "patient_wording_zh": "出現短暫或持續的複視（看到兩個影像）",
+   "label_en": "Diplopia",
+   "is_phenotype": true
+  },
+  {
+   "item_id": "QB-L3-OCM-05",
+   "domain": "OCULOMOTOR",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "用眼睛追著移動的物體感到困難",
+   "label_en": "Difficulty with smooth pursuit",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-OCM-06",
+   "domain": "OCULOMOTOR",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "螢幕捲動或看快速移動畫面會不舒服",
+   "label_en": "Scroll / motion-on-screen intolerance",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-OCM-07",
+   "domain": "OCULOMOTOR",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "難以維持注視同一點，眼睛容易飄走",
+   "label_en": "Difficulty maintaining fixation",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-OCM-08",
+   "domain": "OCULOMOTOR",
+   "item_class": "NON_LOCALIZING_PHENOTYPE",
+   "patient_wording_zh": "對光線敏感、畏光",
+   "label_en": "Photophobia",
+   "is_phenotype": true
+  },
+  {
+   "item_id": "QB-L3-CBL-01",
+   "domain": "CEREBELLAR",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "伸手拿東西時會超過或不到目標位置",
+   "label_en": "Reaching overshoot / undershoot",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-CBL-02",
+   "domain": "CEREBELLAR",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "精細動作變笨拙（扣鈕扣、寫字、用筷子）",
+   "label_en": "Fine-motor clumsiness",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-CBL-03",
+   "domain": "CEREBELLAR",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "走路時會偏向某一側",
+   "label_en": "Veering to one side",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-CBL-04",
+   "domain": "CEREBELLAR",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "走直線或腳跟接腳尖行走有困難",
+   "label_en": "Tandem gait difficulty",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-CBL-05",
+   "domain": "CEREBELLAR",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "說話含糊、節奏不順或斷斷續續",
+   "label_en": "Dysarthria / scanning speech",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-CBL-06",
+   "domain": "CEREBELLAR",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "動作開始後很難平順地停下來",
+   "label_en": "Difficulty terminating movement",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-CBL-07",
+   "domain": "CEREBELLAR",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "快速反覆的動作（如快速翻手掌）做不順",
+   "label_en": "Dysdiadochokinesia",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-CBL-08",
+   "domain": "CEREBELLAR",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "就算睜著眼睛站著也會搖晃不穩",
+   "label_en": "Unsteady even with eyes open",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-COG-01",
+   "domain": "COGNITIVE",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "忘記剛剛說過或剛做過的事",
+   "label_en": "Forgetting just-said / just-done",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-COG-02",
+   "domain": "COGNITIVE",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "難以同時處理兩件事（如邊走邊講話）",
+   "label_en": "Dual-task difficulty",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-COG-03",
+   "domain": "COGNITIVE",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "注意力難以持續、容易分心",
+   "label_en": "Sustained-attention difficulty",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-COG-04",
+   "domain": "COGNITIVE",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "找詞困難、話到嘴邊說不出來",
+   "label_en": "Word-finding difficulty",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-COG-05",
+   "domain": "COGNITIVE",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "思考變慢、反應時間變長",
+   "label_en": "Slowed processing speed",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-COG-06",
+   "domain": "COGNITIVE",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "在熟悉的環境中方向感變差",
+   "label_en": "Impaired spatial navigation",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-COG-07",
+   "domain": "COGNITIVE",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "計畫與安排日常事務變得困難",
+   "label_en": "Executive planning difficulty",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-COG-08",
+   "domain": "COGNITIVE",
+   "item_class": "NON_LOCALIZING_PHENOTYPE",
+   "patient_wording_zh": "用腦之後頭暈或頭痛會加重",
+   "label_en": "Cognitive-exertion aggravation",
+   "is_phenotype": true
+  },
+  {
+   "item_id": "QB-L3-BSA-01",
+   "domain": "BRAINSTEM_AUTONOMIC",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "起身站立時頭暈、眼前發黑",
+   "label_en": "Orthostatic dizziness",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-BSA-02",
+   "domain": "BRAINSTEM_AUTONOMIC",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "心悸，或感覺心跳明顯加快",
+   "label_en": "Palpitations",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-BSA-03",
+   "domain": "BRAINSTEM_AUTONOMIC",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "手腳冰冷，或流汗異常（過多或過少）",
+   "label_en": "Sudomotor abnormality",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-BSA-04",
+   "domain": "BRAINSTEM_AUTONOMIC",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "吞嚥困難或容易嗆到",
+   "label_en": "Dysphagia / choking",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-BSA-05",
+   "domain": "BRAINSTEM_AUTONOMIC",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "噁心或腸胃不適",
+   "label_en": "Nausea / GI discomfort",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-BSA-06",
+   "domain": "BRAINSTEM_AUTONOMIC",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "呼吸急促或覺得吸不到氣",
+   "label_en": "Dyspnea / air hunger",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-BSA-07",
+   "domain": "BRAINSTEM_AUTONOMIC",
+   "item_class": "LOCALIZING",
+   "patient_wording_zh": "對熱或冷的耐受度變差",
+   "label_en": "Thermal intolerance",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-BSA-08",
+   "domain": "BRAINSTEM_AUTONOMIC",
+   "item_class": "NON_LOCALIZING_PHENOTYPE",
+   "patient_wording_zh": "睡覺時被告知有打鼾嚴重或呼吸中斷",
+   "label_en": "Witnessed snoring / apnea",
+   "is_phenotype": true
+  },
+  {
+   "item_id": "QB-L3-DFN-01",
+   "domain": "DAILY_FUNCTION",
+   "item_class": "IMPACT",
+   "patient_wording_zh": "因為症狀而減少外出或社交",
+   "label_en": "Reduced outings / social activity",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-DFN-02",
+   "domain": "DAILY_FUNCTION",
+   "item_class": "IMPACT",
+   "patient_wording_zh": "上下樓梯或走不平路面感到困難或害怕",
+   "label_en": "Stairs / uneven-surface difficulty",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-DFN-03",
+   "domain": "DAILY_FUNCTION",
+   "item_class": "IMPACT",
+   "patient_wording_zh": "開車或騎車受到影響",
+   "label_en": "Driving / riding affected",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-DFN-04",
+   "domain": "DAILY_FUNCTION",
+   "item_class": "IMPACT",
+   "patient_wording_zh": "工作或學業表現受到影響",
+   "label_en": "Work / study performance affected",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-DFN-05",
+   "domain": "DAILY_FUNCTION",
+   "item_class": "IMPACT",
+   "patient_wording_zh": "需要別人協助才能完成日常活動",
+   "label_en": "Requires assistance with ADLs",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-DFN-06",
+   "domain": "DAILY_FUNCTION",
+   "item_class": "IMPACT",
+   "patient_wording_zh": "因為害怕跌倒而改變行動方式",
+   "label_en": "Fall-related activity modification",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-DFN-07",
+   "domain": "DAILY_FUNCTION",
+   "item_class": "IMPACT",
+   "patient_wording_zh": "運動或體能活動量減少",
+   "label_en": "Reduced exercise / activity",
+   "is_phenotype": false
+  },
+  {
+   "item_id": "QB-L3-DFN-08",
+   "domain": "DAILY_FUNCTION",
+   "item_class": "IMPACT",
+   "patient_wording_zh": "症狀影響情緒（焦慮、沮喪、易怒）",
+   "label_en": "Emotional impact of symptoms",
+   "is_phenotype": false
+  }
+ ],
+ "not_executed": [
+  "final_freeze",
+  "validator_binding_change",
+  "registry_change",
+  "core24_change",
+  "production_code"
+ ],
+ "pg_6a_final": "BLOCKED",
+ "frozen_date": "2026-07-28",
+ "pm_approval": {
+  "by": "Karl Li",
+  "role": "PM",
+  "decision": "APPROVED_FINAL_FREEZE",
+  "date": "2026-07-28"
+ },
+ "sa_technical_review": "CLOSED_APPROVED (Phase 6A Stage 3C)",
+ "frozen_from_candidate": {
+  "md_sha256": "2e47a52640b8ad240ea4d501a318d5feb9971cd74b33c894432bc3620c503bf6",
+  "json_sha256": "cc253b2e70586ebbb1f341680f7134cdc67bf158c24a065a101b7f7922c26f3b"
+ },
+ "authority_chain": {
+  "core24_md": "2a91bf9029059896c3e6dd1398e25e394c18b46a67cb48090056d3e9d48b715c",
+  "core24_json": "7bfaf2dced2132120b0531da84ceae8c928d727ba58a4b12402015b7f46c9ac5",
+  "qb_v0_1": "1865f7b2de6e225b31d9e7bba310916263ac620f43b8ab751fa0628ef3a00b95",
+  "registry": "2fd9d9f2f7c70343f264644e0f17858ed7d7c678870e6bd4fb5290fdbcc54d79"
+ },
+ "downstream_not_authorized": [
+  "release_eligibility_assignment",
+  "validator_binding_change",
+  "registry_schema_change",
+  "wording_source_mapping_source_split",
+  "new_invariant_implementation",
+  "production_code_change",
+  "pg_6a_01_to_04_rerun"
+ ]
+}
