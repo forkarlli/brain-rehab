@@ -259,6 +259,19 @@ def path4():
     r = run(mapping_auth_path="../reference/WRONG_NPI_NAME.md")
     return res(r, "INV-REG-SPLIT-1") == "FAIL" and gate(r, "PG-6A-1B") == "FAIL"
 
+@test("AUDIT PG-FINAL reasons do not falsely claim formal rerun was not executed")
+def audit_reason_no_stale_formal_rerun_claim():
+    # The validator cannot know whether a given run is governance-designated "formal"; it must not
+    # assert either way in its permanent audit record. Regression for the Gate A evidence defect
+    # (2026-07-29): a static reason string claimed "formal PG-6A-01~04 rerun NOT executed" inside the
+    # audit record produced BY that very rerun. Assert both directions: stale claim gone, real reason kept.
+    r = run()
+    reasons = r["pg_6a_final"]["reasons"]
+    stale = "formal PG-6A-01~04 rerun NOT executed"
+    expected = "PG-6A-05 / PG-6A-06 not implemented or not authorized"
+    return (all(stale not in reason for reason in reasons)
+            and any(expected in reason for reason in reasons))
+
 if __name__ == "__main__":
     passed = failed = 0
     print("=== Phase 6A Stage 3E — Validator Binding test matrix ===")

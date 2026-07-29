@@ -774,7 +774,7 @@ def run_validation(manifest_path, metadata_manifest_path, base_dir,
     if not wording_release_eligible:
         final_reasons.append("wording_release_gate not validated-eligible: resource_status=%s (declared_eligible=%s, integrity_ok=%s)"
                              % (resource_status, wording_declared_eligible, required_integrity_ok))
-    final_reasons.append("PG-6A-05 / PG-6A-06 not implemented or not authorized this stage; formal PG-6A-01~04 rerun NOT executed")
+    final_reasons.append("PG-6A-05 / PG-6A-06 not implemented or not authorized")
     final_reasons.append("mapping_release_gate=%s (NPI mapping content not production-released; does not block wording gate)" % mapping_gate_status)
     if not all_unchanged:
         final_reasons.append("source artifact changed during validation (read-only violation)")
