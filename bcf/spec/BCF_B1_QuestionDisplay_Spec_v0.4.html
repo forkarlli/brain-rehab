@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BCF · B1 題目顯示層 技術規格 v0.4</title>
+<style>
+  :root{
+    --ink:#16212b;--ink-soft:#4a5a68;--ink-faint:#8194a1;
+    --paper:#fbfcfd;--panel:#ffffff;--line:#e2e9ee;--line-strong:#c9d6de;
+    --teal:#0f6e6a;--teal-deep:#0b4f4c;--teal-tint:#e8f4f2;
+    --amber:#b26a00;--amber-tint:#fbf1df;
+    --red:#a3352b;--red-tint:#faeceb;
+    --green:#237a4a;--green-tint:#e7f3ec;
+    --violet:#5b4b8a;--violet-tint:#efecf7;
+    --mono:"SF Mono",ui-monospace,"Cascadia Mono",Menlo,Consolas,monospace;
+  }
+  *{box-sizing:border-box;}
+  html{-webkit-text-size-adjust:100%;}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang TC","Noto Sans TC",system-ui,sans-serif;
+    line-height:1.72;font-size:16px;letter-spacing:.01em;}
+  .wrap{max-width:820px;margin:0 auto;padding:40px 22px 96px;}
+
+  .eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--teal);font-weight:600;margin:0 0 10px;}
+  h1{font-size:29px;line-height:1.22;margin:0 0 6px;font-weight:700;letter-spacing:-0.01em;}
+  .subtitle{color:var(--ink-soft);font-size:16px;margin:0 0 22px;}
+  .meta{display:flex;flex-wrap:wrap;gap:8px 10px;margin:0 0 24px;font-family:var(--mono);font-size:12.5px;}
+  .chip{display:inline-flex;align-items:center;gap:6px;background:var(--panel);border:1px solid var(--line);border-radius:999px;padding:4px 11px;color:var(--ink-soft);}
+  .chip b{color:var(--ink);font-weight:600;}
+  .chip.ok{background:var(--green-tint);border-color:#bfe0cc;color:var(--green);}
+  .chip.sa{background:var(--amber-tint);border-color:#ecd6a8;color:var(--amber);}
+
+  /* changelog */
+  .change{border:1px solid var(--line);border-radius:12px;background:var(--panel);padding:16px 18px;margin:0 0 30px;}
+  .change h3{margin:0 0 10px;font-size:13px;letter-spacing:.05em;text-transform:uppercase;color:var(--amber);font-family:var(--mono);}
+  .change ol{margin:0;padding-left:20px;font-size:13.5px;color:var(--ink-soft);}
+  .change li{margin:0 0 5px;}
+  .change li b{color:var(--ink);font-weight:600;}
+  .change .src{font-family:var(--mono);font-size:11px;color:var(--ink-faint);}
+
+  .banner{border-left:3px solid var(--amber);background:var(--amber-tint);border-radius:0 8px 8px 0;padding:13px 16px;margin:0 0 36px;font-size:14.5px;color:#6b4a12;}
+  .banner b{color:#4d340a;}
+
+  section{margin:0 0 38px;scroll-margin-top:20px;}
+  h2{font-size:19px;margin:0 0 4px;font-weight:700;letter-spacing:-0.005em;display:flex;align-items:baseline;gap:11px;}
+  h2 .num{font-family:var(--mono);font-size:13px;color:var(--teal);font-weight:700;flex:none;padding-top:1px;}
+  .lede{color:var(--ink-soft);font-size:14.5px;margin:0 0 16px;padding-left:34px;}
+  .body{padding-left:34px;}
+  @media(max-width:560px){.lede,.body{padding-left:0;}}
+
+  p{margin:0 0 13px;}
+  ul{margin:0 0 14px;padding-left:20px;}
+  li{margin:0 0 7px;}
+  li::marker{color:var(--teal);}
+  code{font-family:var(--mono);font-size:0.9em;background:#eef3f6;padding:1.5px 6px;border-radius:5px;color:var(--teal-deep);word-break:break-word;}
+  strong{font-weight:700;}
+  .del{color:var(--red);text-decoration:line-through;text-decoration-color:#d98e86;}
+
+  /* invariant cards */
+  .inv{border:1px solid var(--line-strong);border-radius:12px;overflow:hidden;margin:0 0 15px;background:var(--panel);}
+  .inv-head{display:flex;align-items:center;gap:10px;padding:11px 15px;background:#f2f7f6;border-bottom:1px solid var(--line);}
+  .inv-id{font-family:var(--mono);font-size:12px;font-weight:700;color:#fff;background:var(--teal);padding:3px 9px;border-radius:6px;letter-spacing:.03em;}
+  .inv-name{font-size:13.5px;font-weight:700;letter-spacing:.02em;color:var(--teal-deep);}
+  .inv-body{padding:13px 16px;font-size:14px;}
+  .inv-body p{margin:0 0 9px;}
+  .inv-body p:last-child{margin:0;}
+  .inv-body .rule{font-weight:600;color:var(--ink);}
+  .inv-order{font-family:var(--mono);font-size:12px;background:#0e1b22;color:#cfe3e6;padding:10px 13px;border-radius:8px;margin:9px 0;line-height:1.7;overflow-x:auto;-webkit-overflow-scrolling:touch;}
+  .inv-order b{color:#7fd0c8;}
+  .flag{background:var(--violet-tint);border:1px solid #d6cee8;border-radius:8px;padding:10px 13px;font-size:13px;color:#463a6b;margin-top:9px;}
+  .flag b{color:var(--violet);}
+
+  .scope{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin:6px 0 4px;}
+  @media(max-width:560px){.scope{grid-template-columns:1fr;}}
+  .scope-col{border:1px solid var(--line);border-radius:11px;overflow:hidden;background:var(--panel);}
+  .scope-head{padding:9px 14px;font-size:13px;font-weight:700;font-family:var(--mono);letter-spacing:.05em;}
+  .scope-col.in .scope-head{background:var(--green-tint);color:var(--green);}
+  .scope-col.out .scope-head{background:var(--red-tint);color:var(--red);}
+  .scope-col ul{margin:0;padding:12px 16px 13px 30px;font-size:14px;}
+  .scope-col.out li::marker{color:var(--red);}
+
+  table{width:100%;border-collapse:collapse;margin:4px 0 6px;font-size:13.5px;}
+  th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line);vertical-align:top;}
+  th{font-size:12px;letter-spacing:.05em;text-transform:uppercase;color:var(--ink-faint);font-weight:600;border-bottom:1px solid var(--line-strong);}
+  td code{font-size:0.85em;}
+  tr:last-child td{border-bottom:none;}
+  .rec{color:var(--teal-deep);font-weight:600;}
+  .gem{display:inline-block;font-family:var(--mono);font-size:10.5px;background:var(--violet-tint);color:var(--violet);border:1px solid #d6cee8;border-radius:5px;padding:1px 6px;margin-left:5px;vertical-align:middle;}
+
+  .call{border-radius:9px;padding:13px 16px;margin:14px 0;font-size:14px;}
+  .call.gov{background:#f3f6f8;border:1px solid var(--line);color:var(--ink-soft);}
+  .call .ct{font-weight:700;display:block;margin-bottom:4px;font-size:13px;letter-spacing:.03em;text-transform:uppercase;}
+
+  .err2{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin:6px 0;}
+  @media(max-width:560px){.err2{grid-template-columns:1fr;}}
+  .err-col{border:1px solid var(--line);border-radius:10px;overflow:hidden;}
+  .err-h{padding:8px 13px;font-size:12px;font-weight:700;font-family:var(--mono);letter-spacing:.04em;}
+  .err-col.pt .err-h{background:var(--green-tint);color:var(--green);}
+  .err-col.dg .err-h{background:#eef1f3;color:var(--ink-soft);}
+  .err-b{padding:11px 14px;font-size:13px;}
+  .err-b code{display:block;background:transparent;padding:0;color:var(--ink-soft);white-space:pre-wrap;line-height:1.6;}
+
+  pre.wire{background:#0e1b22;color:#cfe3e6;border-radius:11px;padding:18px 16px;overflow-x:auto;font-family:var(--mono);font-size:12px;line-height:1.65;margin:6px 0 4px;-webkit-overflow-scrolling:touch;}
+  pre.wire .c{color:#5f8c90;}
+  pre.wire .k{color:#7fd0c8;}
+  pre.wire .s{color:#d9b25f;}
+
+  .ac{list-style:none;padding:0;margin:6px 0 4px;}
+  .ac li{position:relative;padding-left:28px;margin-bottom:9px;font-size:14px;}
+  .ac li::before{content:"▢";position:absolute;left:0;top:0;color:var(--teal);font-size:15px;}
+
+  hr.div{border:none;border-top:1px solid var(--line);margin:0 0 38px;}
+  .foot{font-size:12.5px;color:var(--ink-faint);font-family:var(--mono);line-height:1.7;border-top:1px solid var(--line);padding-top:18px;margin-top:8px;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <p class="eyebrow">BCF · 問卷數位化 · Phase B</p>
+  <h1>B1 題目顯示層 — 技術規格 v0.4</h1>
+  <p class="subtitle">已凍結 48 題題庫 → 原始位元驗證 → 唯讀渲染。已通過 SA 架構審與 Gemini 獨立複核；折入 Gemini 觀察（含神經友善顯示）。</p>
+
+  <div class="meta">
+    <span class="chip"><b>Spec</b> v0.4 · impl-ready</span>
+    <span class="chip"><b>日期</b> 2026-08-16</span>
+    <span class="chip sa">SA 🟡 → 收斂 ✓</span>
+    <span class="chip sa" style="background:var(--green-tint);border-color:#bfe0cc;color:var(--green);">Gemini PASS w/ OBS ✓</span>
+    <span class="chip ok">QB cd4525e6… · 13455B ✓</span>
+    <span class="chip"><b>supersedes</b> v0.1–v0.3（bytes 保留）</span>
+  </div>
+
+  <div class="change">
+    <h3>修訂總覽 · v0.2 收斂 SA · v0.3 定案 §11 · v0.4 折入 Gemini</h3>
+    <ol>
+      <li><b>新增 B1-INV-01 RAW-BYTE IDENTITY</b>：hash 必須驗原始位元、禁止 parse→stringify→hash。<span class="src">SA §B</span></li>
+      <li><b>刪除排序 fallback</b>：移除「若 JSON 另有排序宣告，以 JSON 為準」的未授權入口。<span class="src">SA §C</span></li>
+      <li><b>answer-slot 改為病人不可見</b>：inert DOM 插座，patient view 不顯示「B2 實作」技術文字。<span class="src">SA §D</span></li>
+      <li><b>新增 B1-INV-02 NO CLINICAL SEMANTIC DERIVATION</b>：渲染不得依 item_class／phenotype 等分歧。<span class="src">SA §⑥</span></li>
+      <li><b>新增 B1-INV-03 ALL-OR-NOTHING RENDER</b>：全資料通過驗證前，不得有任何題卡進入病人 DOM。<span class="src">SA §⑥</span></li>
+      <li><b>item_id 病人不可見</b>：改存 DOM data 屬性供追溯，病人畫面只留題幹。<span class="src">SA Risk 2</span></li>
+      <li><b>錯誤訊息分兩層</b>：patient-safe 訊息 vs diagnostic 細節。<span class="src">SA Risk 3</span></li>
+      <li><b>狀態改名</b>：「完整性 OK」→「題庫來源驗證通過／QB_SOURCE_VERIFIED」。<span class="src">SA §⑦</span></li>
+      <li><b>［v0.3］§11 已定案</b>：PM 選 Option A——移除 file:// 快照，B1 單一 fetch 路徑。<span class="src">PM 2026-08-16</span></li>
+      <li><b>［v0.4］新增 §12 神經友善顯示標準</b>：對比／字級／行距／減動，列 B1 MUST。<span class="src">Gemini R5a</span></li>
+      <li><b>［v0.4］INV-02 擴充</b>：明文禁止 hardcode <code>if(item_id===…)</code>，且禁止攔截／highlight／自動修正任何輸入（B2-forward）。<span class="src">Gemini R2/R3</span></li>
+      <li><b>［v0.4］§7 錯誤態擴及網路／cold-start</b>＋ §8 D2 升級路徑（叢集若干擾演算法 → B2+ 另立 canonical order）。<span class="src">Gemini R1/R4</span></li>
+    </ol>
+  </div>
+
+  <div class="banner">
+    <b>審查已過 SA + Gemini；下一關是 PM production 授權。</b> Gemini 裁 PASS WITH OBSERVATION、觀察已折入 v0.4。但 Gemini 明載 <code>downstream_not_authorized（Production environment block active）</code>——是否讓 Claude Code 把 B1 實作進 repo，仍需<strong>你（PM）明確授權</strong>。QB 凍結的 <code>production_code_change</code> 邊界完整保留。
+  </div>
+
+  <!-- 1 -->
+  <section>
+    <h2><span class="num">§1</span> 目的與範圍邊界</h2>
+    <p class="lede">B1 只做一件事：把凍結題庫的題幹「顯示」出來。最小、可插拔、零 rework。SA 已 PASS 此 phase boundary。</p>
+    <div class="body">
+      <div class="scope">
+        <div class="scope-col in">
+          <div class="scope-head">IN · B1 做</div>
+          <ul>
+            <li>讀取凍結 QB JSON（單一資料來源）</li>
+            <li>依 6 domain 分組、渲染全部 48 題題幹</li>
+            <li>唯讀顯示，不可作答</li>
+            <li>每題產生一個 inert、病人不可見的作答插座給 B2</li>
+            <li>載入時原始位元 + 結構完整性自檢（見 §3、§7）</li>
+          </ul>
+        </div>
+        <div class="scope-col out">
+          <div class="scope-head">OUT · 明確延後</div>
+          <ul>
+            <li>作答輸入元件 → B2</li>
+            <li>任何 <code>response_format</code> 處理</li>
+            <li>答案儲存 / 送 server</li>
+            <li>強度、gate／modulate、任何臨床判讀</li>
+            <li>依臨床 metadata 改變渲染（見 INV-02）</li>
+            <li>併入 <code>app.js</code>／<code>server.js</code>、commit</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section>
+    <h2><span class="num">§2</span> 資料合約</h2>
+    <div class="body">
+      <table>
+        <tr><th>項目</th><th>值</th></tr>
+        <tr><td>唯一資料來源</td><td><code>bcf/qb/v1.0/BCF_QUESTION_BANK_v1.0_FROZEN.json</code></td></tr>
+        <tr><td>身份綁定</td><td><code>sha256 = cd4525e6…779bb6</code>　<code>bytes = 13455</code>　<span class="rec">recon 已驗證 ✓</span></td></tr>
+        <tr><td>每題欄位</td><td><code>item_id</code> · <code>domain</code> · <code>item_class</code> · <code>patient_wording_zh</code> · <code>label_en</code> · <code>is_phenotype</code></td></tr>
+        <tr><td>6 domains（各 8 題）</td><td>VESTIBULAR · OCULOMOTOR · CEREBELLAR · COGNITIVE · BRAINSTEM_AUTONOMIC · DAILY_FUNCTION</td></tr>
+        <tr><td>class 分布</td><td>LOCALIZING 36 ／ NON_LOCALIZING_PHENOTYPE 4 ／ IMPACT 8</td></tr>
+      </table>
+      <div class="call gov">
+        <span class="ct">用字權威規則（源自 L3 registry v1.1 validator_rule）</span>
+        題幹只能綁 QB v1.0 的 <code>patient_wording_zh</code>；<strong>絕不可</strong>使用 NPI 對照表（<code>BCF_NPI_QUESTION_BANK_v0.2</code>，僅 REFERENCE）。渲染器不得改寫、翻譯、補字。
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 INVARIANTS -->
+  <section>
+    <h2><span class="num">§3</span> 架構不變量（Invariants）</h2>
+    <p class="lede">SA 要求把 B1 的邊界從「規則」升級為「不變量」——這三條任何實作都不得違反。</p>
+    <div class="body">
+
+      <div class="inv">
+        <div class="inv-head"><span class="inv-id">B1-INV-01</span><span class="inv-name">RAW-BYTE IDENTITY</span></div>
+        <div class="inv-body">
+          <p class="rule">SHA-256 與 byte length 必須驗「載入的原始位元」，且在 parse 之前完成。</p>
+          <p><strong>禁止</strong> <code>JSON.parse → JSON.stringify → SHA-256</code>——空白、key 順序、換行都會改變結果，驗到的是「語意重建 JSON」，不是 frozen artifact bytes。</p>
+          <div class="inv-order">固定順序：<b>fetch/read raw bytes</b> → byte-length check → SHA-256 check → PASS → UTF-8 decode + parse → structural checks → render<br>任一步 FAIL ⇒ render = 0 questions</div>
+          <p style="font-size:13px;color:var(--ink-soft);margin:0;">實作註：用 <code>response.arrayBuffer()</code>（非 <code>.json()</code>），對 ArrayBuffer 做 <code>crypto.subtle.digest</code>，再 <code>TextDecoder</code> → <code>JSON.parse</code>。</p>
+          <div class="flag"><b>［§11 已定案 · Option A］</b> B1 只走 production／localhost（secure context），<code>crypto.subtle</code> 全程可用，INV-01 位元 hash <strong>一律執行</strong>；file:// 快照路徑已移除。</div>
+        </div>
+      </div>
+
+      <div class="inv">
+        <div class="inv-head"><span class="inv-id">B1-INV-02</span><span class="inv-name">NO CLINICAL SEMANTIC DERIVATION</span></div>
+        <div class="inv-body">
+          <p class="rule">渲染行為不得依 <code>item_class</code>、<code>is_phenotype</code>、<code>label_en</code>、Core-24 membership、定位 metadata 或 administration parameters 而分歧。</p>
+          <p>對 B1 而言，LOCALIZING／NON_LOCALIZING_PHENOTYPE／IMPACT <strong>都只是題目</strong>。不得因某題是 phenotype 就畫不同樣式、不同排序、或條件顯示。否則 B1 會偷偷變成 clinical logic layer。</p>
+          <p style="margin:0;"><strong>明文條款（折入 Gemini R2／R3）：</strong></p>
+          <ul style="margin:6px 0 0;">
+            <li><strong>禁止 hardcode 特例</strong>：不得出現 <code>if (item_id === 'QB-L3-…') {…}</code> 這類依身份的分支。所有渲染一律 schema 驅動。</li>
+            <li><strong>禁止輸入端加工</strong>（B2-forward）：任何層都不得攔截、格式化、關鍵字 highlight 或自動修正使用者輸入——那也是 clinical derivation。B1 本身無輸入面，此條為 B2 綁定前置。</li>
+          </ul>
+        </div>
+      </div>
+
+      <div class="inv">
+        <div class="inv-head"><span class="inv-id">B1-INV-03</span><span class="inv-name">ALL-OR-NOTHING RENDER</span></div>
+        <div class="inv-body">
+          <p class="rule">完整 artifact 通過身份（INV-01）與結構驗證前，任何題卡都不得進入病人可見 DOM。</p>
+          <p>先驗證完整資料集，再 construct／render。<strong>禁止</strong>逐題 render → 第 N 題才發現錯 → 清 DOM 這種做法。</p>
+        </div>
+      </div>
+
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section>
+    <h2><span class="num">§4</span> 渲染規則</h2>
+    <div class="body">
+      <ul>
+        <li><strong>domain 顯示順序（B1 presentation contract 固定）</strong>：VESTIBULAR → OCULOMOTOR → CEREBELLAR → COGNITIVE → BRAINSTEM_AUTONOMIC → DAILY_FUNCTION。<strong>渲染器不得推論或產生另一套排序規則。</strong><span class="del"> （已刪：若 JSON 另有排序宣告以 JSON 為準）</span>　未來若 QB 正式新增 canonical display-order 欄位，再修本 contract，不預測 schema。</li>
+        <li><strong>題目排序</strong>：每個 domain 內<strong>保留 QB 陣列原順序</strong>（stable partition）。陣列順序＝QB authority；domain 顯示順序＝B1 presentation concern。</li>
+        <li><strong>每題顯示（病人視圖）</strong>：只顯示 <code>patient_wording_zh</code>。<code>item_id</code> 存入 DOM 的 <code>data-item-id</code> 供追溯，<strong>不顯示給病人</strong>（clinician/debug view 可顯示）。</li>
+        <li><strong>中性分段</strong>：病人看到 6 個中性段落「<strong>第一部分～第六部分</strong>」，<strong>不顯示臨床 domain 名稱</strong>（見 §8 D2 / SA Risk 1）。</li>
+        <li><strong>零捏造</strong>：畫面上每個病人可見的字都能對回一個 <code>data-item-id</code>；不渲染 QB 裡不存在的內容。</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section>
+    <h2><span class="num">§5</span> 作答區合約（給 B2 的插座）</h2>
+    <div class="body">
+      <ul>
+        <li>每題產生一個穩定、inert、<strong>病人不可見</strong>的作答插座：<code>&lt;div data-bcf-slot="answer" data-item-id="…"&gt;&lt;/div&gt;</code>（空、無控制項）。</li>
+        <li>B1 patient view <strong>不顯示任何作答控制項，也不顯示任何 B2 技術提示文字</strong>。</li>
+        <li>debug／dev view 可顯示 slot 邊界——但那不是病人介面。</li>
+        <li>B2 以 <code>data-bcf-slot</code> 為目標注入作答元件；B1 題目 renderer 不需改動。這正是「AP-Q15／Q22／Q25 改變作答契約時只需換 B2」的接縫。</li>
+      </ul>
+      <div class="call gov"><span class="ct">Scope 澄清（回應 Gemini「Present &amp; Collect」用語）</span>本 spec 的 B1 = <strong>Present only</strong>；Collect（收集作答）自 <strong>B2</strong> 起。故 Gemini 對 free-text 攔截（R2）與必填防呆（R5b）的意見<strong>原則正確、但作用在 B2</strong>——已記為 B2 綁定前置，精神折入 INV-02。B1 無任何輸入面，不做必填判斷。</div>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section>
+    <h2><span class="num">§6</span> 版面骨架</h2>
+    <p class="lede">中性分段、無病人可見 item_id、插座隱形、狀態標籤收窄。以欄位名佔位，無虛構內容。</p>
+    <div class="body">
+<pre class="wire"><span class="c">┌──────────────────────────────────────────────┐</span>
+<span class="c">│</span>  BCF 症狀評估問卷        <span class="k">●</span> 題庫來源驗證通過        <span class="c">│</span>  <span class="c">← QB_SOURCE_VERIFIED（非「完整」）</span>
+<span class="c">├──────────────────────────────────────────────┤</span>
+<span class="c">│</span>  <span class="s">▎第一部分</span>                             8 題    <span class="c">│</span>  <span class="c">← 中性名稱（內部 domain=VESTIBULAR，不顯示）</span>
+<span class="c">│</span>  ┌────────────────────────────────────────┐  <span class="c">│</span>
+<span class="c">│</span>  │ <span class="k">[patient_wording_zh]</span>                     │  <span class="c">│</span>  <span class="c">← 病人只看到題幹</span>
+<span class="c">│</span>  │ <span class="c">&lt;div data-bcf-slot="answer"</span>              │  <span class="c">│</span>  <span class="c">← 插座：inert、病人不可見</span>
+<span class="c">│</span>  │ <span class="c">     data-item-id="…"&gt;  (empty)</span>          │  <span class="c">│</span>  <span class="c">   （item_id 在此，不上畫面）</span>
+<span class="c">│</span>  └────────────────────────────────────────┘  <span class="c">│</span>
+<span class="c">│</span>  … ×8，再換「第二部分」…                        <span class="c">│</span>
+<span class="c">└──────────────────────────────────────────────┘</span></pre>
+    </div>
+  </section>
+
+  <!-- 7 -->
+  <section>
+    <h2><span class="num">§7</span> 完整性、防禦與錯誤處理</h2>
+    <div class="body">
+      <ul>
+        <li><strong>載入驗證順序</strong>：嚴格照 INV-01（raw bytes → length → SHA-256 → parse → 結構）。</li>
+        <li><strong>結構檢查</strong>：題數＝48、6 domain 各 8、class 分布＝36／4／8——一律執行。位元 hash 亦一律執行（B1 只跑 secure context，見 §11）。</li>
+        <li><strong>渲染策略</strong>：INV-03 全有全無——驗證完整資料集後才 render，不做 partial render。</li>
+        <li><strong>載入失敗態涵蓋網路／cold-start</strong>（折入 Gemini R4）：除 hash／結構失敗外，<strong>fetch 逾時、斷線、Railway 冷啟白畫面</strong>也走同一個 patient-safe error state；載入中顯示中性 loading 態，避免病人焦慮。臨床上「載不到」優於「顯示過期快取」，此為 fail-safe。<span style="color:var(--ink-faint);font-size:12px;">〔營運註：Railway cold-start 建議以 keep-warm 或健康檢查緩解，屬 ops 不屬 B1 code。〕</span></li>
+      </ul>
+      <p style="margin:16px 0 8px;font-weight:600;">錯誤訊息分兩層（SA Risk 3）：</p>
+      <div class="err2">
+        <div class="err-col pt">
+          <div class="err-h">PATIENT UI · 安全訊息</div>
+          <div class="err-b"><code>問卷目前無法載入，
+請通知現場人員。</code><div style="font-size:12px;color:var(--ink-faint);margin-top:8px;">不含 hash、schema、class 等 metadata。</div></div>
+        </div>
+        <div class="err-col dg">
+          <div class="err-h">DIAGNOSTIC · console／clinician</div>
+          <div class="err-b"><code>SHA256_MISMATCH
+EXPECTED=cd4525e6…
+ACTUAL=…
+或 STRUCTURE_FAIL: domainX=N items</code></div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8 -->
+  <section>
+    <h2><span class="num">§8</span> 四項 PM 決策（採 SA 建議為新預設）</h2>
+    <p class="lede">SA 已給裁決建議；以下為新預設，仍待你核可，D2 另送 Gemini 臨床 UI 複核。</p>
+    <div class="body">
+      <table>
+        <tr><th>#</th><th>決策</th><th>SA 建議（新預設）</th></tr>
+        <tr><td>D1</td><td>使用對象</td><td class="rec">病人視圖＝B1 v1.0；clinician／debug view 為另一件事，不屬 B1 v1.0 patient UI</td></tr>
+        <tr><td>D2</td><td>domain 標題</td><td class="rec">病人<strong>不顯示</strong>臨床 domain 名稱；用「第一部分～第六部分」中性分段<span class="gem">GEMINI 複核</span></td></tr>
+        <tr><td>D3</td><td>導覽</td><td class="rec">單頁捲動</td></tr>
+        <tr><td>D4</td><td>hash 自檢</td><td class="rec">MUST／fail closed</td></tr>
+      </table>
+      <div class="flag" style="margin-top:14px;"><b>［D2 · SA+Claude+Gemini 一致］</b> 中性分段擋掉 domain 名稱的 priming，但<strong>同域題目仍連在一起</strong>。要完全去叢集須打散題序（interleave），而打散＝發明排序權威，被 §4／INV-02 禁止。<strong>Gemini 裁定：接受「中性分段＋同域叢集」</strong>（數位化首要目標是如實映射 Fidelity，非在 B1 做心理計量改良）。<strong>升級路徑</strong>：若日後判定叢集 priming 干擾 BCF 演算法，須在 B2+ 或經院長核准，另立一份「Canonical Interleaved Order」作為新 SSOT 再渲染——不得在 B1 擅自打散。</div>
+    </div>
+  </section>
+
+  <!-- 9 -->
+  <section>
+    <h2><span class="num">§9</span> 驗收標準</h2>
+    <div class="body">
+      <ul class="ac">
+        <li>準確渲染 48 題；6 domain 各 8；class 分布 36／4／8 驗證通過。</li>
+        <li>SHA-256 + byte-length 依 INV-01 順序驗原始位元（secure context）；結構檢查一律執行。</li>
+        <li>全有全無：任何時刻都不出現 partial／invalid DOM（INV-03）。</li>
+        <li>病人視圖只有題幹——無 item_id、無臨床 metadata、無作答控制項、無 B2 技術文字。</li>
+        <li>畫面每段題幹都能對回 DOM 的 <code>data-item-id</code>。</li>
+        <li>沒有任何渲染分歧依賴臨床 metadata（INV-02）；<strong>程式碼中無 <code>if(item_id===…)</code> 之類特例分支</strong>——全 schema 驅動。</li>
+        <li>錯誤時病人畫面顯示安全訊息；技術細節僅進 console／clinician view；<strong>網路／cold-start 失敗也走同一 patient-safe error state</strong>。</li>
+        <li><strong>顯示符合 §12 神經友善標準</strong>（對比、字級、行距、減動）。</li>
+        <li>狀態標籤為「題庫來源驗證通過／QB_SOURCE_VERIFIED」，非「完整／COMPLETE」。</li>
+      </ul>
+    </div>
+  </section>
+
+  <!-- 10 -->
+  <section>
+    <h2><span class="num">§10</span> 治理與交付</h2>
+    <div class="body">
+      <div class="call gov">
+        <span class="ct">SA 裁決紀錄</span>
+        🟡 ACCEPTED WITH NARROW REVISION（2026-08-16）。v0.2 收斂全部八點。
+      </div>
+      <div class="call gov" style="background:var(--green-tint);border-color:#bfe0cc;">
+        <span class="ct" style="color:var(--green);">Gemini 獨立複核紀錄</span>
+        ✅ PASS WITH OBSERVATION（2026-08-16）。邏輯嚴密、邊界清晰，可作為 B1 開發藍圖；六項觀察已折入 v0.4。Status: REVIEWED &amp; LOGGED。Authorization: <strong>downstream_not_authorized（Production block active）</strong>。
+      </div>
+      <p><strong>審查鏈：</strong>v0.1 → SA 🟡 → v0.2 → v0.3（§11 定案 A）→ Gemini ✅ PASS w/ OBS → <strong>v0.4（本檔·折入觀察）→ 〔你：PM production 授權〕→ Claude Code 實作 → 依 §9 驗收。</strong></p>
+      <p style="font-size:13px;color:var(--ink-soft);">v0.4 取代 v0.1–v0.3；被取代版本 bytes 保留（依 AP-Q19「被引用 bytes 不可覆寫、後繼給新身份」）。</p>
+    </div>
+  </section>
+
+  <!-- 11 -->
+  <section>
+    <h2><span class="num">§11</span> 已定案：INV-01 vs file:// → <span style="color:var(--teal-deep);">Option A</span></h2>
+    <p class="lede">［PM 定案 2026-08-16］選 Option A：移除 file:// 快照，B1 單一 production／localhost fetch 路徑。</p>
+    <div class="body">
+      <p><strong>背景衝突：</strong>INV-01 要求執行時驗原始位元 SHA-256；<code>crypto.subtle</code> 需 secure context（https／localhost），<code>file://</code> 不支援。故「內嵌 JSON、iPad 雙擊開」的快照版無法滿足 INV-01。</p>
+      <table>
+        <tr><th>選項</th><th>內容</th><th>裁決</th></tr>
+        <tr><td>A</td><td>B1 只有 production／localhost 的 fetch 路徑，不做 file:// 快照。要 iPad 預覽就從 localhost／Railway 服務。</td><td class="rec">✓ 採用 · 身份保證最強（INV-01 全程成立）</td></tr>
+        <tr><td>B</td><td>允許快照版但標示 build-time 驗證、非 runtime。</td><td style="color:var(--ink-faint);">未採用 · 無 runtime 位元驗證</td></tr>
+      </table>
+      <div class="call gov" style="margin-top:12px;"><span class="ct">定案效果</span>B1 全程於 secure context 執行 → INV-01 位元 hash 一律適用；不存在無法驗證身份的渲染路徑。iPad 預覽＝連 localhost／Railway，不用 file://。</div>
+    </div>
+  </section>
+
+  <!-- 12 -->
+  <section>
+    <h2><span class="num">§12</span> 神經友善顯示標準（Neuro-inclusive）<span class="gem">B1 MUST</span></h2>
+    <p class="lede">［折入 Gemini R5a］受測者常伴腦霧、眼動異常（saccade／convergence）、交感高張。顯示層不友善 → 作答疲勞 → garbage-in。不違反任何 INV，但列 B1 UI 實作 MUST。</p>
+    <div class="body">
+      <ul>
+        <li><strong>對比</strong>：body 文字對比 ≥ WCAG AAA 7:1（至少 AA 4.5:1）；不使用低對比灰字。</li>
+        <li><strong>字級</strong>：題幹 ≥ 18px（iPad 建議更大）；避免過細字重。</li>
+        <li><strong>行距／留白</strong>：line-height ≥ 1.7；題與題間留足白，一次聚焦一題。</li>
+        <li><strong>版面</strong>：單欄、低視覺雜訊；同屏不塞過多同時元素。</li>
+        <li><strong>動態</strong>：尊重 <code>prefers-reduced-motion</code>；無自動播放、無閃爍（避免誘發）。</li>
+        <li><strong>觸控</strong>：B1 顯示層不放小型易誤觸元素；（B2 作答元件另需符合最小觸控尺寸）。</li>
+      </ul>
+      <div class="call gov"><span class="ct">為何是硬要求</span>這些是<strong>資料品質</strong>要求，不是美觀：對神經受測者，不良可近性直接等於不準確數據，是後續 BCF 演算法的污染源。此節不改題幹內容，不違反 INV-01／02。</div>
+    </div>
+  </section>
+
+  <hr class="div">
+  <div class="foot">
+    BCF_B1_QuestionDisplay_Spec_v0.4 · 2026-08-16 · supersedes v0.1–v0.3<br>
+    authority input verified — BCF_QUESTION_BANK_v1.0_FROZEN.json · sha256 cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6 · 13455 bytes ✓
+  </div>
+
+</div>
+</body>
+</html>

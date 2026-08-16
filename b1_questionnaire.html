@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BCF 症狀評估問卷</title>
+<style>
+  :root {
+    --ink: #14181c;
+    --ink-soft: #3a4650;
+    --paper: #f4f6f7;
+    --panel: #ffffff;
+    --line: #dde3e7;
+    --accent: #0b4f4c;
+    --accent-verified: #145232;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; font-size: 18px; }
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Noto Sans TC", system-ui, sans-serif;
+    line-height: 1.8;
+  }
+  .bcf-app { max-width: 760px; margin: 0 auto; padding: 32px 20px 96px; }
+
+  .bcf-header {
+    padding-bottom: 20px;
+    margin-bottom: 24px;
+    border-bottom: 1px solid var(--line);
+  }
+  .bcf-header h1 { font-size: 1.5rem; margin: 0; font-weight: 700; color: var(--ink); }
+
+  .bcf-loading {
+    padding: 48px 16px;
+    text-align: center;
+    color: var(--ink-soft);
+    font-size: 1.1rem;
+  }
+
+  .bcf-status-row { margin-bottom: 24px; }
+  .bcf-status {
+    display: inline-block;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--accent-verified);
+  }
+
+  .bcf-section { margin-bottom: 40px; }
+  .bcf-section-title {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    gap: 12px;
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: var(--accent);
+    margin: 0 0 16px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--line);
+  }
+  .bcf-section-count { font-size: 0.9rem; font-weight: 500; color: var(--ink-soft); }
+
+  .bcf-question-card {
+    background: var(--panel);
+    border: 1px solid var(--line);
+    border-radius: 10px;
+    padding: 20px 22px;
+    margin-bottom: 18px;
+  }
+  .bcf-question-stem {
+    margin: 0;
+    font-size: 1.15rem;
+    line-height: 1.8;
+    color: var(--ink);
+  }
+  /* B2 answer slot: inert, empty, not part of B1 patient-visible content */
+  .bcf-answer-slot { display: none; }
+
+  .bcf-error {
+    padding: 40px 24px;
+    text-align: center;
+    font-size: 1.15rem;
+    line-height: 1.8;
+    color: var(--ink);
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+  }
+</style>
+</head>
+<body>
+
+<main id="bcf-app" class="bcf-app">
+  <header class="bcf-header">
+    <h1>BCF 症狀評估問卷</h1>
+  </header>
+
+  <div id="bcf-loading" class="bcf-loading">問卷載入中，請稍候…</div>
+
+  <div id="bcf-content" class="bcf-content" hidden>
+    <div class="bcf-status-row">
+      <span id="bcf-status" class="bcf-status">● 題庫來源驗證通過</span>
+    </div>
+    <div id="bcf-sections"></div>
+  </div>
+
+  <div id="bcf-error" class="bcf-error" hidden>
+    <p>問卷目前無法載入，<br>請通知現場人員。</p>
+  </div>
+</main>
+
+<noscript>
+  <div class="bcf-error" style="display:block;">
+    <p>問卷目前無法載入，<br>請通知現場人員。</p>
+  </div>
+</noscript>
+
+<script>
+(function () {
+  'use strict';
+
+  var QB_URL = '/bcf/qb/v1.0/BCF_QUESTION_BANK_v1.0_FROZEN.json';
+  var EXPECTED_SHA256 = 'cd4525e6052bf5be9e2c0102df6702aad7605314cd8de28b23d19cc390779bb6';
+  var EXPECTED_BYTES = 13455;
+  var DOMAIN_ORDER = ['VESTIBULAR', 'OCULOMOTOR', 'CEREBELLAR', 'COGNITIVE', 'BRAINSTEM_AUTONOMIC', 'DAILY_FUNCTION'];
+  var NEUTRAL_LABELS = ['第一部分', '第二部分', '第三部分', '第四部分', '第五部分', '第六部分'];
+  var EXPECTED_TOTAL = 48;
+  var EXPECTED_PER_DOMAIN = 8;
+  var EXPECTED_CLASS_DIST = { LOCALIZING: 36, NON_LOCALIZING_PHENOTYPE: 4, IMPACT: 8 };
+  var FETCH_TIMEOUT_MS = 20000; // covers Railway cold-start latency (spec v0.4 §7)
+
+  var loadingEl = document.getElementById('bcf-loading');
+  var contentEl = document.getElementById('bcf-content');
+  var sectionsEl = document.getElementById('bcf-sections');
+  var errorEl = document.getElementById('bcf-error');
+
+  function showError(code, detail) {
+    console.error('[BCF_B1] ' + code + (detail ? ' ' + detail : ''));
+    loadingEl.hidden = true;
+    errorEl.hidden = false;
+  }
+
+  function bytesToHex(buffer) {
+    var bytes = new Uint8Array(buffer);
+    var hex = '';
+    for (var i = 0; i < bytes.length; i++) {
+      hex += bytes[i].toString(16).padStart(2, '0');
+    }
+    return hex;
+  }
+
+  function buildFragment(items) {
+    var fragment = document.createDocumentFragment();
+    DOMAIN_ORDER.forEach(function (domain, idx) {
+      var domainItems = items.filter(function (it) { return it.domain === domain; }); // preserves QB array order
+
+      var section = document.createElement('section');
+      section.className = 'bcf-section';
+
+      var heading = document.createElement('h2');
+      heading.className = 'bcf-section-title';
+      var marker = document.createElement('span');
+      marker.textContent = '▎' + NEUTRAL_LABELS[idx];
+      var count = document.createElement('span');
+      count.className = 'bcf-section-count';
+      count.textContent = domainItems.length + ' 題';
+      heading.appendChild(marker);
+      heading.appendChild(count);
+      section.appendChild(heading);
+
+      domainItems.forEach(function (it) {
+        var card = document.createElement('div');
+        card.className = 'bcf-question-card';
+        card.setAttribute('data-item-id', it.item_id);
+
+        var stem = document.createElement('p');
+        stem.className = 'bcf-question-stem';
+        stem.textContent = it.patient_wording_zh;
+        card.appendChild(stem);
+
+        var slot = document.createElement('div');
+        slot.className = 'bcf-answer-slot';
+        slot.setAttribute('data-bcf-slot', 'answer');
+        slot.setAttribute('data-item-id', it.item_id);
+        card.appendChild(slot);
+
+        section.appendChild(card);
+      });
+
+      fragment.appendChild(section);
+    });
+    return fragment;
+  }
+
+  function validateStructure(qb) {
+    var items = Array.isArray(qb.items) ? qb.items : null;
+    if (!items) { showError('STRUCTURE_FAIL', 'items array missing'); return null; }
+    if (items.length !== EXPECTED_TOTAL) {
+      showError('STRUCTURE_FAIL', 'total=' + items.length + ' expected=' + EXPECTED_TOTAL);
+      return null;
+    }
+
+    var byDomain = {};
+    var classCounts = {};
+    for (var i = 0; i < items.length; i++) {
+      var it = items[i];
+      if (!it || typeof it.item_id !== 'string' || !it.item_id ||
+          typeof it.domain !== 'string' || !it.domain ||
+          typeof it.patient_wording_zh !== 'string' || !it.patient_wording_zh ||
+          typeof it.item_class !== 'string' || !it.item_class) {
+        showError('STRUCTURE_FAIL', 'malformed item at index=' + i);
+        return null;
+      }
+      byDomain[it.domain] = (byDomain[it.domain] || 0) + 1;
+      classCounts[it.item_class] = (classCounts[it.item_class] || 0) + 1;
+    }
+
+    for (var d = 0; d < DOMAIN_ORDER.length; d++) {
+      var domain = DOMAIN_ORDER[d];
+      if (byDomain[domain] !== EXPECTED_PER_DOMAIN) {
+        showError('STRUCTURE_FAIL', 'domain=' + domain + ' count=' + (byDomain[domain] || 0) + ' expected=' + EXPECTED_PER_DOMAIN);
+        return null;
+      }
+    }
+
+    var classKeys = Object.keys(EXPECTED_CLASS_DIST);
+    for (var c = 0; c < classKeys.length; c++) {
+      var cls = classKeys[c];
+      if (classCounts[cls] !== EXPECTED_CLASS_DIST[cls]) {
+        showError('STRUCTURE_FAIL', 'class=' + cls + ' count=' + (classCounts[cls] || 0) + ' expected=' + EXPECTED_CLASS_DIST[cls]);
+        return null;
+      }
+    }
+
+    return items;
+  }
+
+  async function loadAndVerify() {
+    if (!window.isSecureContext || !window.crypto || !window.crypto.subtle) {
+      showError('INSECURE_CONTEXT', 'crypto.subtle unavailable — requires https or localhost');
+      return;
+    }
+
+    var controller = new AbortController();
+    var timer = setTimeout(function () { controller.abort(); }, FETCH_TIMEOUT_MS);
+
+    var response;
+    try {
+      response = await fetch(QB_URL, { signal: controller.signal, cache: 'no-store' });
+    } catch (err) {
+      clearTimeout(timer);
+      if (err.name === 'AbortError') {
+        showError('FETCH_TIMEOUT', 'exceeded ' + FETCH_TIMEOUT_MS + 'ms');
+      } else {
+        showError('FETCH_NETWORK_ERROR', err.message);
+      }
+      return;
+    }
+    clearTimeout(timer);
+
+    if (!response.ok) {
+      showError('FETCH_HTTP_ERROR', 'status=' + response.status);
+      return;
+    }
+
+    var rawBytes;
+    try {
+      rawBytes = await response.arrayBuffer();
+    } catch (err) {
+      showError('FETCH_READ_ERROR', err.message);
+      return;
+    }
+
+    // ---- INV-01 RAW-BYTE IDENTITY: verify raw bytes before any parse ----
+    if (rawBytes.byteLength !== EXPECTED_BYTES) {
+      showError('BYTE_LENGTH_MISMATCH', 'EXPECTED=' + EXPECTED_BYTES + ' ACTUAL=' + rawBytes.byteLength);
+      return;
+    }
+
+    var digestBuffer;
+    try {
+      digestBuffer = await crypto.subtle.digest('SHA-256', rawBytes);
+    } catch (err) {
+      showError('SHA256_COMPUTE_ERROR', err.message);
+      return;
+    }
+    var actualHash = bytesToHex(digestBuffer);
+    if (actualHash !== EXPECTED_SHA256) {
+      showError('SHA256_MISMATCH', 'EXPECTED=' + EXPECTED_SHA256 + ' ACTUAL=' + actualHash);
+      return;
+    }
+
+    // ---- identity confirmed; only now decode + parse ----
+    var qb;
+    try {
+      var text = new TextDecoder('utf-8', { fatal: true }).decode(rawBytes);
+      qb = JSON.parse(text);
+    } catch (err) {
+      showError('PARSE_ERROR', err.message);
+      return;
+    }
+
+    var items = validateStructure(qb);
+    if (!items) return; // showError already called inside validateStructure
+
+    // ---- INV-03 ALL-OR-NOTHING: build off-DOM, attach only after full validation ----
+    var fragment = buildFragment(items);
+    sectionsEl.appendChild(fragment);
+    loadingEl.hidden = true;
+    contentEl.hidden = false;
+  }
+
+  loadAndVerify();
+})();
+</script>
+</body>
+</html>
