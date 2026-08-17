@@ -29,6 +29,39 @@ app.use((req, res, next) => {
   }
   next();
 });
+// ── Static exposure guard ─────────────────────────────────────
+// 阻擋伺服器端程式碼、治理文件、後端資料檔經由 express.static 對外公開。
+// 授權：PM 2026-08-17（Q-03 例外授權，僅動 server.js，不涉臨床邏輯）
+//
+// ⚠️ 白名單為前端實際依賴，變更前須 grep 確認：
+//    /bcf/qb/            ← b1_questionnaire.html:125
+//    /prescriptions.json ← app.js:11492
+// ⚠️ root 層 .json 預設全擋（fail-closed）：patients.json（server.js:223）
+//    位於 __dirname，目前不存在於容器但執行時可能產生，不得依賴逐一列舉檔名。
+const STATIC_ALLOW = [
+  /^\/bcf\/qb\//i,
+  /^\/prescriptions\.json$/i,
+];
+
+const STATIC_DENY = [
+  /^\/[^/]+\.json$/i,
+  /^\/server\.js$/i,
+  /^\/migrate\.js$/i,
+  /\.md$/i,
+  /\.txt$/i,
+  /^\/\./,
+  /^\/(bcf|worker|tests|models|node_modules)\//i,
+];
+
+app.use((req, res, next) => {
+  let dec = req.path;
+  try { dec = decodeURIComponent(req.path); } catch { /* 保留原值 */ }
+  const paths = [req.path, dec];
+  if (paths.some(p => STATIC_ALLOW.some(re => re.test(p)))) return next();
+  if (paths.some(p => STATIC_DENY.some(re => re.test(p)))) return res.status(404).end();
+  next();
+});
+
 app.use(express.static(path.join(__dirname)));
 
 app.get('/api/version', (req, res) => res.json({ commit: process.env.RAILWAY_GIT_COMMIT_SHA || 'unknown', time: new Date().toISOString() }));
