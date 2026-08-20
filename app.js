@@ -1226,7 +1226,7 @@ function renderDetailTab(tab) {
   } else if (tab === 'assessments') {
     body.innerHTML = `<table class="data-table">
       <thead><tr><th>日期</th><th>評估項目</th><th>分數</th><th>進步幅度</th><th>備註</th></tr></thead>
-      <tbody>${ptAssess.map(a=>{const diff=a.score-a.prev;const aid=a.id||a._id;return`<tr style="cursor:pointer" onclick="showAssessmentDetail('${aid}')" title="點擊查看詳情">
+      <tbody>${ptAssess.map(a=>{/* != null 為刻意的鬆散比較：persisted 為 null、未寫入為 undefined，兩者皆須捕捉。勿改為 !== */const diff=(a.score!=null&&a.prev!=null)?a.score-a.prev:null;const aid=a.id||a._id;return`<tr style="cursor:pointer" onclick="showAssessmentDetail('${aid}')" title="點擊查看詳情">
         <td>${formatDate(a.date)}</td><td>${a.type}</td>
         <td><strong>${a.score}</strong><span style="color:var(--gray-400);font-size:11px">/${a.maxScore}</span></td>
         <td>${diff>0?`<span style="color:var(--success)">↑ +${diff}</span>`:diff<0?`<span style="color:var(--danger)">↓ ${diff}</span>`:'—'}</td>
@@ -1400,7 +1400,9 @@ function showAssessmentDetail(aid) {
   const isMTT = a.type === '肌肉張力測試';
   const isBCF = a.type === 'BCF腦區判斷';
   const pt    = getPatient(a.patientId);
-  const diff  = (a.score ?? 0) - (a.prev ?? 0);
+  // prev/score 為 null 時不產生 delta（!= null 為刻意的鬆散比較：
+  // persisted 為 null、未寫入為 undefined，兩者皆須捕捉。勿改為 !==）
+  const diff  = (a.score != null && a.prev != null) ? a.score - a.prev : null;
   const scoreColor = a.maxScore > 0
     ? (a.score / a.maxScore >= 0.8 ? '#16a34a' : a.score / a.maxScore >= 0.5 ? '#d97706' : '#dc2626')
     : '#2563eb';
@@ -1453,7 +1455,7 @@ function showAssessmentDetail(aid) {
 
   // progress strip
   body += `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">
-    ${field('進步幅度', diff > 0 ? '↑ +' + diff : diff < 0 ? '↓ ' + diff : '持平', diff > 0 ? ['#dcfce7','#15803d'] : diff < 0 ? ['#fef2f2','#b91c1c'] : ['#f3f4f6','#6b7280'])}
+    ${field('進步幅度', diff == null ? '首次評估' : diff > 0 ? '↑ +' + diff : diff < 0 ? '↓ ' + diff : '持平', diff == null ? ['#f3f4f6','#6b7280'] : diff > 0 ? ['#dcfce7','#15803d'] : diff < 0 ? ['#fef2f2','#b91c1c'] : ['#f3f4f6','#6b7280'])}
     ${field('上次分數', a.prev ?? '—', ['#f3f4f6','#374151'])}
     ${field('達成率', a.maxScore ? Math.round(a.score / a.maxScore * 100) + '%' : '—', [scoreColor + '1a', scoreColor])}
   </div>`;
@@ -7504,7 +7506,9 @@ function _renderBergContent() {
       <tbody>
         ${data.map(a => {
           const pt   = getPatient(a.patientId);
-          const diff = a.score - a.prev;
+          // prev/score 為 null 時不產生 delta（!= null 為刻意的鬆散比較：
+          // persisted 為 null、未寫入為 undefined，兩者皆須捕捉。勿改為 !==）
+          const diff = (a.score != null && a.prev != null) ? a.score - a.prev : null;
           const diffLabel = diff > 0
             ? `<span style="color:var(--success)">↑ +${diff}</span>`
             : diff < 0
@@ -8846,7 +8850,9 @@ function renderAssessments() {
         } else {
           _tbody2.innerHTML = _d2.map(a => {
             const pt = getPatient(a.patientId);
-            const diff = a.score - a.prev;
+            // prev/score 為 null 時不產生 delta（!= null 為刻意的鬆散比較：
+            // persisted 為 null、未寫入為 undefined，兩者皆須捕捉。勿改為 !==）
+            const diff = (a.score != null && a.prev != null) ? a.score - a.prev : null;
             const diffLabel = diff > 0 ? `<span style="color:var(--success)">↑ +${diff}</span>`
               : diff < 0 ? `<span style="color:var(--danger)">↓ ${diff}</span>`
               : `<span style="color:var(--gray-400)">—</span>`;
@@ -8928,7 +8934,9 @@ function renderAssessments() {
 
   tbody.innerHTML = data.map(a => {
     const pt = getPatient(a.patientId);
-    const diff = a.score - a.prev;
+    // prev/score 為 null 時不產生 delta（!= null 為刻意的鬆散比較：
+    // persisted 為 null、未寫入為 undefined，兩者皆須捕捉。勿改為 !==）
+    const diff = (a.score != null && a.prev != null) ? a.score - a.prev : null;
     const diffLabel = diff > 0 ? `<span style="color:var(--success)">↑ +${diff}</span>` : diff < 0 ? `<span style="color:var(--danger)">↓ ${diff}</span>` : '<span style="color:var(--gray-400)">—</span>';
     return `
       <tr>
@@ -11344,7 +11352,9 @@ function generateReport() {
           <thead><tr><th>日期</th><th>評估項目</th><th>分數</th><th>進步</th><th>備註</th></tr></thead>
           <tbody>
             ${ptAssess.slice(0, 6).map(a => {
-              const diff = a.score - a.prev;
+              // prev/score 為 null 時不產生 delta（!= null 為刻意的鬆散比較：
+              // persisted 為 null、未寫入為 undefined，兩者皆須捕捉。勿改為 !==）
+              const diff = (a.score != null && a.prev != null) ? a.score - a.prev : null;
               return `<tr>
                 <td>${formatDate(a.date)}</td><td>${a.type}</td>
                 <td><strong>${a.score}</strong>/${a.maxScore}</td>
