@@ -5869,9 +5869,12 @@ async function saveBCFAssessment() {
 
   // ── Record 1: 肌肉張力測試（測試原始數據） ──
   const totalItems = 31;
-  const prevMTT = DB.assessments
+  // 無前次記錄時 prev 必須為 null，不得代入 sentinel（滿分／0）。
+  // 依「記錄是否存在」判定，不依 score 的 truthiness —— 真實的 0 分須保留。
+  const _priorMTT = DB.assessments
     .filter(a => a.patientId === patientId && a.type === '肌肉張力測試')
-    .sort((a, b) => new Date(b.date) - new Date(a.date))[0]?.score ?? totalItems;
+    .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+  const prevMTT = _priorMTT ? (_priorMTT.score ?? null) : null;
   const mttRec = {
     id: genId('MTT'), patientId, date,
     type: '肌肉張力測試',
@@ -5898,9 +5901,12 @@ async function saveBCFAssessment() {
   let _bcfOutcome = 'NOT_ATTEMPTED';
   if (hasPrescriptions) {
     const rxCount = eyeMachineRx.length + eegPrescriptions.length + (flyingChairData ? 1 : 0);
-    const prevBCF = DB.assessments
+    // 無前次記錄時 prev 必須為 null，不得代入 sentinel（滿分／0）。
+    // 依「記錄是否存在」判定，不依 score 的 truthiness —— 真實的 0 分須保留。
+    const _priorBCF = DB.assessments
       .filter(a => a.patientId === patientId && a.type === 'BCF腦區判斷')
-      .sort((a, b) => new Date(b.date) - new Date(a.date))[0]?.score ?? 0;
+      .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+    const prevBCF = _priorBCF ? (_priorBCF.score ?? null) : null;
     const bcfRec = {
       id: genId('BCF'), patientId, date,
       type: 'BCF腦區判斷',
@@ -7325,9 +7331,12 @@ async function saveRightEyeAssessment() {
     + (document.getElementById('re-intrusion')?.value !== 'none' ? 1 : 0);
 
   const maxScore = 9;
-  const prev = DB.assessments
+  // 無前次記錄時 prev 必須為 null，不得代入 sentinel（滿分／0）。
+  // 依「記錄是否存在」判定，不依 score 的 truthiness —— 真實的 0 分須保留。
+  const _priorRE = DB.assessments
     .filter(a => a.patientId === patientId && a.type === 'RightEye眼動評估')
-    .sort((a, b) => new Date(b.date) - new Date(a.date))[0]?.score ?? maxScore;
+    .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+  const prev = _priorRE ? (_priorRE.score ?? null) : null;
 
   const reRec = {
     id: genId('RE'), patientId, date,
@@ -7849,9 +7858,12 @@ async function saveBTracksAssessment() {
   const pctPro = parseFloat(document.getElementById('romberg-pct-pro')?.value);
   const pctVis = parseFloat(document.getElementById('romberg-pct-vis')?.value);
   const pctVes = parseFloat(document.getElementById('romberg-pct-ves')?.value);
-  const prev = DB.assessments
+  // 無前次記錄時 prev 必須為 null，不得代入 sentinel（滿分／0）。
+  // 依「記錄是否存在」判定，不依 score 的 truthiness —— 真實的 0 分須保留。
+  const _priorBT = DB.assessments
     .filter(a => a.patientId === patientId && a.type === 'Romberg 測試（BTrackS）')
-    .sort((a, b) => new Date(b.date) - new Date(a.date))[0]?.score || 0;
+    .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+  const prev = _priorBT ? (_priorBT.score ?? null) : null;
   const therapist = document.getElementById('assess-therapist')?.value || '治療師';
   const rec = {
     id: genId('A'), patientId, date,
@@ -9168,8 +9180,11 @@ async function saveAssessment() {
   }
 
   // Find previous score
-  const prev = DB.assessments.filter(a => a.patientId === patientId && a.type === typeNames[type])
-    .sort((a, b) => new Date(b.date) - new Date(a.date))[0]?.score || 0;
+  // 無前次記錄時 prev 必須為 null，不得代入 sentinel（滿分／0）。
+  // 依「記錄是否存在」判定，不依 score 的 truthiness —— 真實的 0 分須保留。
+  const _priorGen = DB.assessments.filter(a => a.patientId === patientId && a.type === typeNames[type])
+    .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+  const prev = _priorGen ? (_priorGen.score ?? null) : null;
 
   const rec = {
     id: genId('A'), patientId, date, type: typeNames[type],
