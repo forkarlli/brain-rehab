@@ -1558,6 +1558,19 @@ function showAssessmentDetail(aid) {
           </div>`;
         }).join('');
       }
+      // RE-A：displayability ≠ abnormality。NEV 為獨立集合，不併入 abnormal enum、
+      // 不套用 1550 之 abnormal 樣式。
+      const nevInd = a.indicators.filter(i => i.status === NEV);
+      if (nevInd.length) {
+        body += secTitle('不可評估指標');
+        body += nevInd.map(i => `<div style="padding:8px 10px;background:#f3f4f6;border-left:3px solid #9ca3af;border-radius:6px;margin-bottom:5px">
+            <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:3px">
+              <span style="font-size:12px;font-weight:700;color:#4b5563">⛔ ${i.label}</span>
+              <span style="font-size:13px;font-weight:700;color:#4b5563">${i.value}</span>
+            </div>
+            <div style="font-size:11px;color:#6b7280">不可評估${i.reason ? `（${i.reason}）` : ''} — 系統未依此指標產生腦區與處方</div>
+          </div>`).join('');
+      }
     }
 
     // Prescriptions
@@ -2155,6 +2168,33 @@ const REGION_SIDE_TYPE = {
   'Right PPRF': { side: 'right', type: 'brainstem' },
 };
 const BILATERAL_REGIONS = new Set(['Bilateral Midbrain', 'Bilateral Pons', 'Bilateral Fastigial Nucleus']);
+
+// ── RE-A containment ──────────────────────────────────────────────────────
+// 未驗證之 OD/OS 資料不得升格為方向性臨床事實。
+//
+// N19  垂直欄位語意未定義（vOverR 是 OD 眼別，還是「上向」方向？）
+// PROHIBITION_WITHOUT_COMPLIANT_EXIT
+//      方向性 schema 無 null 出口，模型只能走 OD/OS 捷徑
+//
+// 解除條件（全部）：
+//   RE-B  extraction source isolation ＋ schema null
+//   RE-B  vertical semantics 裁定（N19）
+//   RE-D  Gemini Q-G19 臨床效度驗證
+//
+// ⚠️ NEV 是 implementation token；NOT_EVALUABLE 才是 authoritative
+//    semantic state。兩者在任何文件與測試命名中不得互為同義詞。
+//
+// ⚠️ 宣告於 top-level 而非 computeRightEyeRx 內，原因有二：
+//    (a) renderAISaccadeSummary(6417) 與 showAssessmentDetail(1546) 位於
+//        不同函式，函式內常數對它們不可見；
+//    (b) AC-12 negative control 需由 harness 以 vm context global 覆寫，
+//        函式內 const 無法注入。harness 不得同時抽取本行（會重複宣告）。
+const SACCADE_DIRECTION_CLINICAL_USE_ENABLED = false;
+const NEV = 'nev';
+// RE-A implementation invariant only。RE-B 若出現多種不可評原因
+// （source missing / trajectory unavailable / extraction conflict /
+//   semantic unresolved），不得繼續把所有 NEV 強制映射成同一 reason。
+const NEV_REASON = 'SACCADE_DIRECTION_SEMANTICS_UNRESOLVED';
 
 // ── Horizontal Overshoot Resolver ─────────────────────────────────────────
 // ⚠️  閾值未校準，勿用於真實病人 — 佔位值，7樣本校準
@@ -4150,8 +4190,9 @@ function computeRightEyeRx(data) {
   const pldRSt = pldRight === null ? 'na' : pldRight > -5 ? 'normal' : pldRight > -10 ? 'mild' : 'severe';
   const pldLSt = pldLeft  === null ? 'na' : Math.abs(pldLeft) < 5 ? 'normal' : Math.abs(pldLeft) < 10 ? 'mild' : 'severe';
 
-  const ST_ICON  = { normal: '🟢', mild: '🟡', moderate: '🟠', severe: '🔴', na: '⚪' };
-  const ST_LABEL = { normal: '正常', mild: '輕度異常', moderate: '中度異常', severe: '嚴重異常', na: '未填入' };
+  // nev 條目為必要：4877 為 ${ST_ICON[ind.status]}，無 fallback，缺條目會渲染字面 undefined
+  const ST_ICON  = { normal: '🟢', mild: '🟡', moderate: '🟠', severe: '🔴', na: '⚪', nev: '⛔' };
+  const ST_LABEL = { normal: '正常', mild: '輕度異常', moderate: '中度異常', severe: '嚴重異常', na: '未填入', nev: '不可評估' };
 
   const spHSt  = spSt(spH);
   const spVSt  = spSt(spV);
@@ -4212,18 +4253,24 @@ function computeRightEyeRx(data) {
   const vMissLPct   = pct(vMissedL, vTotal);
 
   const VALID_GRADES = new Set(['mild','moderate','severe']);
+  // RE-A chokepoint：10 個方向性 *St 於 containment 期間降級為 NEV。
+  // hOverRSt / hOverLSt 不納入 —— 已受 resolver ＋ 4115 confidence 閘門。
   const hOverRSt  = (hOverRGrade  && VALID_GRADES.has(hOverRGrade))  ? hOverRGrade  : overGrade(hOverRPct);
-  const hUnderRSt = (hUnderRGrade && VALID_GRADES.has(hUnderRGrade)) ? hUnderRGrade : underGrade(hUnderRPct);
-  const hMissRSt  = missGrade(hMissRPct);
+  const hUnderRSt = SACCADE_DIRECTION_CLINICAL_USE_ENABLED
+    ? ((hUnderRGrade && VALID_GRADES.has(hUnderRGrade)) ? hUnderRGrade : underGrade(hUnderRPct))
+    : NEV;
+  const hMissRSt  = SACCADE_DIRECTION_CLINICAL_USE_ENABLED ? missGrade(hMissRPct) : NEV;
   const hOverLSt  = (hOverLGrade  && VALID_GRADES.has(hOverLGrade))  ? hOverLGrade  : overGrade(hOverLPct);
-  const hUnderLSt = (hUnderLGrade && VALID_GRADES.has(hUnderLGrade)) ? hUnderLGrade : underGrade(hUnderLPct);
-  const hMissLSt  = missGrade(hMissLPct);
-  const vOverRSt  = overGrade(vOverRPct);
-  const vUnderRSt = underGrade(vUnderRPct);
-  const vMissRSt  = missGrade(vMissRPct);
-  const vOverLSt  = overGrade(vOverLPct);
-  const vUnderLSt = underGrade(vUnderLPct);
-  const vMissLSt  = missGrade(vMissLPct);
+  const hUnderLSt = SACCADE_DIRECTION_CLINICAL_USE_ENABLED
+    ? ((hUnderLGrade && VALID_GRADES.has(hUnderLGrade)) ? hUnderLGrade : underGrade(hUnderLPct))
+    : NEV;
+  const hMissLSt  = SACCADE_DIRECTION_CLINICAL_USE_ENABLED ? missGrade(hMissLPct) : NEV;
+  const vOverRSt  = SACCADE_DIRECTION_CLINICAL_USE_ENABLED ? overGrade(vOverRPct)   : NEV;
+  const vUnderRSt = SACCADE_DIRECTION_CLINICAL_USE_ENABLED ? underGrade(vUnderRPct) : NEV;
+  const vMissRSt  = SACCADE_DIRECTION_CLINICAL_USE_ENABLED ? missGrade(vMissRPct)   : NEV;
+  const vOverLSt  = SACCADE_DIRECTION_CLINICAL_USE_ENABLED ? overGrade(vOverLPct)   : NEV;
+  const vUnderLSt = SACCADE_DIRECTION_CLINICAL_USE_ENABLED ? underGrade(vUnderLPct) : NEV;
+  const vMissLSt  = SACCADE_DIRECTION_CLINICAL_USE_ENABLED ? missGrade(vMissLPct)   : NEV;
 
   // 左右眼不對稱判斷
   function asymGrade(diff) { return diff === null ? 'na' : diff < 10 ? 'normal' : diff < 20 ? 'mild' : 'severe'; }
@@ -4478,6 +4525,13 @@ function computeRightEyeRx(data) {
       note:  odAbn && osAbn ? '雙側異常（見OD條目）' : osAbn ? `OS ${latOS}ms偏高 — 需確認方向性Latency` : '',
     });
   }
+
+  // RE-A：row-level 為 reason 之 authority。不經 overNote()（其對未知 status 回 ''）。
+  // summary 側為 deterministic projection，非第二個 SSOT。
+  indicators.forEach(i => { if (i.status === NEV) i.reason = NEV_REASON; });
+  const notEvaluableReasons = [...new Set(
+    indicators.filter(i => i.status === NEV).map(i => i.reason)
+  )];
 
   const brainRegions = new Set();
   indicators.forEach(ind => ind.brain.forEach(b => brainRegions.add(b)));
@@ -4775,6 +4829,10 @@ function computeRightEyeRx(data) {
     .map(([p, modes]) => (PRIORITY_NAMES[p] || '其他') + '：' + [...modes].join('、'));
 
   const hasAbnormal = indicators.some(ind => isAbn(ind.status));
+  // RE-A 三態：hasAbnormal=false 且 hasNotEvaluable=true 時，不得宣稱全部正常
+  const hasNotEvaluable = indicators.some(ind => ind.status === NEV);
+  const notEvaluableCount = indicators.filter(ind => ind.status === NEV).length;
+  const evaluableCount    = indicators.length - notEvaluableCount;
 
   // Build weakRegions for integrated analysis
   const reRegionEv = {};
@@ -4792,6 +4850,7 @@ function computeRightEyeRx(data) {
 
   return {
     indicators, brainRegions, rx, priorityLines, hasAbnormal, ST_ICON, ST_LABEL, velocityAbn,
+    hasNotEvaluable, notEvaluableCount, evaluableCount, notEvaluableReasons,
     weakRegions:   reWeakRegions,
     abnormalCount: reAbnormalCount,
     cerebellarLat: cerebellarLatTag ? {
@@ -5278,7 +5337,9 @@ function generateBCFResults() {
       getPatient(document.getElementById('assess-patient-select')?.value)
     );
 
-    const rightEyeHTML = reResult.hasAbnormal ? renderRightEyeSection(reResult) : '';
+    // RE-A 三態：僅 abnormal 與 not-evaluable 皆無時才可完全不呈現 RightEye 區塊
+    const rightEyeHTML = (reResult.hasAbnormal || reResult.hasNotEvaluable)
+      ? renderRightEyeSection(reResult) : '';
 
     const crossResult   = computeCrossValidation(reData, affectedItems, activeMCodes);
     const crossValidHTML = crossResult.hasData ? renderCrossValidationSection(crossResult) : '';
@@ -6414,6 +6475,13 @@ function renderAISaccadeSummary() {
     { dir: '往左 Overshoot',  grade: reAIGrades.leftward_overshoot,   brain: 'Left CB' },
     { dir: '往左 Undershoot', grade: reAIGrades.leftward_undershoot,  brain: 'Right CB' },
   ];
+  // RE-A A1：directional AI grades 未經 source verification，不得作為臨床輸出。
+  // 一併涵蓋下方「水平 Saccade Overshoot 總百分比」—— 其來源 (hOverR+hOverL)/hTotal
+  // 為 OD/OS aggregation，且顯示於 directional summary 內，易被讀成方向性判讀的
+  // supporting metric（epistemic contradiction）。
+  // ⚠️ 僅抑制本 directional clinical summary，不影響其他 RightEye 量測顯示。
+  // ⚠️ 以下程式碼保留不刪 —— RE-B 通過後需回復。
+  if (!SACCADE_DIRECTION_CLINICAL_USE_ENABLED) { el.style.display = 'none'; return; }
   const hasAny = rows.some(r => r.grade && r.grade !== 'none');
   if (!hasAny && reAIGrades.hOvershootPct === null) { el.style.display = 'none'; return; }
   el.style.display = 'block';
@@ -6496,6 +6564,12 @@ function renderSaccadeDirectionFromAI(dir) {
   const h = dir.horizontal;
   const v = dir.vertical;
   if (h) {
+    // ⚠️ DO NOT CHANGE IN ISOLATION
+    // 此處未設定 reSaccDirConfidenceH，看似 bug（N18），但目前 4115 的
+    // confidence 閘門兼職擔任「來源存在性檢查」（N17）。單獨補上 confidence
+    // 會解除該偶然 fail-closed，使 P2 立即暴露於 N14（方向性 schema 無 null）。
+    //
+    // RE-B 正是要改這裡 —— 但必須與 source / evaluability contract 一起改。
     const hBtn = document.getElementById('re-sacc-dir-btn-horizontal');
     if (hBtn) hBtn.dataset.aiResult = JSON.stringify(h);
     reSaccDirResultsH = [
@@ -7221,7 +7295,7 @@ function analyzeRightEyeStandalone() {
 
   const abnCount = reResult.indicators.filter(i => i.status === 'mild' || i.status === 'severe').length;
 
-  if (!reResult.hasAbnormal) {
+  if (!reResult.hasAbnormal && !reResult.hasNotEvaluable) {
     resultsEl.className = 'card';
     resultsEl.innerHTML = `
       <div class="card-header"><h3>👁 RightEye 分析結果</h3></div>
@@ -7229,6 +7303,22 @@ function analyzeRightEyeStandalone() {
         <div style="font-size:48px;margin-bottom:8px">✅</div>
         <h4 style="color:var(--success)">所有指標均在正常範圍</h4>
         <p style="color:var(--gray-500);margin-top:4px">無需眼動機處方介入</p>
+      </div>
+      ${opnsHtml ? '<div style="padding:0 20px 16px">' + opnsHtml + '</div>' : ''}`;
+  } else if (!reResult.hasAbnormal) {
+    // RE-A 三態：無臨床異常，但存在不可評估指標 —— 不得宣稱全部正常
+    resultsEl.className = 'card';
+    resultsEl.innerHTML = `
+      <div class="card-header"><h3>👁 RightEye 分析結果</h3></div>
+      <div style="padding:24px 20px">
+        <div style="background:#f3f4f6;border-left:3px solid #9ca3af;border-radius:6px;padding:12px 14px">
+          <div style="font-size:13px;font-weight:600;color:#4b5563;margin-bottom:4px">⛔ 部分指標不可評估</div>
+          <div style="font-size:12px;color:#6b7280;line-height:1.7">
+            部分 RightEye 方向性指標目前不可評估；系統已停止依這些指標產生相關腦區與處方。<br>
+            可評估項目：${reResult.evaluableCount} 項；不可評估項目：${reResult.notEvaluableCount} 項。
+            ${reResult.notEvaluableReasons?.length ? '<br>原因：' + reResult.notEvaluableReasons.join('、') : ''}
+          </div>
+        </div>
       </div>
       ${opnsHtml ? '<div style="padding:0 20px 16px">' + opnsHtml + '</div>' : ''}`;
   } else {
@@ -7408,7 +7498,7 @@ async function saveRightEyeAssessment() {
       saccDirConfidence: reSaccDirConfidenceH,
     };
     const rxResult = computeRightEyeRx(reDataForAnalysis);
-    reRec.indicators   = rxResult.indicators.map(i => ({ label: i.label, value: i.value, status: i.status, brain: i.brain, note: i.note }));
+    reRec.indicators   = rxResult.indicators.map(i => ({ label: i.label, value: i.value, status: i.status, brain: i.brain, note: i.note, reason: i.reason }));
     reRec.prescriptions = rxResult.rx;
     reRec.brainRegions  = [...rxResult.brainRegions];
     reRec.cerebellarLat = rxResult.cerebellarLat || null;
@@ -10764,6 +10854,8 @@ function _renderRightEyeCard(rec) {
   const indicators = rec.indicators || [];
   const abnInd  = indicators.filter(i => isAbn(i.status));
   const abnCount = abnInd.length;
+  // RE-A 三態：不可評估不得被呈現為「無異常」
+  const nevInd  = indicators.filter(i => i.status === NEV);
   const regions  = rec.brainRegions || [];
 
   return `
@@ -10779,7 +10871,9 @@ function _renderRightEyeCard(rec) {
           <span class="rx-module-label">主要異常</span>
           <span class="rx-module-value">
             ${abnInd.length === 0
-              ? '<span style="color:var(--gray-300);font-size:11px">無異常</span>'
+              ? (nevInd.length
+                  ? `<span style="color:#6b7280;font-size:11px">⛔ ${nevInd.length} 項不可評估（未產生腦區與處方）</span>`
+                  : '<span style="color:var(--gray-300);font-size:11px">無異常</span>')
               : abnInd.slice(0, 3).map(i =>
                   `<div style="font-size:11px;line-height:1.8">${ST_ICON[i.status] || '🟡'} ${i.label}：<strong>${i.value}</strong></div>`
                 ).join('') +
