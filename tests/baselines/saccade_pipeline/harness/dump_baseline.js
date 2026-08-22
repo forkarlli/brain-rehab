@@ -59,6 +59,15 @@ function extractFunction(src, signatureText) {
   return extractByStartLine(src, signatureText);
 }
 
+// Extract a single verbatim source line (for brace-less top-level consts, where
+// matchBraceBlock would run off to some unrelated later block).
+function extractLine(src, startText) {
+  const idx = src.indexOf(startText);
+  if (idx === -1) throw new Error('line marker not found: ' + startText);
+  const nl = src.indexOf('\n', idx);
+  return src.slice(idx, nl === -1 ? src.length : nl);
+}
+
 // Extract a verbatim sub-slice of a function body between two literal marker lines
 // (both must appear, in order, inside the function). Used where we want to run a
 // function's internal logic without its DB/DOM-dependent prologue.
@@ -72,7 +81,14 @@ function extractBodySlice(src, afterMarker, uptoAndIncludingMarker) {
   return src.slice(bodyStart, bodyEnd);
 }
 
-function buildHarness(ref) {
+// policy: optional { SACCADE_DIRECTION_CLINICAL_USE_ENABLED: boolean }
+//
+// RE-A containment declares three top-level consts in app.js. NEV / NEV_REASON
+// are pulled verbatim from source so tests assert against the real tokens. The
+// flag is deliberately NOT extracted: it is injected as a vm context global so
+// AC-12's negative control can run containment-off without editing production
+// source or leaving the working tree dirty.
+function buildHarness(ref, policy) {
   const src = gitShow(ref, 'app.js');
 
   const aliasNormalizeBlock = extractByStartLine(src, 'const BRAIN_REGION_ALIASES = {') +
@@ -115,9 +131,19 @@ function buildHarness(ref) {
     '    if (affectedBrainRegions.has(canon)) extra.forEach(a => affectedBrainRegions.add(a));\n' +
     '  }\n  return affectedBrainRegions;\n}\n';
 
+  // Verbatim from source — NOT hard-coded here, so a token rename in app.js
+  // surfaces as a test failure rather than silent divergence (AC-11).
+  // Absent on refs predating RE-A (e.g. the frozen golden-baseline commit), where
+  // the extracted functions never reference them.
+  let nevConsts = '';
+  if (src.includes('const NEV = ')) {
+    nevConsts = extractLine(src, 'const NEV = ') + '\n' + extractLine(src, 'const NEV_REASON = ');
+  }
+
   const full = [
     aliasNormalizeBlock,
     overshootConsts,
+    nevConsts,
     reAIGradesInit,
     resolveOvershootFn,
     lookupOvershootFn,
@@ -131,6 +157,11 @@ function buildHarness(ref) {
   ].join('\n\n');
 
   const ctx = {};
+  const p = policy || {};
+  ctx.SACCADE_DIRECTION_CLINICAL_USE_ENABLED =
+    typeof p.SACCADE_DIRECTION_CLINICAL_USE_ENABLED === 'boolean'
+      ? p.SACCADE_DIRECTION_CLINICAL_USE_ENABLED
+      : false;
   vm.createContext(ctx);
   vm.runInContext(full, ctx, { filename: `app.js@${ref} (extracted)` });
   return ctx.__api;
@@ -244,4 +275,8 @@ function main() {
   }
 }
 
-main();
+if (require.main === module) main();
+
+// Exported so contract tests (e.g. RE-A containment ACs) reuse this exact
+// extraction path instead of reimplementing it.
+module.exports = { buildHarness, gitShow, matchBraceBlock, extractByStartLine, extractFunction, extractLine, baseRxInput };
